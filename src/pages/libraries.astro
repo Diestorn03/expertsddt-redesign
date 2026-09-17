@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import Cta from '../components/Cta.astro';
+---
+<Base title="Implant libraries" description="Free ExpertsDDT implant libraries for Exocad. Manufacturer-ready implant components across major systems.">
+  <section class="page-hero" data-nav-solid-from data-scene>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="wrap grid-2">
+      <div class="stack">
+        <span class="pill" data-reveal="up">Free download</span>
+        <h1 class="h-display" data-split="words">ExpertsDDT implant libraries</h1>
+        <p class="lead" data-reveal="up" data-delay=".3">Manufacturer-ready implant components for accurate restorations across major systems. Free digital library for your Exocad workflow, ready to import.</p>
+        <div class="cta-row" data-reveal="up" data-delay=".45">
+          <a class="btn btn--white" href="https://expertsddt.com/exocad-libraries/" target="_blank" rel="noopener" data-magnetic>Download <span class="arrow">↓</span></a>
+          <a class="btn btn--ghost" href="/store">See premium libraries</a>
+        </div>
+      </div>
+      <div class="lib" data-reveal="iris" aria-hidden="true">
+        <div class="lib__disc"><span>.exocad</span><b>IMPLANT<br />LIBRARY</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" data-scene>
+    <div class="wrap grid-3" data-stagger=".12">
+      <div class="card step"><b>01</b><h3>Download</h3><p>Get the free library package and unzip it on your design station.</p></div>
+      <div class="card step"><b>02</b><h3>Import into Exocad</h3><p>Copy the folders into your DentalCAD implant library directory and restart Exocad.</p></div>
+      <div class="card step"><b>03</b><h3>Design with confidence</h3><p>Select the manufacturer, pick the component and restore with exact geometry.</p></div>
+    </div>
+  </section>
+
+  <Cta title="Missing a system? <span class='cta__accent'>Tell us.</span>" text="We keep expanding the library. Send us the manufacturer and component you need and our team will get back to you." />
+</Base>
+
+<style>
+  .lib { display: grid; place-items: center; }
+  .lib__disc { width: min(380px, 80vw); aspect-ratio: 1; border-radius: 50%; background: conic-gradient(from 200deg, #046bd2, #1d3273, #2a7abf, #046bd2); display: grid; place-content: center; text-align: center; color: #fff; box-shadow: 0 50px 100px -40px rgba(4,107,210,.9), inset 0 0 0 18px rgba(255,255,255,.06); animation: spin 30s linear infinite; }
+  .lib__disc span { font-size: .8rem; letter-spacing: .3em; opacity: .8; }
+  .lib__disc b { font-size: 2rem; letter-spacing: .05em; line-height: 1; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .step { display: grid; gap: .6rem; align-content: start; }
+  .step b { font-size: 2.4rem; font-weight: 800; color: transparent; -webkit-text-stroke: 1.5px rgba(4,107,210,.5); line-height: 1; }
+  .step h3 { font-size: 1.15rem; }
+</style>

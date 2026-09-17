@@ -1,0 +1,72 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Contact & booking" description="Book a 1-hour consultation with Experts DDT or send us a message.">
+  <section class="page-hero" data-nav-solid-from data-scene>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="wrap stack">
+      <span class="eyebrow" data-reveal="up">Contact</span>
+      <h1 class="h-display" data-split="words">Let’s talk about your workflow.</h1>
+      <p class="lead" data-reveal="up" data-delay=".3">Book a consultation, request support or just say hello. We answer fast.</p>
+    </div>
+  </section>
+
+  <section class="section" data-scene>
+    <div class="wrap contact">
+      <div class="stack">
+        <article class="card booking" data-reveal="left" data-tilt>
+          <span class="pill">Booking</span>
+          <h2 class="h-lg">Consultation</h2>
+          <p class="booking__meta"><b>1 hour</b> · Online or on-site in Florida</p>
+          <p>Choose a slot in our calendar and we’ll confirm within the day. Time zones are detected automatically.</p>
+          <a class="btn btn--primary" href="https://expertsddt.com/contact/" target="_blank" rel="noopener">See available appointments <span class="arrow">→</span></a>
+        </article>
+        <ul class="channels" data-stagger=".1">
+          <li><span>Phone</span><a href="tel:+15106760418">+1 (510) 676-0418</a></li>
+          <li><span>Email</span><a href="mailto:Polanco@expertsddt.com">Polanco@expertsddt.com</a></li>
+          <li><span>Doctor portal</span><a href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">portal.expertsddt.com</a></li>
+          <li><span>Concierge</span><span>Apex, our digital concierge, guides you through services and workflows 24/7.</span></li>
+        </ul>
+      </div>
+
+      <form class="card form" data-reveal="right" id="contact-form" data-lenis-prevent>
+        <h2 class="h-lg">Send a message</h2>
+        <label>Name <input name="name" required autocomplete="name" /></label>
+        <label>Email <input type="email" name="email" required autocomplete="email" /></label>
+        <label>Clinic or lab <input name="clinic" autocomplete="organization" /></label>
+        <label>How can we help? <textarea name="message" rows="5" required></textarea></label>
+        <button class="btn btn--primary" type="submit">Send message <span class="arrow">→</span></button>
+        <p class="form__note">Opens your email client with the message ready to send. <!-- ponytail: swap for n8n/Formspree endpoint when the site goes live --></p>
+      </form>
+    </div>
+  </section>
+
+  <script>
+    document.addEventListener('astro:page-load', () => {
+      const f = document.getElementById('contact-form');
+      if (!f) return;
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const d = new FormData(f);
+        const body = `Name: ${d.get('name')}\nEmail: ${d.get('email')}\nClinic: ${d.get('clinic')}\n\n${d.get('message')}`;
+        location.href = `mailto:Polanco@expertsddt.com?subject=${encodeURIComponent('Website inquiry from ' + d.get('name'))}&body=${encodeURIComponent(body)}`;
+      });
+    });
+  </script>
+</Base>
+
+<style>
+  .contact { display: grid; grid-template-columns: 1fr 1.1fr; gap: 2.5rem; align-items: start; }
+  .booking { display: grid; gap: .9rem; justify-items: start; }
+  .booking__meta b { color: var(--blue); }
+  .channels { list-style: none; padding: 0; margin: 0; display: grid; gap: .6rem; }
+  .channels li { display: grid; grid-template-columns: 130px 1fr; gap: 1rem; padding: 1rem 1.2rem; border-radius: 16px; background: var(--mist); font-size: .95rem; }
+  .channels li > span:first-child { font-size: .75rem; letter-spacing: .15em; text-transform: uppercase; font-weight: 600; color: var(--blue); }
+  .channels a:hover { color: var(--blue); }
+  .form { display: grid; gap: 1rem; }
+  .form label { display: grid; gap: .4rem; font-size: .85rem; font-weight: 600; color: var(--ink); }
+  .form input, .form textarea { font: inherit; padding: .85rem 1rem; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; transition: border-color .3s, box-shadow .3s; }
+  .form input:focus, .form textarea:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(4,107,210,.15); }
+  .form__note { font-size: .78rem; color: #64748b; }
+  @media (max-width: 960px) { .contact { grid-template-columns: 1fr; } .channels li { grid-template-columns: 1fr; gap: .2rem; } }
+</style>

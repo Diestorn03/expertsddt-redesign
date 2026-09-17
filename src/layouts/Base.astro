@@ -1,0 +1,136 @@
+---
+import { ClientRouter } from 'astro:transitions';
+import '../styles/global.css';
+import 'lenis/dist/lenis.css';
+
+interface Props { title: string; description?: string }
+const { title, description = 'Experts DDT — premium digital dental design, facial scanning, hands-on training and expert support by Fernando Polanco, The Wizard of Digital Dentistry.' } = Astro.props;
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const links = [
+  ['/', 'Home'], ['/#about', 'About us'], ['/services', 'Services'], ['/courses', 'Online courses'], ['/store', 'Store'], ['/libraries', 'Implant libraries'],
+];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · Experts DDT</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#0f346e" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <meta property="og:title" content={`${title} · Experts DDT`} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="/img/portal-laptop.webp" />
+    <ClientRouter />
+  </head>
+  <body>
+    <a class="sr-only" href="#main">Skip to content</a>
+
+    <header class="nav" transition:persist>
+      <div class="nav__inner">
+        <a class="logo" href="/" aria-label="Experts DDT home">
+          <svg class="logo__mark" viewBox="0 0 40 40" aria-hidden="true">
+            <defs>
+              <linearGradient id="lgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f7fb"/><stop offset="1" stop-color="#9fb0c4"/></linearGradient>
+              <linearGradient id="lgB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b8cff"/><stop offset="1" stop-color="#045cb4"/></linearGradient>
+            </defs>
+            <polygon points="20,2 2,38 20,30" fill="url(#lgS)"/>
+            <polygon points="20,2 38,38 20,30" fill="url(#lgB)"/>
+            <polygon points="2,38 38,38 20,30" fill="#0b2a5c"/>
+          </svg>
+          <span class="logo__text">EXPERTS DDT</span>
+        </a>
+
+        <nav aria-label="Primary">
+          <ul class="nav__links">
+            {links.map(([href, label]) => <li><a href={href} aria-current={path === href ? 'page' : undefined}>{label}</a></li>)}
+          </ul>
+        </nav>
+
+        <div class="nav__cta">
+          <a class="nav__icon" href="/store" aria-label="Cart">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>
+          </a>
+          <a class="btn btn--primary" href="/contact" data-magnetic>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18M9 15l2 2 4-4"/></svg>
+            Booking
+          </a>
+          <button class="burger" aria-label="Open menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button>
+        </div>
+      </div>
+    </header>
+    <nav class="menu" id="menu" aria-label="Mobile">
+      {links.map(([href, label]) => <a href={href}>{label}</a>)}
+      <a href="/contact">Booking</a>
+    </nav>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="footer">
+      <div class="footer__ghost" aria-hidden="true">EXPERTS DDT</div>
+      <div class="wrap">
+        <div class="footer__grid">
+          <div>
+            <a class="logo logo--footer" href="/" aria-label="Experts DDT">
+              <svg class="logo__mark" viewBox="0 0 40 40" aria-hidden="true"><polygon points="20,2 2,38 20,30" fill="url(#lgS)"/><polygon points="20,2 38,38 20,30" fill="url(#lgB)"/><polygon points="2,38 38,38 20,30" fill="#0b2a5c"/></svg>
+              <span class="logo__text logo__text--light">EXPERTS DDT</span>
+            </a>
+            <p style="margin-top:1rem;max-width:34ch">Fernando Polanco DDT LLC. High-level design services, digital dentistry implementations, hands-on training and comprehensive clinical & technical support since 2019.</p>
+            <div class="socials" style="margin-top:1.4rem">
+              <a href="https://www.facebook.com/FernandoPolancoDDTRDA" target="_blank" rel="noopener" aria-label="Facebook"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H7v3h3v7h3v-7h3l1-3h-4v-2c0-.6.4-1 1-1z"/></svg></a>
+              <a href="https://www.instagram.com/expertsddt" target="_blank" rel="noopener" aria-label="Instagram Experts DDT"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg></a>
+              <a href="https://www.instagram.com/fernandopolancoddt" target="_blank" rel="noopener" aria-label="Instagram Fernando Polanco"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></a>
+            </div>
+          </div>
+          <div>
+            <h4>Navigate</h4>
+            <ul>{links.map(([href, label]) => <li><a href={href}>{label}</a></li>)}<li><a href="/contact">Contact & booking</a></li></ul>
+          </div>
+          <div>
+            <h4>Doctor portal</h4>
+            <ul>
+              <li><a href="https://portal.expertsddt.com/signup" target="_blank" rel="noopener">Sign up as doctor</a></li>
+              <li><a href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">Log in</a></li>
+              <li><a href="/libraries">Free Exocad libraries</a></li>
+              <li><a href="/contact">Technical support</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Get to know more about us</h4>
+            <ul>
+              <li><a href="tel:+15106760418">+1 (510) 676-0418</a></li>
+              <li><a href="mailto:Polanco@expertsddt.com">Polanco@expertsddt.com</a></li>
+              <li>Florida, United States</li>
+              <li style="opacity:.7">Available in 10 languages</li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer__bottom">
+          <span>© {new Date().getFullYear()} Fernando Polanco DDT LLC · Experts DDT. All rights reserved.</span>
+          <span>Redesign proposal · built with Astro</span>
+        </div>
+      </div>
+    </footer>
+
+    <a class="fab" href="/contact" aria-label="Chat with Apex, our digital concierge">
+      <span class="fab__dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
+      Ask Apex
+    </a>
+
+    <script src="../scripts/motion.js"></script>
+  </body>
+</html>
+
+<style is:global>
+  .logo { display: inline-flex; align-items: center; gap: .55rem; }
+  .logo__mark { width: 34px; height: 34px; filter: drop-shadow(0 4px 10px rgba(4,107,210,.35)); }
+  .logo__text { font-weight: 800; letter-spacing: .04em; font-size: 1.05rem; color: inherit; }
+  .nav.is-solid .logo__text { background: linear-gradient(90deg, #046bd2, #045cb4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .logo__text--light { color: #fff; }
+</style>
