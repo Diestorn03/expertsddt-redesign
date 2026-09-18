@@ -318,6 +318,7 @@ function initVideos() {
   vids.forEach((v) => {
     v.muted = true; v.defaultMuted = true; v.volume = 0; v.setAttribute('muted', '');
     v.removeAttribute('autoplay');
+    v.addEventListener('playing', () => v.classList.add('is-playing'), { once: true });
     if (getComputedStyle(v).display === 'none') { v.pause(); v.removeAttribute('src'); v.load(); return; }
     io.observe(v);
   });
