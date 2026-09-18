@@ -1,17 +1,20 @@
 ---
 import Base from '../layouts/Base.astro';
 import Cta from '../components/Cta.astro';
+import { useI18n } from '../i18n/index.js';
+const { t, asset } = useI18n(Astro);
+const c = t.pages.courses;
+const shop = import.meta.env.PUBLIC_SHOP_URL || 'https://expertsddt.com/courses/';
 ---
-<Base title="Online courses" description="Master the knowledge that transforms lives. Exocad and digital dentistry online courses by Fernando Polanco.">
+<Base title={t.meta.courses}>
   <section class="page-hero courses-hero" data-nav-solid-from data-scene>
     <div class="grid-bg" aria-hidden="true"></div>
-    <div class="wrap stack" style="text-align:center;justify-items:center">
-      <span class="eyebrow" data-reveal="up">Online courses</span>
-      <h1 class="h-display" data-split="words">Master the knowledge that transforms lives.</h1>
-      <p class="lead" data-reveal="up" data-delay=".3">The best investment is in yourself. What are you waiting for? Discover the catalog.</p>
-      <div class="cta-row" data-reveal="up" data-delay=".45" style="justify-content:center">
-        <a class="btn btn--primary" href="#catalog">Join today <span class="arrow">→</span></a>
-        <a class="btn btn--ghost" href="#memberships">Explore memberships</a>
+    <div class="wrap stack courses-hero__inner">
+      <span class="eyebrow" data-reveal="up">{c.eyebrow}</span>
+      <h1 class="h-display" data-split="words">{c.title}</h1>
+      <p class="lead" data-reveal="up" data-delay=".3">{c.lead}</p>
+      <div class="cta-row" data-reveal="up" data-delay=".45">
+        <a class="btn btn--primary" href="#catalog">{c.join} <span class="arrow">→</span></a>
       </div>
     </div>
     <div class="courses-hero__ring" aria-hidden="true" data-parallax="0.3"></div>
@@ -19,62 +22,42 @@ import Cta from '../components/Cta.astro';
 
   <section id="catalog" class="section" data-scene>
     <div class="wrap">
-      <div class="stack" style="max-width:720px;margin-bottom:3rem" data-reveal-scope>
-        <span class="eyebrow" data-reveal="up">Catalog</span>
-        <h2 class="h-xl" data-split="lines">Find the class that will unlock your <span class="underline-accent">hidden potential</span>.</h2>
+      <div class="stack" style="max-width:720px;margin-bottom:2.5rem" data-reveal-scope>
+        <span class="eyebrow" data-reveal="up">{c.catalogEyebrow}</span>
+        <h2 class="h-xl" data-split="lines">{c.catalogTitle} <span class="underline-accent">{c.catalogAccent}</span>.</h2>
       </div>
       <article class="course card" data-reveal="drop" data-tilt>
         <div class="course__media">
-          <video autoplay muted loop playsinline preload="metadata" src="/video/smile-preview.mp4"></video>
-          <span class="pill">Sale!</span>
+          <video autoplay muted loop playsinline preload="metadata" src={asset('/video/smile-preview.mp4')}></video>
+          <span class="pill">{c.sale}</span>
         </div>
         <div class="course__body stack">
-          <span class="eyebrow">Courses · Exocad</span>
-          <h3 class="h-lg">Exocad training video: how to use the teeth and virtual gingiva libraries</h3>
-          <p>Learn, step by step, how Fernando Polanco uses the teeth-in-occlusion and virtual gingiva libraries inside Exocad to turn hours of design into minutes of precision.</p>
-          <ul class="course__meta">
-            <li>On-demand video</li><li>Lifetime access</li><li>Exocad 3.2 / 3.3 and 3Shape compatible</li>
-          </ul>
+          <span class="eyebrow">{c.courseEyebrow}</span>
+          <h3 class="h-lg">{c.courseTitle}</h3>
+          <p>{c.courseText}</p>
+          <ul class="course__meta">{c.meta.map((m) => <li>{m}</li>)}</ul>
           <div class="cta-row">
-            <span class="price"><s>$149.99</s>$99.99</span>
-            <a class="btn btn--primary" href="https://expertsddt.com/courses/" target="_blank" rel="noopener">Add to cart <span class="arrow">→</span></a>
+            <span class="price"><s>{c.was}</s>{c.now}</span>
+            <a class="btn btn--primary" href={shop} target="_blank" rel="noopener">{c.addToCart} <span class="arrow">→</span></a>
           </div>
         </div>
       </article>
     </div>
   </section>
 
-  <section id="memberships" class="section section--navy" data-scene>
-    <div class="wrap grid-2">
-      <div class="stack" data-reveal-scope>
-        <span class="eyebrow" data-reveal="up">Memberships</span>
-        <h2 class="h-xl" data-split="lines">Choose the best plan, at your own pace and in your own style.</h2>
-        <p class="lead" data-reveal="up" data-delay=".2">Explore our memberships and get continuous access to new training, libraries and expert guidance.</p>
-        <div data-reveal="up" data-delay=".3"><a class="btn btn--white" href="/contact">Go now <span class="arrow">→</span></a></div>
-      </div>
-      <ul class="perks" data-stagger=".1">
-        <li><b>01</b>New Exocad workflows every month</li>
-        <li><b>02</b>Priority access to hands-on training</li>
-        <li><b>03</b>Discounts on templates and libraries</li>
-        <li><b>04</b>Direct line to Fernando’s team</li>
-      </ul>
-    </div>
-  </section>
-
-  <Cta title="Not sure where to start? <span class='cta__accent'>Let’s talk.</span>" />
+  <Cta title={c.ctaTitle} />
 </Base>
 
 <style>
+  .courses-hero__inner { text-align: center; justify-items: center; }
+  .courses-hero__inner .cta-row { justify-content: center; }
   .courses-hero__ring { position: absolute; right: -10vw; top: -10vw; width: 40vw; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(255,255,255,.12); box-shadow: inset 0 0 0 40px rgba(4,107,210,.15); z-index: -1; }
   .course { display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.5rem; padding: 1.2rem; overflow: hidden; }
   .course__media { position: relative; border-radius: 16px; overflow: hidden; min-height: 320px; }
   .course__media video { width: 100%; height: 100%; object-fit: cover; }
-  .course__media .pill { position: absolute; top: 1rem; left: 1rem; background: #fff; }
+  .course__media .pill { position: absolute; top: 1rem; left: 1rem; background: var(--surface); }
   .course__body { padding: 1.5rem 1.5rem 1.5rem 0; align-content: center; }
   .course__meta { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-start; }
   .course__meta li { font-size: .8rem; font-weight: 600; padding: .4rem .8rem; border-radius: 999px; background: var(--mist); color: var(--ink); }
-  .perks { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
-  .perks li { display: flex; gap: 1rem; align-items: center; padding: 1.2rem 1.4rem; border-radius: 18px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); color: #fff; font-weight: 500; }
-  .perks b { color: #6fb6ff; font-weight: 800; }
-  @media (max-width: 960px) { .course { grid-template-columns: 1fr; } .course__body { padding: .5rem; } }
+  @media (max-width: 960px) { .course { grid-template-columns: 1fr; padding: .8rem; } .course__body { padding: .8rem; } .course__media { min-height: 220px; aspect-ratio: 16 / 10; } }
 </style>

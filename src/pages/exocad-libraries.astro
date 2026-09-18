@@ -1,0 +1,46 @@
+---
+import Base from '../layouts/Base.astro';
+import Cta from '../components/Cta.astro';
+import { useI18n } from '../i18n/index.js';
+const { t, href } = useI18n(Astro);
+const l = t.pages.libraries;
+---
+<Base title={t.meta.libraries}>
+  <section class="page-hero" data-nav-solid-from data-scene>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="wrap grid-2">
+      <div class="stack">
+        <span class="pill" data-reveal="up">{l.pill}</span>
+        <h1 class="h-display" data-split="words">{l.title}</h1>
+        <p class="lead" data-reveal="up" data-delay=".3">{l.lead}</p>
+        <div class="cta-row" data-reveal="up" data-delay=".45">
+          <a class="btn btn--white" href="https://expertsddt.com/exocad-libraries/" target="_blank" rel="noopener" data-magnetic>{l.download} <span class="arrow">↓</span></a>
+          <a class="btn btn--ghost" href={href('/store/')}>{l.premium}</a>
+        </div>
+      </div>
+      <div class="lib" data-reveal="iris" aria-hidden="true">
+        <div class="lib__disc"><span>{l.disc[0]}</span><b>{l.disc[1]}<br />{l.disc[2]}</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" data-scene>
+    <div class="wrap grid-3" data-stagger=".12">
+      {l.steps.map((s, i) => <div class="card step"><b>0{i + 1}</b><h3>{s.t}</h3><p>{s.d}</p></div>)}
+    </div>
+  </section>
+
+  <Cta title={l.ctaTitle} text={l.ctaText} />
+</Base>
+
+<style>
+  .lib { display: grid; place-items: center; }
+  .lib__disc { width: min(380px, 70vw); aspect-ratio: 1; border-radius: 50%; background: conic-gradient(from 200deg, #046bd2, #1d3273, #2a7abf, #046bd2); display: grid; place-content: center; text-align: center; color: #fff; box-shadow: 0 50px 100px -40px rgba(4,107,210,.9), inset 0 0 0 18px rgba(255,255,255,.06); animation: spin 30s linear infinite; }
+  .lib__disc span { font-size: .8rem; letter-spacing: .3em; opacity: .8; }
+  .lib__disc b { font-size: 2rem; letter-spacing: .05em; line-height: 1; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .step { display: grid; gap: .6rem; align-content: start; }
+  .step b { font-size: 2.4rem; font-weight: 800; color: transparent; -webkit-text-stroke: 1.5px rgba(4,107,210,.5); line-height: 1; }
+  .step h3 { font-size: 1.15rem; }
+  @media (max-width: 960px) { .lib { order: -1; } .lib__disc { width: min(240px, 60vw); } .lib__disc b { font-size: 1.4rem; } }
+</style>

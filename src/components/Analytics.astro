@@ -1,0 +1,38 @@
+---
+// GA4 behind a consent banner. Renders nothing unless PUBLIC_GA_ID is set.
+import { useI18n } from '../i18n/index.js';
+const { t } = useI18n(Astro);
+const id = import.meta.env.PUBLIC_GA_ID;
+---
+{id && (
+  <>
+    <div class="consent" id="consent" hidden role="dialog" aria-live="polite" aria-label="Cookies">
+      <p>{t.consent.text}</p>
+      <div class="consent__btns">
+        <button class="btn btn--outline" type="button" data-consent="denied">{t.consent.decline}</button>
+        <button class="btn btn--primary" type="button" data-consent="granted">{t.consent.accept}</button>
+      </div>
+    </div>
+    <script is:inline define:vars={{ id }}>
+      (function () {
+        var KEY = 'cookie-consent';
+        function load() {
+          if (window.__gaLoaded) return; window.__gaLoaded = true;
+          var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + id; document.head.appendChild(s);
+          window.dataLayer = window.dataLayer || []; window.gtag = function () { dataLayer.push(arguments); };
+          gtag('js', new Date()); gtag('config', id, { anonymize_ip: true });
+          document.addEventListener('astro:page-load', function () { gtag('event', 'page_view', { page_location: location.href, page_title: document.title }); });
+        }
+        function init() {
+          var box = document.getElementById('consent'); if (!box) return;
+          var v = null; try { v = localStorage.getItem(KEY); } catch (e) {}
+          if (v === 'granted') load(); else if (!v) box.hidden = false;
+          box.querySelectorAll('[data-consent]').forEach(function (b) {
+            b.onclick = function () { try { localStorage.setItem(KEY, b.dataset.consent); } catch (e) {} box.hidden = true; if (b.dataset.consent === 'granted') load(); };
+          });
+        }
+        document.addEventListener('astro:page-load', init);
+      })();
+    </script>
+  </>
+)}

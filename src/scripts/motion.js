@@ -45,6 +45,24 @@ function initLenis() {
   });
 }
 
+/* ---------------- Theme toggle (dark / light, persisted) ---------------- */
+function initTheme() {
+  const root = document.documentElement;
+  const sync = () => document.querySelectorAll('.theme-toggle').forEach((b) => {
+    b.setAttribute('aria-pressed', String(root.dataset.theme === 'dark'));
+    const l = b.querySelector('.theme-toggle__label'); if (l) l.textContent = root.dataset.theme === 'dark' ? 'Light' : 'Dark';
+  });
+  document.querySelectorAll('.theme-toggle').forEach((b) => {
+    if (b.dataset.bound) return; b.dataset.bound = '1';
+    b.addEventListener('click', () => {
+      root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('theme', root.dataset.theme); } catch {}
+      sync();
+    });
+  });
+  sync();
+}
+
 /* ---------------- Nav ---------------- */
 function initNav() {
   const nav = document.querySelector('.nav');
@@ -56,7 +74,8 @@ function initNav() {
 
   const burger = document.querySelector('.burger');
   const menu = document.querySelector('.menu');
-  if (burger && menu) {
+  if (burger && menu && !burger.dataset.bound) {
+    burger.dataset.bound = '1';
     const toggle = (open) => {
       burger.setAttribute('aria-expanded', String(open));
       menu.classList.toggle('is-open', open);
@@ -64,6 +83,7 @@ function initNav() {
     };
     burger.addEventListener('click', () => toggle(burger.getAttribute('aria-expanded') !== 'true'));
     menu.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => toggle(false)));
+    document.addEventListener('astro:before-swap', () => toggle(false));
   }
 }
 
@@ -102,7 +122,8 @@ function initReveals() {
 /* ---------------- Text splitting ---------------- */
 function initSplits() {
   gsap.utils.toArray('[data-split]').forEach((el) => {
-    const mode = el.dataset.split; // chars | words | lines
+    // mobile: sober — chars become words, lines stay (cheap)
+    const mode = coarse && el.dataset.split === 'chars' ? 'words' : el.dataset.split; // chars | words | lines
     el.style.visibility = 'visible';
     const split = new SplitText(el, { type: mode === 'chars' ? 'chars,words' : mode, mask: mode === 'lines' ? 'lines' : undefined, linesClass: 'split-line', wordsClass: 'split-word', charsClass: 'split-char' });
     const targets = mode === 'chars' ? split.chars : mode === 'words' ? split.words : split.lines;
@@ -288,6 +309,7 @@ function boot() {
   ctx?.revert();
   ScrollTrigger.getAll().forEach((t) => t.kill());
   ctx = gsap.context(() => {
+    initTheme();
     initHero();
     initNav();
     initPillars();

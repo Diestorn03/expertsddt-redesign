@@ -2,37 +2,57 @@
 import { ClientRouter } from 'astro:transitions';
 import '../styles/global.css';
 import 'lenis/dist/lenis.css';
+import { useI18n } from '../i18n/index.js';
+import Analytics from '../components/Analytics.astro';
+import Apex from '../components/Apex.astro';
 
 interface Props { title: string; description?: string }
-const { title, description = 'Experts DDT — premium digital dental design, facial scanning, hands-on training and expert support by Fernando Polanco, The Wizard of Digital Dentistry.' } = Astro.props;
-const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const { t, lang, href, asset, alt, path, base } = useI18n(Astro);
+const { title, description = t.meta.description } = Astro.props;
+const shop = import.meta.env.PUBLIC_SHOP_URL;
+const site = (Astro.site?.origin ?? '') + base;
 const links = [
-  ['/', 'Home'], ['/#about', 'About us'], ['/services', 'Services'], ['/courses', 'Online courses'], ['/store', 'Store'], ['/libraries', 'Implant libraries'],
+  [href('/'), t.nav.home], [href('/#about'), t.nav.about], [href('/services/'), t.nav.services], [href('/courses/'), t.nav.courses],
+  [shop || href('/store/'), t.nav.store], [href('/exocad-libraries/'), t.nav.libraries],
 ];
+const current = (h) => h === Astro.url.pathname ? 'page' : undefined;
 ---
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title} · Experts DDT</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title} · {t.siteName}</title>
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0f346e" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={asset('/favicon.svg')} type="image/svg+xml" />
+    <link rel="canonical" href={(Astro.site?.origin ?? '') + Astro.url.pathname} />
+    <link rel="alternate" hreflang="en" href={site + path} />
+    <link rel="alternate" hreflang="es" href={site + '/es' + path} />
+    <link rel="alternate" hreflang="x-default" href={site + path} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <meta property="og:title" content={`${title} · Experts DDT`} />
+    <meta property="og:title" content={`${title} · ${t.siteName}`} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content="/img/portal-laptop.webp" />
+    <meta property="og:image" content={site + '/img/portal-laptop.webp'} />
+    <meta property="og:locale" content={lang === 'es' ? 'es_ES' : 'en_US'} />
+    <script is:inline>
+      // Theme before first paint; re-applied after view transitions.
+      (function () {
+        function apply() { var t = null; try { t = localStorage.getItem('theme'); } catch (e) {} if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = t; }
+        apply(); document.addEventListener('astro:after-swap', apply);
+      })();
+    </script>
     <ClientRouter />
+    <Analytics />
   </head>
   <body>
-    <a class="sr-only" href="#main">Skip to content</a>
+    <a class="sr-only" href="#main">{t.nav.skip}</a>
 
     <header class="nav" transition:persist>
       <div class="nav__inner">
-        <a class="logo" href="/" aria-label="Experts DDT home">
+        <a class="logo" href={href('/')} aria-label={t.siteName}>
           <svg class="logo__mark" viewBox="0 0 40 40" aria-hidden="true">
             <defs>
               <linearGradient id="lgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f7fb"/><stop offset="1" stop-color="#9fb0c4"/></linearGradient>
@@ -47,25 +67,43 @@ const links = [
 
         <nav aria-label="Primary">
           <ul class="nav__links">
-            {links.map(([href, label]) => <li><a href={href} aria-current={path === href ? 'page' : undefined}>{label}</a></li>)}
+            {links.map(([h, label]) => <li><a href={h} aria-current={current(h)} target={h.startsWith('http') ? '_blank' : undefined} rel={h.startsWith('http') ? 'noopener' : undefined}>{label}</a></li>)}
           </ul>
         </nav>
 
         <div class="nav__cta">
-          <a class="nav__icon" href="/store" aria-label="Cart">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>
+          <a class="nav__lang" href={alt.href} hreflang={alt.lang} lang={alt.lang} aria-label={t.nav.langSwitch}>{t.nav.langCode}</a>
+          <button class="nav__icon theme-toggle" type="button" aria-label={t.nav.theme} aria-pressed="false">
+            <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          </button>
+          <a class="nav__icon nav__cart" href={shop ? `${shop.replace(/\/$/, '')}/cart` : href('/store/')} aria-label={t.nav.cart} target={shop ? '_blank' : undefined} rel={shop ? 'noopener' : undefined}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>
           </a>
-          <a class="btn btn--primary" href="/contact" data-magnetic>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18M9 15l2 2 4-4"/></svg>
-            Booking
+          <a class="btn btn--primary nav__book" href={href('/contact/')} data-magnetic>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18M9 15l2 2 4-4"/></svg>
+            <span class="txt">{t.nav.booking}</span>
           </a>
-          <button class="burger" aria-label="Open menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button>
+          <button class="burger" aria-label={t.nav.menu} aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button>
         </div>
       </div>
     </header>
     <nav class="menu" id="menu" aria-label="Mobile">
-      {links.map(([href, label]) => <a href={href}>{label}</a>)}
-      <a href="/contact">Booking</a>
+      <div class="menu__links">
+        {links.map(([h, label]) => <a href={h} target={h.startsWith('http') ? '_blank' : undefined} rel={h.startsWith('http') ? 'noopener' : undefined}>{label}</a>)}
+        <a href={href('/contact/')}>{t.nav.contact}</a>
+      </div>
+      <div class="menu__extra">
+        <a class="btn btn--white" href={href('/contact/')}>{t.nav.booking}</a>
+        <a class="btn btn--ghost" href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">{t.nav.portal}</a>
+        <a class="btn btn--ghost" href={alt.href} hreflang={alt.lang} lang={alt.lang}>{t.nav.langSwitch}</a>
+        <button class="btn btn--ghost theme-toggle" type="button" aria-label={t.nav.theme} aria-pressed="false">
+          <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <span class="theme-toggle__label" aria-hidden="true"></span>
+        </button>
+        <a class="menu__phone" href="tel:+15106760418">+1 (510) 676-0418</a>
+      </div>
     </nav>
 
     <main id="main">
@@ -77,52 +115,48 @@ const links = [
       <div class="wrap">
         <div class="footer__grid">
           <div>
-            <a class="logo logo--footer" href="/" aria-label="Experts DDT">
+            <a class="logo logo--footer" href={href('/')} aria-label={t.siteName}>
               <svg class="logo__mark" viewBox="0 0 40 40" aria-hidden="true"><polygon points="20,2 2,38 20,30" fill="url(#lgS)"/><polygon points="20,2 38,38 20,30" fill="url(#lgB)"/><polygon points="2,38 38,38 20,30" fill="#0b2a5c"/></svg>
               <span class="logo__text logo__text--light">EXPERTS DDT</span>
             </a>
-            <p style="margin-top:1rem;max-width:34ch">Fernando Polanco DDT LLC. High-level design services, digital dentistry implementations, hands-on training and comprehensive clinical & technical support since 2019.</p>
+            <p style="margin-top:1rem;max-width:34ch">{t.footer.blurb}</p>
             <div class="socials" style="margin-top:1.4rem">
-              <a href="https://www.facebook.com/FernandoPolancoDDTRDA" target="_blank" rel="noopener" aria-label="Facebook"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H7v3h3v7h3v-7h3l1-3h-4v-2c0-.6.4-1 1-1z"/></svg></a>
-              <a href="https://www.instagram.com/expertsddt" target="_blank" rel="noopener" aria-label="Instagram Experts DDT"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg></a>
-              <a href="https://www.instagram.com/fernandopolancoddt" target="_blank" rel="noopener" aria-label="Instagram Fernando Polanco"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></a>
+              <a href="https://www.facebook.com/FernandoPolancoDDTRDA" target="_blank" rel="noopener" aria-label="Facebook"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H7v3h3v7h3v-7h3l1-3h-4v-2c0-.6.4-1 1-1z"/></svg></a>
+              <a href="https://www.instagram.com/expertsddt" target="_blank" rel="noopener" aria-label="Instagram Experts DDT"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg></a>
+              <a href="https://www.instagram.com/fernandopolancoddt" target="_blank" rel="noopener" aria-label="Instagram Fernando Polanco"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></a>
             </div>
           </div>
           <div>
-            <h4>Navigate</h4>
-            <ul>{links.map(([href, label]) => <li><a href={href}>{label}</a></li>)}<li><a href="/contact">Contact & booking</a></li></ul>
+            <h4>{t.footer.navigate}</h4>
+            <ul>{links.map(([h, label]) => <li><a href={h}>{label}</a></li>)}<li><a href={href('/contact/')}>{t.nav.contact}</a></li></ul>
           </div>
           <div>
-            <h4>Doctor portal</h4>
+            <h4>{t.footer.portal}</h4>
             <ul>
-              <li><a href="https://portal.expertsddt.com/signup" target="_blank" rel="noopener">Sign up as doctor</a></li>
-              <li><a href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">Log in</a></li>
-              <li><a href="/libraries">Free Exocad libraries</a></li>
-              <li><a href="/contact">Technical support</a></li>
+              <li><a href="https://portal.expertsddt.com/signup" target="_blank" rel="noopener">{t.footer.signup}</a></li>
+              <li><a href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">{t.footer.login}</a></li>
+              <li><a href={href('/exocad-libraries/')}>{t.footer.libraries}</a></li>
+              <li><a href={href('/contact/')}>{t.footer.support}</a></li>
             </ul>
           </div>
           <div>
-            <h4>Get to know more about us</h4>
+            <h4>{t.footer.contact}</h4>
             <ul>
               <li><a href="tel:+15106760418">+1 (510) 676-0418</a></li>
               <li><a href="mailto:Polanco@expertsddt.com">Polanco@expertsddt.com</a></li>
-              <li>Florida, United States</li>
-              <li style="opacity:.7">Available in 10 languages</li>
+              <li>{t.footer.location}</li>
+              <li style="opacity:.7">{t.footer.languages}</li>
             </ul>
           </div>
         </div>
         <div class="footer__bottom">
-          <span>© {new Date().getFullYear()} Fernando Polanco DDT LLC · Experts DDT. All rights reserved.</span>
-          <span>Redesign proposal · built with Astro</span>
+          <span>© {new Date().getFullYear()} Fernando Polanco DDT LLC · Experts DDT. {t.footer.rights}</span>
+          <span>{t.footer.built}</span>
         </div>
       </div>
     </footer>
 
-    <a class="fab" href="/contact" aria-label="Chat with Apex, our digital concierge">
-      <span class="fab__dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
-      Ask Apex
-    </a>
-
+    <Apex />
     <script src="../scripts/motion.js"></script>
   </body>
 </html>
@@ -132,5 +166,6 @@ const links = [
   .logo__mark { width: 34px; height: 34px; filter: drop-shadow(0 4px 10px rgba(4,107,210,.35)); }
   .logo__text { font-weight: 800; letter-spacing: .04em; font-size: 1.05rem; color: inherit; }
   .nav.is-solid .logo__text { background: linear-gradient(90deg, #046bd2, #045cb4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  [data-theme="dark"] .nav.is-solid .logo__text { background: linear-gradient(90deg, #6fb6ff, #1b8cff); -webkit-background-clip: text; background-clip: text; }
   .logo__text--light { color: #fff; }
 </style>

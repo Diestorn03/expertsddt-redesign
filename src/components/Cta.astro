@@ -1,16 +1,18 @@
 ---
+import { useI18n } from '../i18n/index.js';
+const { t, href } = useI18n(Astro);
 interface Props { title?: string; text?: string }
-const { title = 'Ready to go <span class="cta__accent">fully digital?</span>', text = 'Book a 1-hour consultation, talk to our team, or ask Apex, our digital concierge, to guide you through services and workflows.' } = Astro.props;
+const { title = t.cta.title, text = t.cta.text } = Astro.props;
 ---
 <section class="section cta" data-scene aria-label="Contact">
   <div class="wrap">
     <div class="cta__box" data-reveal="scale">
       <div class="cta__glow" aria-hidden="true"></div>
-      <span class="eyebrow">Get to know more about us</span>
+      <span class="eyebrow">{t.cta.eyebrow}</span>
       <h2 class="h-display" set:html={title}></h2>
       <p class="lead">{text}</p>
       <div class="cta-row">
-        <a class="btn btn--white" href="/contact" data-magnetic>Book your session <span class="arrow">→</span></a>
+        <a class="btn btn--white" href={href('/contact/')} data-magnetic>{t.cta.book} <span class="arrow">→</span></a>
         <a class="btn btn--ghost" href="tel:+15106760418">+1 (510) 676-0418</a>
         <a class="btn btn--ghost" href="mailto:Polanco@expertsddt.com">Polanco@expertsddt.com</a>
       </div>
@@ -20,10 +22,11 @@ const { title = 'Ready to go <span class="cta__accent">fully digital?</span>', t
 
 <style>
   .cta { padding-top: 0; }
-  .cta__box { position: relative; overflow: hidden; border-radius: 32px; padding: clamp(3rem, 7vw, 6rem); background: var(--navy-deep); color: #c7d6ee; display: grid; gap: 1.4rem; justify-items: start; isolation: isolate; }
+  .cta__box { position: relative; overflow: hidden; border-radius: 32px; padding: clamp(2rem, 7vw, 6rem); background: var(--navy-deep); color: #c7d6ee; display: grid; gap: 1.4rem; justify-items: start; isolation: isolate; }
   .cta__box h2 { color: #fff; }
   .cta__box :global(.cta__accent) { background: linear-gradient(90deg, #6fb6ff, #1b8cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .cta__glow { position: absolute; inset: 0; z-index: -1; background: radial-gradient(50% 80% at 90% 10%, rgba(4,107,210,.7), transparent 60%), radial-gradient(40% 60% at 5% 100%, rgba(42,122,191,.5), transparent 60%); }
   .cta__box .eyebrow { color: #8fc1ff; }
   .cta__box .lead { color: #c7d6ee; }
+  @media (max-width: 560px) { .cta__box { border-radius: 22px; } .cta__box .btn { font-size: .9rem; } }
 </style>

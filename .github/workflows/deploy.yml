@@ -1,0 +1,51 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          # Project site: https://<owner>.github.io/<repo>/ — remove PAGES_BASE when a custom domain is attached.
+          SITE_URL: https://${{ github.repository_owner }}.github.io
+          PAGES_BASE: /${{ github.event.repository.name }}
+          # Optional integrations: set them under Settings → Secrets and variables → Actions → Variables.
+          PUBLIC_GA_ID: ${{ vars.PUBLIC_GA_ID }}
+          PUBLIC_N8N_FORM_WEBHOOK: ${{ vars.PUBLIC_N8N_FORM_WEBHOOK }}
+          PUBLIC_N8N_CHAT_WEBHOOK: ${{ vars.PUBLIC_N8N_CHAT_WEBHOOK }}
+          PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
+          PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
+          PUBLIC_WHATSAPP: ${{ vars.PUBLIC_WHATSAPP || '15106760418' }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

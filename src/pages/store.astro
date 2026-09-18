@@ -1,37 +1,32 @@
 ---
 import Base from '../layouts/Base.astro';
 import Cta from '../components/Cta.astro';
-
-const cats = [
-  { t: 'Courses', n: '1 product', d: 'On-demand Exocad video training.', href: '/courses' },
-  { t: 'Physical products', n: '4 products', d: 'Hardware and components for your digital workflow.', href: 'https://expertsddt.com/store/' },
-  { t: 'Templates', n: '3 products', d: 'Libraries and guidelines by Fernando Polanco.', href: '#products' },
-];
-const products = [
-  { cat: 'Templates', t: 'Teeth in occlusion with virtual gingiva libraries by Fernando Polanco', d: 'Pre-occluded, anatomically positioned teeth with ready-to-go virtual gingiva. Compatible with Exocad and 3Shape. Save up to 70% in design time on full dentures, overdentures and All-on-X.', was: '$699.99', now: '$399.99', href: 'https://expertsddt.com/store/' },
-  { cat: 'Templates', t: '3D aesthetic guidelines: Smile Creator 8mm by Fernando Polanco', d: 'Advanced 3D guidelines template that ensures accurate positioning and symmetry for crowns, bridges and All-on-X cases.', was: '$49.99', now: '$24.99', href: 'https://expertsddt.com/store/' },
-  { cat: 'Courses', t: 'Exocad training video: teeth and virtual gingiva libraries', d: 'How to use the teeth and virtual gingiva libraries inside Exocad. Optional 30-minute masterclass included with the libraries.', was: '$149.99', now: '$99.99', href: '/courses' },
-];
+import { useI18n } from '../i18n/index.js';
+const { t, href } = useI18n(Astro);
+const s = t.pages.store;
+const shop = import.meta.env.PUBLIC_SHOP_URL;
+const catHref = [shop || href('/courses/'), shop || 'https://expertsddt.com/store/', '#products'];
+const buy = shop || 'https://expertsddt.com/store/';
 ---
-<Base title="Store" description="Templates, libraries, courses and physical products by Experts DDT.">
+<Base title={t.meta.store}>
   <section class="page-hero" data-nav-solid-from data-scene>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="wrap stack">
-      <span class="eyebrow" data-reveal="up">Store</span>
-      <h1 class="h-display" data-split="words">Tools that turn hours of design into minutes of precision.</h1>
-      <p class="lead" data-reveal="up" data-delay=".3">Templates, libraries, courses and physical products, developed through 10 years of clinical refinement.</p>
+      <span class="eyebrow" data-reveal="up">{s.eyebrow}</span>
+      <h1 class="h-display" data-split="words">{s.title}</h1>
+      <p class="lead" data-reveal="up" data-delay=".3">{s.lead}</p>
     </div>
   </section>
 
   <section class="section" data-scene>
     <div class="wrap">
       <div class="grid-3" data-stagger=".1">
-        {cats.map((c) => (
-          <a class="cat card" href={c.href} data-tilt>
+        {s.cats.map((c, i) => (
+          <a class="cat card" href={catHref[i]} data-tilt target={catHref[i].startsWith('http') ? '_blank' : undefined} rel="noopener">
             <span class="pill">{c.n}</span>
             <h2 class="h-lg">{c.t}</h2>
             <p>{c.d}</p>
-            <span class="cat__cta">Browse <span class="arrow">→</span></span>
+            <span class="cat__cta">{s.browse} <span class="arrow">→</span></span>
           </a>
         ))}
       </div>
@@ -41,20 +36,21 @@ const products = [
   <section id="products" class="section section--mist" data-scene>
     <div class="wrap">
       <div class="stack" style="margin-bottom:2.5rem" data-reveal-scope>
-        <span class="eyebrow" data-reveal="up">Featured</span>
-        <h2 class="h-xl" data-split="lines">Best <span class="underline-accent">sellers</span></h2>
+        <span class="eyebrow" data-reveal="up">{s.featured}</span>
+        <h2 class="h-xl" data-split="lines">{s.bestTitle} <span class="underline-accent">{s.bestAccent}</span></h2>
+        <p class="note" data-reveal="up" data-delay=".2">{s.shopifyNote}</p>
       </div>
       <div class="products">
-        {products.map((p, i) => (
+        {s.products.map((p, i) => (
           <article class="product card" data-reveal="up" data-delay={i * .1}>
             <div class="product__visual" aria-hidden="true"><span>{p.cat}</span></div>
             <div class="stack">
-              <span class="pill">Sale!</span>
+              <span class="pill">{s.sale}</span>
               <h3>{p.t}</h3>
               <p>{p.d}</p>
               <div class="cta-row">
                 <span class="price"><s>{p.was}</s>{p.now}</span>
-                <a class="btn btn--outline" href={p.href} target={p.href.startsWith('http') ? '_blank' : undefined} rel="noopener">Add to cart</a>
+                <a class="btn btn--outline" href={buy} target="_blank" rel="noopener">{s.addToCart}</a>
               </div>
             </div>
           </article>
@@ -63,7 +59,7 @@ const products = [
     </div>
   </section>
 
-  <Cta title="Need a custom library or <span class='cta__accent'>a bulk quote?</span>" />
+  <Cta title={s.ctaTitle} />
 </Base>
 
 <style>
@@ -75,5 +71,5 @@ const products = [
   .product__visual { aspect-ratio: 1; border-radius: 16px; background: var(--grad); display: grid; place-items: center; color: #fff; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; font-size: .75rem; position: relative; overflow: hidden; }
   .product__visual::after { content: ''; position: absolute; inset: auto -30% -30% auto; width: 70%; aspect-ratio: 1; border-radius: 50%; border: 30px solid rgba(255,255,255,.1); }
   .product h3 { font-size: 1.3rem; }
-  @media (max-width: 700px) { .product { grid-template-columns: 1fr; } .product__visual { aspect-ratio: 16/6; } }
+  @media (max-width: 700px) { .product { grid-template-columns: 1fr; gap: 1.2rem; } .product__visual { aspect-ratio: 16/6; } .cat { min-height: 0; } }
 </style>

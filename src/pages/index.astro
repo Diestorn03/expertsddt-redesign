@@ -1,109 +1,100 @@
 ---
 import Base from '../layouts/Base.astro';
 import Cta from '../components/Cta.astro';
+import { useI18n } from '../i18n/index.js';
+const { t, href, asset } = useI18n(Astro);
+const shop = import.meta.env.PUBLIC_SHOP_URL;
 
-const services = [
-  { t: 'Implementation', d: 'Seamless integration of full digital dental ecosystems into your lab or clinic, guided by Fernando Polanco DDT experts.', i: 'M4 6h16v10H4zM2 20h20M9 16v4M15 16v4' },
-  { t: 'Cutting-edge technology', d: 'Integrate advanced facial scanning technology and state-of-the-art tools to visualize and plan patient outcomes with superior accuracy.', i: 'M12 3a9 9 0 1 0 9 9M12 3v4M12 3l3 1M12 12l6-6M12 12a2 2 0 1 0 0 .01' },
-  { t: 'Training', d: 'Master the digital workflow with hands-on training in intraoral scanning, facial scanning, Exocad design, and 3D printing.', i: 'M3 8l9-4 9 4-9 4zM7 10v5c0 1.5 2.5 3 5 3s5-1.5 5-3v-5M21 8v6' },
-  { t: 'Customized workflows', d: 'Tailor-made digital protocols designed specifically for your clinic to maximize efficiency and improve the patient experience.', i: 'M4 6h6v6H4zM14 12h6v6h-6zM10 9h4M17 12V8M7 12v3h7' },
-  { t: 'Components', d: 'Premium components engineered to optimize your digital workflows, ensuring better fit and maximum patient comfort.', i: 'M12 2l8 4.5v9L12 20l-8-4.5v-9zM12 20v-9M4 6.5l8 4.5 8-4.5' },
-  { t: 'Support', d: 'Reliable, on-demand technical expert support to ensure your digital equipment and software keep running smoothly.', i: 'M4 13a8 8 0 0 1 16 0M4 13v4a2 2 0 0 0 2 2h2v-6H4M20 13v4a2 2 0 0 1-2 2h-2v-6h4M12 21h4' },
+const icons = [
+  'M4 6h16v10H4zM2 20h20M9 16v4M15 16v4',
+  'M12 3a9 9 0 1 0 9 9M12 3v4M12 3l3 1M12 12l6-6M12 12a2 2 0 1 0 0 .01',
+  'M3 8l9-4 9 4-9 4zM7 10v5c0 1.5 2.5 3 5 3s5-1.5 5-3v-5M21 8v6',
+  'M4 6h6v6H4zM14 12h6v6h-6zM10 9h4M17 12V8M7 12v3h7',
+  'M12 2l8 4.5v9L12 20l-8-4.5v-9zM12 20v-9M4 6.5l8 4.5 8-4.5',
+  'M4 13a8 8 0 0 1 16 0M4 13v4a2 2 0 0 0 2 2h2v-6H4M20 13v4a2 2 0 0 1-2 2h-2v-6h4M12 21h4',
 ];
-
-const pillars = [
-  { n: '01', k: 'Design services', h: ['Experience premium', 'design services'], p: 'Elevate your clinical outcomes with our end-to-end digital design solutions. From comprehensive All-on-X planning to highly accurate surgical guides, we deliver uncompromising design quality for every case.', cta: 'See design services', href: '/services', video: '/video/smile-preview.mp4' },
-  { n: '02', k: 'Facial scanner', h: ['The next generation of', 'facial scanning'], p: 'Transform your practice with Fernando Polanco’s 5.0 Facial Scanning Technology. Capture high-resolution facial, bite, and denture scans in under 10 seconds, ensuring ultimate patient comfort while saving up to 80% of chair time.', cta: 'Discover the technology', href: '/services#scanning', img: '/img/design-services.webp' },
-  { n: '03', k: 'Training & implementation', h: ['Master the digital workflow', 'with hands-on training'], p: 'Don’t just outsource; understand. Join our intensive hands-on courses designed to bridge the gap between clinical dentistry and digital technology. Master intraoral scanning and Exocad workflows in days, not months.', cta: 'Training & courses', href: '/courses', img: '/img/training-main.webp' },
-  { n: '04', k: 'Contact support', h: ['Dedicated support for', 'your digital workflow'], p: 'Stay ahead of the curve in an evolving industry. We integrate facial scanning, AI-assisted planning, and automated manufacturing to deliver the most predictable and patient-centered results available today.', cta: 'Contact support', href: '/contact', img: '/img/training.webp' },
-];
-
-const reviews = [
-  { n: 'Dr. Michael R.', r: 'Implant Specialist', q: 'The hands-on training with Fernando was a complete game-changer for my clinic. I had struggled with Exocad for months, but his method of breaking down complex workflows made it incredibly intuitive. I left the course with the confidence to handle full-arch cases the very next day. Truly the “Wizard” of digital dentistry.' },
-  { n: 'Sarah L.', r: 'Dental Lab Owner', q: 'Precision is everything in implantology, and Experts DDT delivers exactly that. The fit of their Zirconia bars and the accuracy of the surgical guides are unmatched. We’ve significantly reduced our chairside adjustment time since we started working with them. A partner you can trust.' },
-  { n: 'Dr. James K.', r: 'Prosthodontist', q: 'I brought a nightmare case to Fernando that two other labs had turned down. He didn’t just design a solution; he engineered a workflow that saved the patient’s treatment. His deep understanding of both the clinical and technical sides is rare to find. Highly recommended.' },
-];
-
-const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning', '3D printing', 'Photogrammetry', 'CBCT', 'Zirconia', 'Surgical guides', 'PMMA', 'Smile design'];
+const featureIcons = ['M12 16V4M7 9l5-5 5 5M4 20h16', 'M3 12h4l3-8 4 16 3-8h4', 'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z'];
+const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset('/img/design-services.webp') }, { img: asset('/img/training-main.webp') }, { img: asset('/img/training.webp') }];
 ---
-<Base title="The best in dental solutions">
+<Base title={t.meta.home}>
 
-  <!-- ================= HERO + PORTAL CHAPTER (pinned scrub) ================= -->
+  <!-- ================= HERO + PORTAL CHAPTER (pinned scrub on desktop) ================= -->
   <section id="hero" class="hero" data-scene data-nav-solid-from>
     <div class="hero__bg" aria-hidden="true">
-      <video autoplay muted loop playsinline preload="metadata" poster="/img/design-services.webp" src="/video/smile-design.mp4"></video>
+      <video class="hero__video" autoplay muted loop playsinline preload="metadata" poster={asset('/img/design-services.webp')} src={asset('/video/smile-design.mp4')}></video>
+      <img class="hero__poster" src={asset('/img/design-services.webp')} alt="" loading="eager" />
       <div class="hero__veil"></div>
     </div>
     <div class="hero__glow" aria-hidden="true"><i></i><i></i><i></i></div>
     <div class="grid-bg" aria-hidden="true"></div>
-    <div class="hero__ghost" aria-hidden="true"><span class="line-mask"><span class="g1">DIGITAL</span></span><span class="line-mask"><span class="g2">DENTISTRY</span></span></div>
+    <div class="hero__ghost" aria-hidden="true"><span class="line-mask"><span class="g1">{t.hero.ghost[0]}</span></span><span class="line-mask"><span class="g2">{t.hero.ghost[1]}</span></span></div>
 
     <div class="hero__stage wrap">
       <div class="hero__copy">
-        <p class="hero__eyebrow"><span class="pill">✦ Fernando Polanco DDT · since 2019</span></p>
+        <p class="hero__eyebrow"><span class="pill">{t.hero.eyebrow}</span></p>
         <h1 class="hero__title">
-          <span class="line-mask"><span class="w">The best in</span></span>
-          <span class="line-mask"><span class="w">dental</span> <span class="w accent">solutions.</span></span>
+          <span class="line-mask"><span class="w">{t.hero.title[0]}</span></span>
+          <span class="line-mask"><span class="w">{t.hero.title[1]}</span> <span class="w accent">{t.hero.title[2]}</span></span>
         </h1>
-        <p class="hero__lead">Premium design services, facial scanning, hands-on training and expert support. The complete digital workflow, engineered by “The Wizard of Digital Dentistry”.</p>
+        <p class="hero__lead">{t.hero.lead}</p>
         <div class="hero__cta cta-row">
-          <a class="btn btn--primary" href="/contact" data-magnetic>Book a consultation <span class="arrow">→</span></a>
-          <a class="btn btn--ghost" href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">Doctor portal</a>
+          <a class="btn btn--primary" href={href('/contact/')} data-magnetic>{t.hero.cta} <span class="arrow">→</span></a>
+          <a class="btn btn--ghost" href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">{t.hero.portal}</a>
         </div>
       </div>
 
       <div class="hero__laptop">
-        <img class="float-loop" src="/img/portal-laptop.webp" alt="Experts DDT Doctor Portal dashboard showing clinical cases on a laptop" width="1774" height="887" fetchpriority="high" />
+        <img class="float-loop" src={asset('/img/portal-laptop.webp')} alt={t.hero.laptopAlt} width="1774" height="887" fetchpriority="high" />
       </div>
 
       <div class="portal" aria-labelledby="portal-title">
         <div class="portal__head">
-          <span class="pill">✦ New</span>
-          <h2 id="portal-title">Introducing the Experts DDT Doctor Portal</h2>
-          <p>Submit cases, track progress, and communicate with our design team — all in one secure platform.</p>
+          <span class="pill">{t.portal.pill}</span>
+          <h2 id="portal-title">{t.portal.title}</h2>
+          <p>{t.portal.text}</p>
         </div>
         <ul class="portal__features">
-          <li class="portal__feature"><i><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg></i><h3>Easy case submission</h3><p>Upload scans, photos, and prescriptions in minutes</p></li>
-          <li class="portal__feature"><i><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></i><h3>Real-time tracking</h3><p>Monitor your case status from submission to delivery</p></li>
-          <li class="portal__feature"><i><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></i><h3>Direct communication</h3><p>Chat with our designers and get instant updates</p></li>
+          {t.portal.features.map((f, i) => (
+            <li class="portal__feature"><i><svg viewBox="0 0 24 24"><path d={featureIcons[i]}/></svg></i><h3>{f.t}</h3><p>{f.d}</p></li>
+          ))}
         </ul>
         <div class="portal__cta cta-row">
-          <a class="btn btn--white" href="https://portal.expertsddt.com/signup" target="_blank" rel="noopener">Sign up as doctor</a>
-          <a class="btn btn--ghost" href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">Log in <span class="arrow">→</span></a>
+          <a class="btn btn--white" href="https://portal.expertsddt.com/signup" target="_blank" rel="noopener">{t.portal.signup}</a>
+          <a class="btn btn--ghost" href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">{t.portal.login} <span class="arrow">→</span></a>
         </div>
       </div>
     </div>
 
-    <div class="hero__scroll" aria-hidden="true"><span></span>Scroll</div>
+    <div class="hero__scroll" aria-hidden="true"><span></span>{t.hero.scroll}</div>
   </section>
 
-  <!-- ================= PILLARS (horizontal scroll) ================= -->
-  <section id="pillars" class="pillars" data-scene aria-label="What we do">
+  <!-- ================= PILLARS (horizontal scroll on desktop) ================= -->
+  <section id="pillars" class="pillars" data-scene aria-label={t.pillars.hud}>
     <div class="pillars__hud">
-      <span class="eyebrow">What we do</span>
+      <span class="eyebrow">{t.pillars.hud}</span>
       <span class="pillars__progress" aria-hidden="true"><i></i></span>
       <span class="pillars__count" aria-hidden="true">01</span>
     </div>
     <div class="pillars__track">
       <article class="pillar pillar--intro">
         <div class="pillar__copy">
-          <span class="eyebrow">Four pillars</span>
-          <h2 class="h-display" data-split="words">Everything a fully digital practice needs.</h2>
-          <p class="lead" data-reveal="up" data-delay=".3">Design, scanning, training and support, under one roof and one expert. Keep scrolling to explore each pillar.</p>
-          <span class="pillar__hint" data-reveal="up" data-delay=".5">Scroll <span class="arrow">→</span></span>
+          <span class="eyebrow">{t.pillars.intro.eyebrow}</span>
+          <h2 class="h-display" data-split="words">{t.pillars.intro.title}</h2>
+          <p class="lead" data-reveal="up" data-delay=".3">{t.pillars.intro.lead}</p>
+          <span class="pillar__hint" data-reveal="up" data-delay=".5">{t.pillars.intro.hint} <span class="arrow">→</span></span>
         </div>
       </article>
-      {pillars.map((p) => (
+      {t.pillars.items.map((p, i) => (
         <article class="pillar">
           <div class="pillar__media" aria-hidden="true">
-            {p.video ? <video autoplay muted loop playsinline preload="metadata" src={p.video}></video> : <img src={p.img} alt="" loading="lazy" />}
+            {pillarMedia[i].video ? <video autoplay muted loop playsinline preload="metadata" src={pillarMedia[i].video}></video> : <img src={pillarMedia[i].img} alt="" loading="lazy" />}
           </div>
           <div class="pillar__copy">
             <span class="pillar__num">{p.n}</span>
             <span class="eyebrow">{p.k}</span>
             <h3 class="h-xl">{p.h[0]}<br /><span class="accent">{p.h[1]}</span></h3>
             <p class="lead">{p.p}</p>
-            <a class="btn btn--primary" href={p.href}>{p.cta} <span class="arrow">→</span></a>
+            <a class="btn btn--primary" href={href(p.href)}>{p.cta} <span class="arrow">→</span></a>
           </div>
         </article>
       ))}
@@ -112,20 +103,20 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
 
   <!-- ================= SERVICES GRID ================= -->
   <section id="services" class="section section--mist services" data-scene>
-    <img class="services__brush" src="/img/facial-scan.webp" alt="" aria-hidden="true" data-parallax="0.35" loading="lazy" />
+    <img class="services__brush" src={asset('/img/facial-scan.webp')} alt="" aria-hidden="true" data-parallax="0.35" loading="lazy" />
     <div class="wrap">
       <div class="services__head" data-reveal-scope>
-        <span class="eyebrow" data-reveal="up">Our main</span>
-        <h2 class="h-display" data-split="chars"><span class="underline-accent">Services</span></h2>
-        <p class="lead" data-reveal="up" data-delay=".2">Six ways we help labs and clinics go fully digital, with predictable, precise and profitable results.</p>
+        <span class="eyebrow" data-reveal="up">{t.services.eyebrow}</span>
+        <h2 class="h-display" data-split="chars"><span class="underline-accent">{t.services.title}</span></h2>
+        <p class="lead" data-reveal="up" data-delay=".2">{t.services.lead}</p>
       </div>
       <div class="services__grid" data-stagger=".08">
-        {services.map((s) => (
+        {t.services.items.map((s, i) => (
           <article class="svc card card--grad" data-tilt data-glow>
-            <i class="svc__icon"><svg viewBox="0 0 24 24"><path d={s.i}/></svg></i>
+            <i class="svc__icon"><svg viewBox="0 0 24 24"><path d={icons[i]}/></svg></i>
             <h3>{s.t}</h3>
             <p>{s.d}</p>
-            <a href="/services" class="svc__link">Learn more <span class="arrow">→</span></a>
+            <a href={href('/services/')} class="svc__link">{t.services.learn} <span class="arrow">→</span></a>
           </article>
         ))}
       </div>
@@ -135,14 +126,12 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   <!-- ================= MARQUEE + STATS ================= -->
   <section class="stats section--navy" data-scene aria-label="Key numbers">
     <div class="marquee" aria-hidden="true">
-      <div class="marquee__track">{keywords.map((k) => <span>{k}<i>✦</i></span>)}</div>
+      <div class="marquee__track">{t.stats.keywords.map((k) => <span>{k}<i>✦</i></span>)}</div>
     </div>
     <div class="wrap stats__grid" data-stagger=".1">
-      <div class="stat"><strong><span data-count="2019">0</span></strong><span>Founded in Florida, USA</span></div>
-      <div class="stat"><strong><span data-count="13">0</span>+</strong><span>Years of daily collaboration with dentists and patients</span></div>
-      <div class="stat"><strong>&lt;<span data-count="10">0</span>s</strong><span>To capture a high-resolution facial, bite or denture scan</span></div>
-      <div class="stat"><strong><span data-count="80">0</span>%</strong><span>Chair time saved with 5.0 facial scanning technology</span></div>
-      <div class="stat"><strong><span data-count="70">0</span>%</strong><span>Less design time with our teeth-in-occlusion libraries</span></div>
+      {t.stats.items.map((s) => (
+        <div class="stat"><strong>{s.prefix}<span data-count={s.v}>0</span>{s.suffix}</strong><span>{s.label}</span></div>
+      ))}
     </div>
   </section>
 
@@ -151,21 +140,21 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
     <div class="wrap grid-2">
       <div class="about__visual">
         <div class="about__photo" data-reveal="iris">
-          <img src="/img/fernando.webp" alt="Fernando Polanco, founder of Experts DDT" width="1024" height="1024" loading="lazy" />
+          <img src={asset('/img/fernando.webp')} alt={t.about.photoAlt} width="1024" height="1024" loading="lazy" />
         </div>
         <div class="about__badge" data-reveal="scale" data-delay=".5" data-parallax="0.5">
-          <strong>The Wizard</strong><span>of Digital Dentistry</span>
+          <strong>{t.about.badge}</strong><span>{t.about.badgeSub}</span>
         </div>
         <div class="about__orbit" aria-hidden="true" data-parallax="0.25"></div>
       </div>
       <div class="about__copy" data-reveal-scope>
-        <span class="eyebrow" data-reveal="up">About us</span>
-        <h2 class="h-xl" data-split="lines">Fernando Polanco <span class="underline-accent">DDT LLC</span></h2>
-        <p class="lead about__p" data-lit>Founded in 2019, we provide high-level design services, digital dentistry implementations, hands-on training, and comprehensive clinical and technical support. The company specializes in advanced dental technology solutions, including facial scanning, intraoral scanning, CBCT, and photogrammetry, and in the development of innovative, fully digital workflows that optimize accuracy, efficiency, and patient care.</p>
-        <p class="about__p" data-lit>Fernando Polanco, widely known as “The Wizard of Digital Dentistry”, is an immigrant from Guatemala who has earned global recognition for his unique innovations, developments, and contributions to the evolution of digital dentistry. With over 13 years of daily collaboration with dentists and patients, Fernando has built exceptional expertise and a deep understanding of clinical needs, allowing him to create cutting-edge solutions that elevate the standard of care across the industry.</p>
+        <span class="eyebrow" data-reveal="up">{t.about.eyebrow}</span>
+        <h2 class="h-xl" data-split="lines">{t.about.title} <span class="underline-accent">{t.about.titleAccent}</span></h2>
+        <p class="lead about__p" data-lit>{t.about.p1}</p>
+        <p class="about__p" data-lit>{t.about.p2}</p>
         <div class="cta-row" data-reveal="up">
-          <a class="btn btn--primary" href="/contact">Work with Fernando <span class="arrow">→</span></a>
-          <a class="btn btn--outline" href="/courses">Explore courses</a>
+          <a class="btn btn--primary" href={href('/contact/')}>{t.about.cta} <span class="arrow">→</span></a>
+          <a class="btn btn--outline" href={href('/courses/')}>{t.about.cta2}</a>
         </div>
       </div>
     </div>
@@ -175,13 +164,14 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   <section id="reviews" class="section section--mist reviews" data-scene>
     <div class="wrap reviews__grid">
       <div class="reviews__head" data-reveal-scope>
-        <span class="eyebrow" data-reveal="up">Your reviews</span>
-        <h2 class="h-display" data-split="lines">Let us know<br />how you <span class="underline-accent">feel</span></h2>
-        <p class="lead" data-reveal="up" data-delay=".2">Specialists, prosthodontists and lab owners on what changes when Experts DDT joins the workflow.</p>
-        <div class="reviews__rating" data-reveal="up" data-delay=".35"><span class="stars" aria-hidden="true">★★★★★</span> Trusted by clinics and labs across the US</div>
+        <span class="eyebrow" data-reveal="up">{t.reviews.eyebrow}</span>
+        <h2 class="h-display" data-split="lines">{t.reviews.title}<br />{t.reviews.titleLine2} <span class="underline-accent">{t.reviews.titleAccent}</span></h2>
+        <p class="lead" data-reveal="up" data-delay=".2">{t.reviews.lead}</p>
+        <div class="reviews__rating" data-reveal="up" data-delay=".35"><span class="stars" aria-hidden="true">★★★★★</span> {t.reviews.trust}</div>
+        <p class="note" data-reveal="up" data-delay=".45">{t.reviews.sample}</p>
       </div>
       <div class="reviews__stack">
-        {reviews.map((r, i) => (
+        {t.reviews.items.map((r, i) => (
           <figure class="stack-card card" style={`--i:${i}`}>
             <span class="stack-card__quote" aria-hidden="true">“</span>
             <blockquote><p>{r.q}</p></blockquote>
@@ -196,29 +186,29 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   <section id="resources" class="section resources" data-scene>
     <div class="wrap">
       <div class="resources__head" data-reveal-scope>
-        <span class="eyebrow" data-reveal="up">Learn, download, upgrade</span>
-        <h2 class="h-xl" data-split="words">Resources built for your <span class="underline-accent">Exocad workflow</span></h2>
+        <span class="eyebrow" data-reveal="up">{t.resources.eyebrow}</span>
+        <h2 class="h-xl" data-split="words">{t.resources.title} <span class="underline-accent">{t.resources.titleAccent}</span></h2>
       </div>
       <div class="grid-3 resources__grid">
-        <a class="res res--free" href="/libraries" data-reveal="drop">
-          <span class="pill">Free download</span>
-          <h3>ExpertsDDT implant libraries</h3>
-          <p>Manufacturer-ready implant components for accurate restorations across major systems. Ready to import into Exocad.</p>
-          <span class="res__cta">Download <span class="arrow">→</span></span>
+        <a class="res res--free" href={href('/exocad-libraries/')} data-reveal="drop">
+          <span class="pill">{t.resources.free.pill}</span>
+          <h3>{t.resources.free.t}</h3>
+          <p>{t.resources.free.d}</p>
+          <span class="res__cta">{t.resources.free.cta} <span class="arrow">→</span></span>
         </a>
-        <a class="res res--course" href="/courses" data-reveal="drop" data-delay=".12">
-          <span class="pill">Online course · Sale</span>
-          <h3>Teeth & virtual gingiva libraries in Exocad</h3>
-          <p>Video training on how to use the teeth and virtual gingiva libraries, at your own pace.</p>
-          <span class="price"><s>$149.99</s>$99.99</span>
-          <span class="res__cta">Join today <span class="arrow">→</span></span>
+        <a class="res res--course" href={shop || href('/courses/')} data-reveal="drop" data-delay=".12">
+          <span class="pill">{t.resources.course.pill}</span>
+          <h3>{t.resources.course.t}</h3>
+          <p>{t.resources.course.d}</p>
+          <span class="price"><s>{t.resources.course.was}</s>{t.resources.course.now}</span>
+          <span class="res__cta">{t.resources.course.cta} <span class="arrow">→</span></span>
         </a>
-        <a class="res res--store" href="/store" data-reveal="drop" data-delay=".24">
-          <span class="pill">Templates · Sale</span>
-          <h3>Teeth in occlusion with virtual gingiva</h3>
-          <p>Pre-occluded tooth libraries by Fernando Polanco. Save up to 70% of design time on dentures, overdentures and All-on-X.</p>
-          <span class="price"><s>$699.99</s>$399.99</span>
-          <span class="res__cta">Visit the store <span class="arrow">→</span></span>
+        <a class="res res--store" href={shop || href('/store/')} data-reveal="drop" data-delay=".24">
+          <span class="pill">{t.resources.store.pill}</span>
+          <h3>{t.resources.store.t}</h3>
+          <p>{t.resources.store.d}</p>
+          <span class="price"><s>{t.resources.store.was}</s>{t.resources.store.now}</span>
+          <span class="res__cta">{t.resources.store.cta} <span class="arrow">→</span></span>
         </a>
       </div>
     </div>
@@ -229,9 +219,10 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
 
 <style>
   /* ---------- HERO ---------- */
-  .hero { position: relative; min-height: 100vh; min-height: 100svh; color: #fff; overflow: hidden; isolation: isolate; display: flex; align-items: center; }
+  .hero { position: relative; min-height: 100vh; min-height: 100svh; color: #fff; overflow: hidden; isolation: isolate; display: flex; align-items: center; background: #0a1a3a; }
   .hero__bg { position: absolute; inset: 0; z-index: -3; }
-  .hero__bg video { width: 100%; height: 100%; object-fit: cover; }
+  .hero__bg video, .hero__poster { width: 100%; height: 100%; object-fit: cover; }
+  .hero__poster { display: none; position: absolute; inset: 0; }
   .hero__veil { position: absolute; inset: 0; background: linear-gradient(110deg, rgba(10,26,58,.96) 0%, rgba(15,52,110,.85) 45%, rgba(4,107,210,.35) 100%), linear-gradient(0deg, rgba(10,26,58,.9), transparent 40%); }
   .hero__glow { position: absolute; inset: 0; z-index: -2; pointer-events: none; }
   .hero__glow i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55; animation: drift 14s ease-in-out infinite alternate; }
@@ -242,10 +233,10 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   .hero .grid-bg { z-index: -1; opacity: .5; }
   .hero__ghost { position: absolute; right: 2vw; top: 8vh; z-index: -1; display: grid; text-align: right; font-size: clamp(4rem, 9.5vw, 9rem); font-weight: 800; line-height: .9; letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.12); pointer-events: none; user-select: none; }
   .hero__ghost span span { display: block; }
-  .hero__stage { position: relative; display: grid; grid-template-columns: 1.05fr .95fr; gap: 2rem; align-items: center; padding-top: var(--nav-h); min-height: 100vh; }
-  .hero__copy { position: relative; z-index: 2; max-width: 620px; }
+  .hero__stage { position: relative; display: grid; grid-template-columns: 1fr; gap: 2rem; align-items: center; padding-top: var(--nav-h); min-height: 100vh; }
+  .hero__copy { position: relative; z-index: 2; max-width: 640px; }
   .hero__eyebrow { margin-bottom: 1.4rem; }
-  .hero__title { font-size: clamp(2.8rem, 6.4vw, 5.4rem); font-weight: 800; color: #fff; line-height: 1.02; letter-spacing: -.03em; }
+  .hero__title { font-size: clamp(2.6rem, 6.4vw, 5.4rem); font-weight: 800; color: #fff; line-height: 1.02; letter-spacing: -.03em; }
   .hero__title .line-mask { padding-bottom: .08em; }
   .hero__title .w { display: inline-block; }
   .hero__title .accent { color: #6fb6ff; }
@@ -259,7 +250,7 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   /* portal chapter: absolute over the stage on desktop, normal flow on mobile */
   .portal { text-align: center; color: #c7d6ee; }
   .portal__head { max-width: 760px; margin-inline: auto; display: grid; gap: .8rem; justify-items: center; }
-  .portal__head h2 { color: #fff; font-size: clamp(1.8rem, 3.6vw, 2.9rem); font-weight: 800; }
+  .portal__head h2 { color: #fff; font-size: clamp(1.7rem, 3.6vw, 2.9rem); font-weight: 800; }
   .portal__head p { max-width: 56ch; }
   .portal__features { list-style: none; padding: 0; margin: 2rem auto 1.6rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; max-width: 980px; }
   .portal__feature { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 18px; padding: 1.2rem 1.3rem; text-align: left; display: grid; grid-template-columns: 44px 1fr; gap: .2rem .9rem; align-items: center; }
@@ -272,20 +263,25 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
     .portal { position: absolute; inset: 0; z-index: 3; padding-top: calc(var(--nav-h) + 1vh); pointer-events: none; }
     .portal__head, .portal__features, .portal__cta { pointer-events: auto; }
     .hero__laptop { position: absolute; left: 0; right: 0; margin-inline: auto; top: 59vh; width: min(66vw, 1040px); z-index: 2; }
-    .hero__stage { grid-template-columns: 1fr; }
-    .hero__copy { max-width: 640px; }
   }
   @media (max-width: 960px) {
-    .hero { padding-bottom: 4rem; }
-    .hero__stage { grid-template-columns: 1fr; padding-top: calc(var(--nav-h) + 3rem); gap: 3rem; }
-    .hero__laptop { margin-inline: -1rem; }
-    .portal { padding-top: 2rem; }
-    .portal__features { grid-template-columns: 1fr; }
+    .hero { padding-bottom: 3rem; }
+    .hero__bg video { display: none; }
+    .hero__poster { display: block; }
+    .hero__glow i { filter: blur(40px); }
+    .hero__glow i:nth-child(3) { display: none; }
+    .hero__stage { padding-top: calc(var(--nav-h) + 2.5rem); gap: 2.5rem; }
+    .hero__eyebrow { margin-bottom: 1rem; }
+    .hero__lead { margin: 1.2rem 0 1.6rem; }
+    .hero__laptop { margin-inline: -.5rem; }
+    .portal { padding-top: 1rem; }
+    .portal__features { grid-template-columns: 1fr; margin: 1.5rem auto 1.2rem; }
+    .portal__feature { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(255,255,255,.09); }
     .hero__scroll, .hero__ghost { display: none; }
   }
 
   /* ---------- PILLARS ---------- */
-  .pillars { position: relative; background: #fff; overflow: hidden; }
+  .pillars { position: relative; background: var(--surface); overflow: hidden; }
   .pillars__hud { position: absolute; top: calc(var(--nav-h) + .8rem); left: 50%; transform: translateX(-50%); width: min(1200px, 100% - 2rem); display: flex; align-items: center; gap: 1.2rem; z-index: 5; }
   .pillars__progress { flex: 1; height: 2px; background: rgba(29,50,115,.12); border-radius: 2px; overflow: hidden; }
   .pillars__progress i { display: block; height: 100%; background: var(--blue); transform: scaleX(0); transform-origin: left; }
@@ -301,17 +297,24 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   .pillar__media > * { width: 100%; height: 100%; object-fit: cover; }
   .pillar__media::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 60%, rgba(15,52,110,.35)); }
   .pillar__copy { display: grid; gap: 1.2rem; justify-items: start; }
-  .pillar__num { font-size: clamp(4rem, 9vw, 7rem); font-weight: 800; line-height: .8; color: transparent; -webkit-text-stroke: 1.5px rgba(4,107,210,.35); letter-spacing: -.04em; }
+  .pillar__num { font-size: clamp(3.5rem, 9vw, 7rem); font-weight: 800; line-height: .8; color: transparent; -webkit-text-stroke: 1.5px rgba(4,107,210,.35); letter-spacing: -.04em; }
   .pillars.is-static .pillars__hud { display: none; }
   .pillars.is-static .pillars__track { flex-direction: column; height: auto; width: 100%; }
-  .pillars.is-static .pillar { width: 100%; height: auto; grid-template-columns: 1fr; padding: 4rem 1rem; }
-  .pillars.is-static .pillar__media { height: 48vh; }
+  .pillars.is-static .pillar { width: 100%; height: auto; grid-template-columns: 1fr; padding: 3.5rem 1.25rem; gap: 1.5rem; }
+  .pillars.is-static .pillar--intro { padding-block: 4rem; }
+  .pillars.is-static .pillar__media { height: auto; aspect-ratio: 4 / 3; border-radius: 18px; }
   .pillars.is-static .pillar__hint { display: none; }
+  .pillars.is-static .pillar__copy { gap: .9rem; }
+  .pillars.is-static .pillar__num { font-size: 3rem; }
+  .pillars.is-static .pillar__copy h3 br { display: none; }
+  .pillars.is-static .pillar__copy h3 .accent { display: inline; }
+  .pillars.is-static .pillar__copy h3 .accent::before { content: ' '; }
 
   /* ---------- SERVICES ---------- */
   .services { overflow: hidden; }
   .services__brush { position: absolute; left: 50%; top: 2rem; width: min(900px, 120vw); transform: translateX(-50%); opacity: .8; pointer-events: none; z-index: 0; }
-  .services__head { position: relative; text-align: center; display: grid; justify-items: center; gap: 1rem; margin-bottom: 3.5rem; z-index: 1; }
+  :global([data-theme="dark"]) .services__brush { opacity: .12; }
+  .services__head { position: relative; text-align: center; display: grid; justify-items: center; gap: 1rem; margin-bottom: 3rem; z-index: 1; }
   .services__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; position: relative; z-index: 1; }
   .svc { position: relative; overflow: hidden; display: grid; gap: .9rem; align-content: start; min-height: 300px; transition: box-shadow .4s; }
   .svc::before { content: ''; position: absolute; inset: 0; background: radial-gradient(240px circle at var(--gx, 50%) var(--gy, 50%), rgba(255,255,255,.18), transparent 60%); opacity: 0; transition: opacity .4s; pointer-events: none; }
@@ -319,26 +322,26 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   .svc:hover { box-shadow: 0 30px 60px -24px rgba(29,50,115,.6); }
   .svc__icon { width: 54px; height: 54px; border-radius: 16px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); display: grid; place-items: center; }
   .svc__icon svg { width: 26px; height: 26px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .svc h3 { font-size: 1.25rem; text-transform: uppercase; letter-spacing: .04em; }
+  .svc h3 { font-size: 1.2rem; text-transform: uppercase; letter-spacing: .04em; }
   .svc p { font-size: .95rem; }
-  .svc__link { margin-top: auto; font-weight: 600; color: #fff; display: inline-flex; gap: .4rem; align-items: center; }
+  .svc__link { margin-top: auto; font-weight: 600; color: #fff; display: inline-flex; gap: .4rem; align-items: center; min-height: 44px; }
   .svc__link:hover .arrow { transform: translateX(4px); }
   .svc__link .arrow { transition: transform .3s var(--ease-out); }
-  @media (max-width: 960px) { .services__grid { grid-template-columns: 1fr; } }
+  @media (max-width: 960px) { .services__grid { grid-template-columns: 1fr; } .svc { min-height: 0; } }
   @media (min-width: 640px) and (max-width: 960px) { .services__grid { grid-template-columns: 1fr 1fr; } }
 
   /* ---------- STATS ---------- */
   .stats { padding: 0 0 5rem; overflow: hidden; }
   .marquee { overflow: hidden; padding: 1.6rem 0; border-bottom: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
   .marquee__track { display: inline-flex; will-change: transform; }
-  .marquee__track span { display: inline-flex; align-items: center; gap: 1.6rem; padding-right: 1.6rem; font-size: clamp(1.6rem, 3.6vw, 3rem); font-weight: 800; letter-spacing: -.02em; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.45); text-transform: uppercase; }
+  .marquee__track span { display: inline-flex; align-items: center; gap: 1.6rem; padding-right: 1.6rem; font-size: clamp(1.4rem, 3.6vw, 3rem); font-weight: 800; letter-spacing: -.02em; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.45); text-transform: uppercase; }
   .marquee__track span i { font-style: normal; color: #6fb6ff; -webkit-text-stroke: 0; font-size: .6em; }
   .stats__grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2rem; margin-top: 4rem; }
   .stat { display: grid; gap: .4rem; border-left: 1px solid rgba(255,255,255,.12); padding-left: 1.2rem; }
-  .stat strong { font-size: clamp(2.4rem, 4vw, 3.6rem); font-weight: 800; color: #fff; line-height: 1; letter-spacing: -.03em; }
+  .stat strong { font-size: clamp(2.2rem, 4vw, 3.6rem); font-weight: 800; color: #fff; line-height: 1; letter-spacing: -.03em; }
   .stat strong span { color: #6fb6ff; }
   .stat > span { font-size: .85rem; color: #9fb3d4; }
-  @media (max-width: 960px) { .stats__grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 960px) { .stats__grid { grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 3rem; } .stats { padding-bottom: 3.5rem; } }
 
   /* ---------- ABOUT ---------- */
   .about { overflow: hidden; }
@@ -347,14 +350,14 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   .about__photo::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(15,52,110,.55)); }
   .about__photo img { width: 100%; height: 100%; object-fit: cover; transition: transform 1.2s var(--ease-out); }
   .about__photo:hover img { transform: scale(1.03); }
-  .about__badge { position: absolute; right: -1rem; bottom: 2.5rem; background: #fff; border-radius: 18px; padding: 1rem 1.4rem; display: grid; box-shadow: 0 24px 50px -20px rgba(15,52,110,.5); border: 1px solid rgba(29,50,115,.06); }
+  .about__badge { position: absolute; right: -1rem; bottom: 2.5rem; background: var(--surface); border-radius: 18px; padding: 1rem 1.4rem; display: grid; box-shadow: 0 24px 50px -20px rgba(15,52,110,.5); border: 1px solid var(--line); }
   .about__badge strong { color: var(--ink); font-size: 1.15rem; }
   .about__badge span { font-size: .8rem; color: var(--blue); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   .about__orbit { position: absolute; inset: -12% auto auto -12%; width: 60%; aspect-ratio: 1; border-radius: 50%; border: 1px dashed rgba(4,107,210,.35); z-index: -1; animation: spin 40s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg) } }
   .about__copy { display: grid; gap: 1.4rem; }
   .about__p { line-height: 1.7; }
-  @media (max-width: 960px) { .about__badge { right: .5rem; } }
+  @media (max-width: 960px) { .about__badge { right: .5rem; bottom: 1rem; padding: .8rem 1.1rem; } .about__photo { border-radius: 22px; } }
 
   /* ---------- REVIEWS ---------- */
   .reviews__grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 4rem; align-items: start; }
@@ -368,20 +371,26 @@ const keywords = ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning',
   .stack-card figcaption { display: grid; }
   .stack-card figcaption strong { color: var(--ink); }
   .stack-card figcaption span { font-size: .85rem; }
-  @media (max-width: 960px) { .reviews__grid { grid-template-columns: 1fr; gap: 2.5rem; } .reviews__head { position: static; } }
+  @media (max-width: 960px) {
+    .reviews__grid { grid-template-columns: 1fr; gap: 2.5rem; }
+    .reviews__head { position: static; }
+    .stack-card { padding: 1.5rem; gap: 1rem; top: calc(var(--nav-h) + 1rem + var(--i) * 1rem); }
+    .stack-card blockquote { font-size: 1rem; }
+    .stack-card__quote { font-size: 3.5rem; }
+  }
 
   /* ---------- RESOURCES ---------- */
   .resources__head { display: grid; gap: 1rem; max-width: 720px; margin-bottom: 3rem; }
-  .res { position: relative; display: grid; gap: .9rem; align-content: start; padding: 2.2rem; border-radius: var(--radius); min-height: 360px; overflow: hidden; border: 1px solid rgba(29,50,115,.08); background: var(--mist); transition: transform .45s var(--ease-out), box-shadow .45s var(--ease-out); }
+  .res { position: relative; display: grid; gap: .9rem; align-content: start; padding: 2.2rem; border-radius: var(--radius); min-height: 360px; overflow: hidden; border: 1px solid var(--line); background: var(--mist); transition: transform .45s var(--ease-out), box-shadow .45s var(--ease-out); }
   .res:hover { transform: translateY(-8px); box-shadow: 0 40px 70px -35px rgba(15,52,110,.6); }
   .res h3 { font-size: 1.4rem; }
   .res p { font-size: .95rem; }
   .res__cta { margin-top: auto; font-weight: 600; color: var(--blue); display: inline-flex; gap: .4rem; }
   .res:hover .arrow { transform: translateX(4px); }
   .res .arrow { transition: transform .3s var(--ease-out); }
-  .res--free { background: var(--grad); color: #dbe6f7; }
+  .res--free { background: var(--grad); color: #dbe6f7; border: 0; }
   .res--free h3, .res--free .res__cta { color: #fff; }
   .res--free .pill { background: rgba(255,255,255,.14); color: #fff; }
   .res--free::after { content: ''; position: absolute; right: -40px; bottom: -40px; width: 200px; height: 200px; border-radius: 50%; border: 40px solid rgba(255,255,255,.08); }
-
+  @media (max-width: 960px) { .res { min-height: 0; padding: 1.6rem; } }
 </style>

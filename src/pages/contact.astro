@@ -1,42 +1,57 @@
 ---
 import Base from '../layouts/Base.astro';
+import { useI18n } from '../i18n/index.js';
+const { t, lang } = useI18n(Astro);
+const c = t.pages.contact;
+const gcal = import.meta.env.PUBLIC_GCAL_EMBED;
+const webhook = import.meta.env.PUBLIC_N8N_FORM_WEBHOOK || '';
+const wa = import.meta.env.PUBLIC_WHATSAPP || '15106760418';
 ---
-<Base title="Contact & booking" description="Book a 1-hour consultation with Experts DDT or send us a message.">
+<Base title={t.meta.contact}>
   <section class="page-hero" data-nav-solid-from data-scene>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="wrap stack">
-      <span class="eyebrow" data-reveal="up">Contact</span>
-      <h1 class="h-display" data-split="words">Let’s talk about your workflow.</h1>
-      <p class="lead" data-reveal="up" data-delay=".3">Book a consultation, request support or just say hello. We answer fast.</p>
+      <span class="eyebrow" data-reveal="up">{c.eyebrow}</span>
+      <h1 class="h-display" data-split="words">{c.title}</h1>
+      <p class="lead" data-reveal="up" data-delay=".3">{c.lead}</p>
     </div>
   </section>
 
   <section class="section" data-scene>
     <div class="wrap contact">
       <div class="stack">
-        <article class="card booking" data-reveal="left" data-tilt>
-          <span class="pill">Booking</span>
-          <h2 class="h-lg">Consultation</h2>
-          <p class="booking__meta"><b>1 hour</b> · Online or on-site in Florida</p>
-          <p>Choose a slot in our calendar and we’ll confirm within the day. Time zones are detected automatically.</p>
-          <a class="btn btn--primary" href="https://expertsddt.com/contact/" target="_blank" rel="noopener">See available appointments <span class="arrow">→</span></a>
+        <article class="card booking" data-reveal="left">
+          <span class="pill">{c.bookingPill}</span>
+          <h2 class="h-lg">{c.bookingTitle}</h2>
+          <p class="booking__meta"><b>{c.duration}</b> · {c.mode}</p>
+          <p>{c.bookingText}</p>
+          {gcal ? (
+            <iframe class="booking__cal" src={gcal} title={c.bookingTitle} loading="lazy" data-lenis-prevent></iframe>
+          ) : (
+            <>
+              <a class="btn btn--primary" href="https://expertsddt.com/contact/" target="_blank" rel="noopener">{c.bookingCta} <span class="arrow">→</span></a>
+              <p class="note">{c.calendarNote}</p>
+            </>
+          )}
         </article>
         <ul class="channels" data-stagger=".1">
-          <li><span>Phone</span><a href="tel:+15106760418">+1 (510) 676-0418</a></li>
-          <li><span>Email</span><a href="mailto:Polanco@expertsddt.com">Polanco@expertsddt.com</a></li>
-          <li><span>Doctor portal</span><a href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">portal.expertsddt.com</a></li>
-          <li><span>Concierge</span><span>Apex, our digital concierge, guides you through services and workflows 24/7.</span></li>
+          <li><span>{c.channels.phone}</span><a href="tel:+15106760418">+1 (510) 676-0418</a></li>
+          <li><span>{c.channels.whatsapp}</span><a href={`https://wa.me/${wa}`} target="_blank" rel="noopener">+1 (510) 676-0418</a></li>
+          <li><span>{c.channels.email}</span><a href="mailto:Polanco@expertsddt.com">Polanco@expertsddt.com</a></li>
+          <li><span>{c.channels.portal}</span><a href="https://portal.expertsddt.com/login" target="_blank" rel="noopener">portal.expertsddt.com</a></li>
+          <li><span>{c.channels.concierge}</span><span>{c.channels.conciergeText}</span></li>
         </ul>
       </div>
 
-      <form class="card form" data-reveal="right" id="contact-form" data-lenis-prevent>
-        <h2 class="h-lg">Send a message</h2>
-        <label>Name <input name="name" required autocomplete="name" /></label>
-        <label>Email <input type="email" name="email" required autocomplete="email" /></label>
-        <label>Clinic or lab <input name="clinic" autocomplete="organization" /></label>
-        <label>How can we help? <textarea name="message" rows="5" required></textarea></label>
-        <button class="btn btn--primary" type="submit">Send message <span class="arrow">→</span></button>
-        <p class="form__note">Opens your email client with the message ready to send. <!-- ponytail: swap for n8n/Formspree endpoint when the site goes live --></p>
+      <form class="card form" data-reveal="right" id="contact-form" data-webhook={webhook} data-lang={lang} data-lenis-prevent novalidate>
+        <h2 class="h-lg">{c.form.title}</h2>
+        <label>{c.form.name} <input name="name" required autocomplete="name" /></label>
+        <label>{c.form.email} <input type="email" name="email" required autocomplete="email" inputmode="email" /></label>
+        <label>{c.form.clinic} <input name="clinic" autocomplete="organization" /></label>
+        <label>{c.form.message} <textarea name="message" rows="5" required></textarea></label>
+        <input type="text" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
+        <button class="btn btn--primary" type="submit" data-label={c.form.send} data-sending={c.form.sending}>{c.form.send} <span class="arrow">→</span></button>
+        <p class="form__note" data-ok={c.form.sent} data-err={c.form.error}>{c.form.note}</p>
       </form>
     </div>
   </section>
@@ -44,12 +59,32 @@ import Base from '../layouts/Base.astro';
   <script>
     document.addEventListener('astro:page-load', () => {
       const f = document.getElementById('contact-form');
-      if (!f) return;
-      f.addEventListener('submit', (e) => {
+      if (!f || f.dataset.bound) return;
+      f.dataset.bound = '1';
+      const btn = f.querySelector('button');
+      const note = f.querySelector('.form__note');
+      f.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const d = new FormData(f);
-        const body = `Name: ${d.get('name')}\nEmail: ${d.get('email')}\nClinic: ${d.get('clinic')}\n\n${d.get('message')}`;
-        location.href = `mailto:Polanco@expertsddt.com?subject=${encodeURIComponent('Website inquiry from ' + d.get('name'))}&body=${encodeURIComponent(body)}`;
+        if (!f.reportValidity()) return;
+        const d = Object.fromEntries(new FormData(f));
+        if (d.website) return; // honeypot
+        delete d.website;
+        const hook = f.dataset.webhook;
+        if (!hook) {
+          const body = `Name: ${d.name}\nEmail: ${d.email}\nClinic: ${d.clinic}\n\n${d.message}`;
+          location.href = `mailto:Polanco@expertsddt.com?subject=${encodeURIComponent('Website inquiry from ' + d.name)}&body=${encodeURIComponent(body)}`;
+          return;
+        }
+        btn.disabled = true; btn.textContent = btn.dataset.sending;
+        try {
+          const r = await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...d, lang: f.dataset.lang, page: location.href }) });
+          if (!r.ok) throw new Error(String(r.status));
+          note.textContent = note.dataset.ok; note.classList.add('is-ok'); f.reset();
+        } catch {
+          note.textContent = note.dataset.err; note.classList.add('is-err');
+        } finally {
+          btn.disabled = false; btn.textContent = btn.dataset.label;
+        }
       });
     });
   </script>
@@ -59,14 +94,18 @@ import Base from '../layouts/Base.astro';
   .contact { display: grid; grid-template-columns: 1fr 1.1fr; gap: 2.5rem; align-items: start; }
   .booking { display: grid; gap: .9rem; justify-items: start; }
   .booking__meta b { color: var(--blue); }
+  .booking__cal { width: 100%; height: 600px; border: 0; border-radius: 14px; background: #fff; justify-self: stretch; }
   .channels { list-style: none; padding: 0; margin: 0; display: grid; gap: .6rem; }
   .channels li { display: grid; grid-template-columns: 130px 1fr; gap: 1rem; padding: 1rem 1.2rem; border-radius: 16px; background: var(--mist); font-size: .95rem; }
   .channels li > span:first-child { font-size: .75rem; letter-spacing: .15em; text-transform: uppercase; font-weight: 600; color: var(--blue); }
   .channels a:hover { color: var(--blue); }
   .form { display: grid; gap: 1rem; }
   .form label { display: grid; gap: .4rem; font-size: .85rem; font-weight: 600; color: var(--ink); }
-  .form input, .form textarea { font: inherit; padding: .85rem 1rem; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; transition: border-color .3s, box-shadow .3s; }
+  .form input, .form textarea { font: inherit; padding: .85rem 1rem; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); transition: border-color .3s, box-shadow .3s; min-height: 48px; }
   .form input:focus, .form textarea:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(4,107,210,.15); }
-  .form__note { font-size: .78rem; color: #64748b; }
-  @media (max-width: 960px) { .contact { grid-template-columns: 1fr; } .channels li { grid-template-columns: 1fr; gap: .2rem; } }
+  .form .hp { position: absolute; left: -9999px; height: 0; min-height: 0; padding: 0; border: 0; }
+  .form__note { font-size: .85rem; color: var(--muted); }
+  .form__note.is-ok { color: #16a34a; font-weight: 600; }
+  .form__note.is-err { color: #dc2626; font-weight: 600; }
+  @media (max-width: 960px) { .contact { grid-template-columns: 1fr; } .channels li { grid-template-columns: 1fr; gap: .2rem; } .booking__cal { height: 520px; } }
 </style>

@@ -1,26 +1,67 @@
 # Experts DDT · Propuesta de rediseño web
 
-Rediseño de [expertsddt.com](https://expertsddt.com) construido con **Astro 7**, **GSAP 3.15** (ScrollTrigger + SplitText) y **Lenis**. Reutiliza los colores, la tipografía (Poppins), los textos, las imágenes, los vídeos y la estructura de la web actual (WordPress + Elementor), y los envuelve en una experiencia cinematográfica.
+Rediseño de [expertsddt.com](https://expertsddt.com) construido con **Astro 7**, **GSAP 3.15** (ScrollTrigger + SplitText) y **Lenis**. Reutiliza los colores, la tipografía (Poppins), los textos, las imágenes, los vídeos y la estructura de la web actual (WordPress + Elementor) y los envuelve en una experiencia cinematográfica. Bilingüe (inglés y español), con modo oscuro y versión móvil sobria.
 
-## Arrancar
+## Arrancar en local
 
 ```bash
 npm install
 npm run dev      # http://localhost:4321
-npm run build    # sitio estático en /dist, listo para Netlify, Vercel, Cloudflare o cualquier hosting
+npm run build    # sitio estático en /dist
 ```
+
+## Despliegue
+
+### GitHub Pages (actual)
+
+Cada push a `main` ejecuta [.github/workflows/deploy.yml](.github/workflows/deploy.yml) y publica en `https://<usuario>.github.io/<repo>/`.
+Requisitos una sola vez: repositorio público y **Settings → Pages → Source: GitHub Actions**.
+
+El workflow define `PAGES_BASE=/<repo>` y `SITE_URL=https://<usuario>.github.io`. Si se conecta un dominio propio (por ejemplo `nuevo.expertsddt.com`), añade el archivo `public/CNAME` con el dominio y quita `PAGES_BASE` del workflow.
+
+### Hostinger / dominio final
+
+`npm run build` sin variables produce `/dist` con rutas desde la raíz y `site = https://expertsddt.com`. Basta subir la carpeta al hosting. `vercel.json` ya incluye redirecciones y cabeceras por si se usa Vercel.
+
+## Integraciones (variables de entorno)
+
+Todas opcionales. En GitHub: **Settings → Secrets and variables → Actions → Variables**. En local: copia `.env.example` a `.env`.
+
+| Variable | Qué activa |
+|---|---|
+| `PUBLIC_GA_ID` | Google Analytics 4, cargado solo tras aceptar el banner de cookies |
+| `PUBLIC_N8N_FORM_WEBHOOK` | El formulario de contacto envía JSON a n8n. Sin ella abre el cliente de correo |
+| `PUBLIC_N8N_CHAT_WEBHOOK` | Widget oficial `@n8n/chat` para "Apex". Sin ella el botón lleva a contacto |
+| `PUBLIC_GCAL_EMBED` | Agenda de citas de Google Calendar incrustada en `/contact/` |
+| `PUBLIC_SHOP_URL` | Tienda Shopify: el menú "Store", el carrito y los "Add to cart" apuntan ahí |
+| `PUBLIC_WHATSAPP` | Número del botón flotante de WhatsApp (por defecto 15106760418) |
+
+### Google Calendar (reservas)
+
+1. En el Google Calendar de la empresa: **Crear → Agenda de citas**, duración 1 hora.
+2. Abrir la agenda → **Compartir → Insertar** → copiar la URL del `src` del iframe.
+3. Guardarla en `PUBLIC_GCAL_EMBED`. Las citas caen directamente en ese calendario.
+
+### Chat Apex (n8n)
+
+El widget que usa la web actual es `@n8n/chat`. Solo hace falta la URL del **Chat Trigger** del workflow de n8n en `PUBLIC_N8N_CHAT_WEBHOOK` (y añadir el dominio de la web a *Allowed Origins* del trigger).
+
+## Idiomas
+
+Inglés en `/`, español en `/es/`. Todo el texto vive en [src/i18n/en.js](src/i18n/en.js) y [src/i18n/es.js](src/i18n/es.js) con la misma estructura; las páginas solo maquetan. Las rutas `/es/*` son envoltorios de una línea de la página en inglés. Hay `hreflang` y sitemap por idioma.
 
 ## Qué cambia respecto a la web actual
 
 | Actual (WordPress + Elementor) | Propuesta (Astro) |
 |---|---|
-| Tema Astra + Elementor, ~40 scripts y hojas de estilo, carga pesada | HTML estático, CSS y un único bundle JS. Sin base de datos |
-| Tabs estáticos en el hero | Escena fijada con scroll: el hero se transforma en el capítulo del Doctor Portal con el portátil como protagonista |
-| Carrusel de servicios | Scroll horizontal "Four pillars" + grid de servicios con tilt 3D y glow al pasar el ratón |
-| Texto plano "About us" | Texto que se ilumina palabra a palabra al hacer scroll, foto con badge "The Wizard" |
-| Reseñas en columnas | Tarjetas apiladas (card stack) que se van recogiendo |
-| Sin secciones de recursos ni tienda en la home | Librerías gratuitas, curso y plantillas destacadas con precios reales |
-| Navegación con recarga completa | Transiciones entre páginas (View Transitions) con la cabecera persistente |
+| Tema Astra + Elementor, ~40 scripts y hojas de estilo | HTML estático, CSS y un único bundle JS. Sin base de datos |
+| Tabs estáticos en el hero | Escena fijada con scroll: el hero se transforma en el capítulo del Doctor Portal |
+| Carrusel de servicios | Scroll horizontal "Four pillars" + grid de servicios con tilt 3D |
+| Texto plano "About us" | Texto que se ilumina palabra a palabra, foto con badge "The Wizard" |
+| Reseñas en columnas | Tarjetas apiladas (card stack) |
+| Traducción automática GTranslate | Español real, con SEO por idioma |
+| Sin modo oscuro | Interruptor claro/oscuro persistente |
+| Navegación con recarga completa | Transiciones entre páginas con cabecera persistente |
 
 ## Paleta y tipografía (extraídas del sitio actual)
 
@@ -38,26 +79,29 @@ npm run build    # sitio estático en /dist, listo para Netlify, Vercel, Cloudfl
 
 ```
 src/
-  layouts/Base.astro     cabecera glass, menú móvil, footer, botón "Ask Apex", ClientRouter
-  components/Cta.astro   bloque de contacto reutilizado en todas las páginas
-  pages/                 index, services, courses, store, libraries, contact
-  scripts/motion.js      motor de animación (data-attributes: data-reveal, data-split, data-lit, data-stagger, data-parallax, data-count, data-tilt, data-magnetic)
-  styles/global.css      tokens, botones, nav, footer, reduced-motion
-public/img, public/video assets descargados de expertsddt.com
+  layouts/Base.astro        cabecera, menú móvil, footer, tema, hreflang, ClientRouter
+  components/Cta.astro      bloque de contacto reutilizado
+  components/Apex.astro     WhatsApp + concierge (n8n chat o enlace)
+  components/Analytics.astro GA4 + banner de cookies
+  i18n/en.js, es.js         contenido
+  pages/                    index, services, courses, store, exocad-libraries, contact (+ es/)
+  scripts/motion.js         motor de animación por data-attributes
+  styles/global.css         tokens (claro/oscuro), botones, nav, footer, reduced-motion
+public/img, public/video    assets descargados de expertsddt.com
 ```
 
 ## Accesibilidad y rendimiento
 
-- `prefers-reduced-motion`: desactiva el scroll suave y todas las animaciones.
-- Móvil (`pointer: coarse` / < 960px): el hero fluye sin pin y los pilares se apilan en vertical.
+- `prefers-reduced-motion`: desactiva scroll suave y animaciones.
+- Móvil: sin vídeo de fondo ni escenas fijadas, reveals suaves, botones a ancho completo, áreas táctiles ≥ 44 px.
 - Solo se animan `transform`, `opacity`, `filter` y `clip-path`.
-- Elementos decorativos con `aria-hidden`, foco visible, skip link.
+- Elementos decorativos con `aria-hidden`, foco visible, skip link, formulario con honeypot.
 
-## Pendiente para producción
+## Decisiones acordadas y pendientes
 
-- Tienda y carrito: conectar con WooCommerce (Store API) o migrar a Stripe Checkout / Shopify Buy Button.
-- Formulario de contacto: hoy abre el cliente de correo; cambiar a n8n, Formspree o Netlify Forms.
-- Reservas: embeber el widget de booking actual o Cal.com / Calendly.
-- Idiomas: la web actual usa GTranslate (10 idiomas); en Astro se puede hacer i18n nativo con rutas `/es`, `/pt`, etc.
-- Chat "Apex": incrustar el widget de n8n existente.
-- Productos físicos de la tienda: faltan nombres e imágenes (no son públicos en el sitio actual).
+- WordPress sigue vivo en Hostinger; la propuesta enlaza a booking, librerías y portal actuales.
+- Tienda, cursos y plantillas se venderán en **Shopify** (pendiente `PUBLIC_SHOP_URL`).
+- Membresías eliminadas. Portal solo con enlaces a login/signup.
+- Reseñas marcadas como **muestra** hasta tener testimonios verificados.
+- Logo definitivo en vectorial pendiente de subir (hoy se usa un SVG recreado).
+- Productos físicos: sin datos públicos, se cubren desde Shopify.
