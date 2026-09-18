@@ -88,6 +88,11 @@ function initNav() {
   if (!nav) return;
   const from = document.querySelector('[data-nav-solid-from]');
   nav.classList.remove('is-solid');
+  // the header persists across view transitions: keep the current-page marker in sync
+  nav.querySelectorAll('.nav__links a').forEach((a) => {
+    const here = a.getAttribute('href') === location.pathname;
+    if (here) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
   // created after initHero so the pin spacer is accounted for
   // desktop: solid once the hero scene is over; stacked layouts: solid after 80px so the logo never sits on images
   const useHero = from && !isMobile();
@@ -192,7 +197,7 @@ function initHero() {
   const gate = document.getElementById('loader')
     ? new Promise((r) => document.addEventListener('loader:done', r, { once: true }))
     : Promise.race([Promise.all([img ? img.decode().catch(() => {}) : Promise.resolve(), document.fonts?.ready ?? Promise.resolve()]), new Promise((r) => setTimeout(r, 400))]);
-  gate.then(() => requestAnimationFrame(() => intro.play()));
+  gate.then(() => intro.play()); // no rAF here: hidden tabs never fire it and the intro would never start
   // fromTo with explicit end values: CSS pre-hides these elements (html.js) so `from` would animate 0 → 0
   intro
     .fromTo(q('.hero__bg video, .hero__bg img'), { scale: 1.15 }, { scale: 1, duration: 2.2, ease: 'power2.out' }, 0)
