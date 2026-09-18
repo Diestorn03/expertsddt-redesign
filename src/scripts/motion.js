@@ -328,6 +328,11 @@ function initVideos() {
   });
   // after ScrollTrigger moves things around (pin spacers, refresh), re-observe to get a fresh intersection report
   ScrollTrigger.addEventListener('refresh', () => observed.forEach((v) => { io.unobserve(v); io.observe(v); }));
+  // browsers pause muted videos in hidden/occluded tabs and do not always resume them: resume the hero video ourselves
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    vids.forEach((v) => { if (v.closest('#hero') && v.paused && v.isConnected) v.play().catch(() => {}); });
+  });
 }
 
 /* ---------------- Cursor glow (desktop only) ---------------- */
