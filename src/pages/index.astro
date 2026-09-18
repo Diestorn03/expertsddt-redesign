@@ -276,6 +276,10 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .portal__feature p { font-size: .85rem; color: #b9c8e2; }
   .portal__cta { justify-content: center; }
   @media (min-width: 1181px) {
+    /* pre-position the scene before GSAP runs (JS on only): no disordered first frame on reload */
+    :global(html.js) .portal__head, :global(html.js) .portal__feature, :global(html.js) .portal__cta { opacity: 0; }
+    :global(html.js) .hero__laptop { transform: translate(22vw, 12vh) scale(.82); }
+    :global(html.js) .hero__rise, :global(html.js) .hero__eyebrow, :global(html.js) .hero__title .w, :global(html.js) .hero__lead, :global(html.js) .hero__cta > *, :global(html.js) .hero__ghost .g1, :global(html.js) .hero__ghost .g2 { opacity: 0; }
     .portal { position: absolute; inset: 0; z-index: 3; padding-top: calc(var(--nav-h) + 1vh); pointer-events: none; }
     .portal__head, .portal__features, .portal__cta { pointer-events: auto; }
     .hero__laptop { position: absolute; left: 0; right: 0; margin-inline: auto; top: 59vh; width: min(66vw, 1040px); z-index: 2; }

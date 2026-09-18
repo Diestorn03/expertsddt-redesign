@@ -49,6 +49,21 @@ function initLenis() {
   });
 }
 
+/* ---------------- Loader (first load only) ---------------- */
+function initLoader() {
+  const el = document.getElementById('loader');
+  if (!el) return;
+  const img = document.querySelector('.hero__laptop img, main img');
+  const ready = Promise.all([img ? img.decode().catch(() => {}) : Promise.resolve(), document.fonts?.ready ?? Promise.resolve()]);
+  const minShown = new Promise((r) => setTimeout(r, Math.max(0, 500 - (performance.now() - (window.__t0 || 0)))));
+  Promise.race([Promise.all([ready, minShown]), new Promise((r) => setTimeout(r, 2000))]).then(() => {
+    ScrollTrigger.refresh();
+    el.classList.add('is-done');
+    document.dispatchEvent(new Event('loader:done'));
+    setTimeout(() => el.remove(), 800);
+  });
+}
+
 /* ---------------- Theme toggle (dark / light, persisted) ---------------- */
 function initTheme() {
   const root = document.documentElement;
@@ -170,24 +185,24 @@ function initHero() {
   const laptopFrom = { x: '22vw', y: '12vh', scale: .82 };
   if (desktop) gsap.set(q('.hero__laptop'), laptopFrom);
 
-  // Intro (time-based). Created paused so initial states apply at once; plays as soon as the laptop image is decoded
-  // and fonts are in (capped at 400ms) so the first frames don't stutter on decode/reflow.
+  // Intro (time-based). Created paused so initial states apply at once; plays when the loader wipes away
+  // (first load) or as soon as the laptop image is decoded and fonts are in (client-side navigation, capped at 400ms).
   const intro = gsap.timeline({ paused: true, defaults: { ease: 'power4.out' } });
   const img = q('.hero__laptop img')[0];
-  const ready = Promise.all([
-    img ? img.decode().catch(() => {}) : Promise.resolve(),
-    document.fonts?.ready ?? Promise.resolve(),
-  ]);
-  Promise.race([ready, new Promise((r) => setTimeout(r, 400))]).then(() => requestAnimationFrame(() => intro.play()));
+  const gate = document.getElementById('loader')
+    ? new Promise((r) => document.addEventListener('loader:done', r, { once: true }))
+    : Promise.race([Promise.all([img ? img.decode().catch(() => {}) : Promise.resolve(), document.fonts?.ready ?? Promise.resolve()]), new Promise((r) => setTimeout(r, 400))]);
+  gate.then(() => requestAnimationFrame(() => intro.play()));
+  // fromTo with explicit end values: CSS pre-hides these elements (html.js) so `from` would animate 0 → 0
   intro
-    .from(q('.hero__bg video, .hero__bg img'), { scale: 1.15, duration: 2.2, ease: 'power2.out' }, 0)
-    .from(q('.hero__eyebrow'), { y: 24, opacity: 0, duration: .8 }, .3)
-    .from(q('.hero__title .w'), { yPercent: 110, opacity: 0, rotate: 3, duration: 1.1, stagger: .06 }, .35)
-    .from(q('.hero__lead'), { y: 28, opacity: 0, duration: .9 }, .9)
-    .from(q('.hero__cta > *'), { y: 28, opacity: 0, duration: .8, stagger: .1 }, 1.05)
+    .fromTo(q('.hero__bg video, .hero__bg img'), { scale: 1.15 }, { scale: 1, duration: 2.2, ease: 'power2.out' }, 0)
+    .fromTo(q('.hero__eyebrow'), { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: .8 }, .3)
+    .fromTo(q('.hero__title .w'), { yPercent: 110, opacity: 0, rotate: 3 }, { yPercent: 0, opacity: 1, rotate: 0, duration: 1.1, stagger: .06 }, .35)
+    .fromTo(q('.hero__lead'), { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: .9 }, .9)
+    .fromTo(q('.hero__cta > *'), { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: .8, stagger: .1 }, 1.05)
     // intro and scrub own different layers: .hero__rise (intro) vs .hero__laptop (scrub); .g1/.g2 (intro) vs .line-mask (scrub)
-    .from(q('.hero__rise'), { y: 160, opacity: 0, duration: 1.6, ease: 'expo.out' }, .7)
-    .from(q('.hero__ghost .g1, .hero__ghost .g2'), { yPercent: 100, opacity: 0, duration: 1.2, stagger: .1 }, .5);
+    .fromTo(q('.hero__rise'), { y: 160, opacity: 0 }, { y: 0, opacity: 1, duration: 1.6, ease: 'expo.out' }, .7)
+    .fromTo(q('.hero__ghost .g1, .hero__ghost .g2'), { yPercent: 100, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 1.2, stagger: .1 }, .5);
   if (window.scrollY > 40) intro.progress(1).pause(); // not at the top (e.g. anchor link): skip the intro, no overlap with the scrub
 
   if (!desktop) return; // mobile: hero flows naturally, no pin
@@ -355,6 +370,7 @@ function boot() {
     initTheme();
     initVideos();
     initHero();
+    initLoader();
     initNav();
     initPillars();
     initSplits();
@@ -375,4 +391,7 @@ function boot() {
 initLenis();
 document.addEventListener('astro:page-load', boot);
 document.addEventListener('astro:before-swap', () => { ctx?.revert(); ScrollTrigger.getAll().forEach((t) => t.kill()); });
-document.addEventListener('astro:after-swap', () => { lenis?.scrollTo(0, { immediate: true }); });
+document.addEventListener('astro:after-swap', () => {
+  document.getElementById('loader')?.remove(); // client-side navigation: no loader
+  lenis?.scrollTo(0, { immediate: true });
+});
