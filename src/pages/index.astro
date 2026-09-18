@@ -17,6 +17,9 @@ const featureIcons = ['M12 16V4M7 9l5-5 5 5M4 20h16', 'M3 12h4l3-8 4 16 3-8h4', 
 const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset('/img/design-services.webp') }, { img: asset('/img/training-main.webp') }, { img: asset('/img/training.webp') }];
 ---
 <Base title={t.meta.home}>
+  <Fragment slot="head">
+    <link rel="preload" as="image" href={asset('/img/portal-laptop.webp')} fetchpriority="high" />
+  </Fragment>
 
   <!-- ================= HERO + PORTAL CHAPTER (pinned scrub on desktop) ================= -->
   <section id="hero" class="hero" data-scene data-nav-solid-from>
@@ -221,11 +224,12 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   /* ---------- HERO ---------- */
   .hero { position: relative; min-height: 100vh; min-height: 100svh; color: #fff; overflow: hidden; isolation: isolate; display: flex; align-items: center; background: #0a1a3a; }
   .hero__bg { position: absolute; inset: 0; z-index: -3; }
-  .hero__bg video, .hero__poster { width: 100%; height: 100%; object-fit: cover; }
+  .hero__bg video, .hero__poster { width: 100%; height: 100%; object-fit: cover; will-change: transform; }
+  .hero__copy, .hero__title .w { will-change: transform, opacity; }
   .hero__poster { display: none; position: absolute; inset: 0; }
   .hero__veil { position: absolute; inset: 0; background: linear-gradient(110deg, rgba(10,26,58,.96) 0%, rgba(15,52,110,.85) 45%, rgba(4,107,210,.35) 100%), linear-gradient(0deg, rgba(10,26,58,.9), transparent 40%); }
   .hero__glow { position: absolute; inset: 0; z-index: -2; pointer-events: none; }
-  .hero__glow i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55; animation: drift 14s ease-in-out infinite alternate; }
+  .hero__glow i { position: absolute; border-radius: 50%; filter: blur(50px); opacity: .55; animation: drift 14s ease-in-out infinite alternate; will-change: transform; }
   .hero__glow i:nth-child(1) { width: 46vw; height: 46vw; left: -12vw; top: -10vw; background: #046bd2; }
   .hero__glow i:nth-child(2) { width: 34vw; height: 34vw; right: -8vw; top: 10vh; background: #2a7abf; animation-delay: -5s; }
   .hero__glow i:nth-child(3) { width: 30vw; height: 30vw; left: 30vw; bottom: -14vw; background: #1d3273; animation-delay: -9s; }
@@ -241,8 +245,10 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .hero__title .w { display: inline-block; }
   .hero__title .accent { color: #6fb6ff; }
   .hero__lead { margin: 1.6rem 0 2.2rem; font-size: clamp(1rem, 1.35vw, 1.2rem); color: #c7d6ee; max-width: 52ch; }
-  .hero__laptop { position: relative; z-index: 1; filter: drop-shadow(0 40px 60px rgba(0,0,0,.55)); }
-  .hero__laptop img { width: 100%; height: auto; }
+  /* no CSS filter here: drop-shadow re-rasterises every frame while the laptop moves. Cheap gradient shadow instead. */
+  .hero__laptop { position: relative; z-index: 1; will-change: transform, opacity; transform: translateZ(0); }
+  .hero__laptop::after { content: ''; position: absolute; left: 6%; right: 6%; bottom: -6%; height: 22%; background: radial-gradient(ellipse at center, rgba(0,0,0,.6), transparent 70%); z-index: -1; pointer-events: none; }
+  .hero__laptop img { width: 100%; height: auto; will-change: transform; }
   .hero__scroll { position: absolute; left: 50%; bottom: 1.6rem; transform: translateX(-50%); font-size: .7rem; letter-spacing: .3em; text-transform: uppercase; color: #9fb3d4; display: grid; justify-items: center; gap: .5rem; }
   .hero__scroll span { width: 1px; height: 46px; background: linear-gradient(#fff, transparent); animation: scrollHint 1.8s ease-in-out infinite; transform-origin: top; }
   @keyframes scrollHint { 0% { transform: scaleY(0); opacity: 0 } 40% { transform: scaleY(1); opacity: 1 } 100% { transform: scaleY(1) translateY(20px); opacity: 0 } }

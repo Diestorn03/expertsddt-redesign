@@ -46,6 +46,7 @@ const current = (h) => h === Astro.url.pathname ? 'page' : undefined;
     </script>
     <ClientRouter />
     <Analytics />
+    <slot name="head" />
   </head>
   <body>
     <a class="sr-only" href="#main">{t.nav.skip}</a>

@@ -170,10 +170,17 @@ function initHero() {
   const laptopFrom = { x: '22vw', y: '12vh', scale: .82 };
   if (desktop) gsap.set(q('.hero__laptop'), laptopFrom);
 
-  // Intro (time-based, plays on load)
-  const intro = gsap.timeline({ defaults: { ease: 'power4.out' } });
+  // Intro (time-based). Created paused so initial states apply at once; plays when the laptop image is decoded
+  // and fonts are in, so the first frames don't stutter on decode/reflow (capped at 900ms).
+  const intro = gsap.timeline({ paused: true, defaults: { ease: 'power4.out' } });
+  const img = q('.hero__laptop img')[0];
+  const ready = Promise.all([
+    img ? img.decode().catch(() => {}) : Promise.resolve(),
+    document.fonts?.ready ?? Promise.resolve(),
+  ]);
+  Promise.race([ready, new Promise((r) => setTimeout(r, 900))]).then(() => requestAnimationFrame(() => intro.play()));
   intro
-    .from(q('.hero__bg video, .hero__bg img'), { scale: 1.25, duration: 2.2, ease: 'power2.out' }, 0)
+    .from(q('.hero__bg video, .hero__bg img'), { scale: 1.15, duration: 2.2, ease: 'power2.out' }, 0)
     .from(q('.hero__eyebrow'), { y: 24, opacity: 0, duration: .8 }, .3)
     .from(q('.hero__title .w'), { yPercent: 110, opacity: 0, rotate: 3, duration: 1.1, stagger: .06 }, .35)
     .from(q('.hero__lead'), { y: 28, opacity: 0, duration: .9 }, .9)
@@ -181,7 +188,7 @@ function initHero() {
     .from(q('.hero__scroll'), { opacity: 0, duration: .8 }, 1.4)
     .from(q('.hero__laptop'), { y: '+=160', opacity: 0, duration: 1.6, ease: 'expo.out' }, .7)
     .from(q('.hero__ghost .g1, .hero__ghost .g2'), { yPercent: 100, opacity: 0, duration: 1.2, stagger: .1 }, .5);
-  if (window.scrollY > 40) intro.progress(1); // not at the top (e.g. anchor link): skip the intro, no overlap with the scrub
+  if (window.scrollY > 40) intro.progress(1).pause(); // not at the top (e.g. anchor link): skip the intro, no overlap with the scrub
 
   if (!desktop) return; // mobile: hero flows naturally, no pin
 
