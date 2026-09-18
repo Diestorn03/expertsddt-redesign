@@ -198,7 +198,8 @@ function initHero() {
     .to(q('.hero__copy'), { yPercent: -30, opacity: 0, duration: .22, ease: 'power2.in' }, 0)
     .to(q('.hero__ghost .line-mask:first-child'), { xPercent: -25, opacity: 0, duration: .3 }, 0)
     .to(q('.hero__ghost .line-mask:last-child'), { xPercent: 25, opacity: 0, duration: .3 }, 0)
-    .to(q('.hero__bg'), { scale: 1.12, filter: 'brightness(.55) blur(6px)', duration: .45 }, 0)
+    // explicit start values: from "filter: none" GSAP would infer brightness(0) and black out the hero on the first tick
+    .fromTo(q('.hero__bg'), { scale: 1, filter: 'brightness(1) blur(0px)' }, { scale: 1.12, filter: 'brightness(.55) blur(4px)', duration: .45, immediateRender: false }, 0)
     .to(q('.hero__scroll'), { opacity: 0, duration: .1 }, 0)
     .fromTo(q('.hero__laptop'), laptopFrom, { x: 0, y: 0, scale: 1, duration: .45, ease: 'power2.inOut', immediateRender: false }, .05)
     .fromTo(q('.portal__head'), { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: .22, ease: 'power3.out' }, .24)
@@ -314,14 +315,19 @@ function initVideos() {
     const v = e.target;
     if (e.isIntersecting && getComputedStyle(v).display !== 'none') v.play().catch(() => {});
     else v.pause();
-  }), { threshold: .05 });
+  }), { rootMargin: '200px 0px', threshold: 0 });
+  const observed = [];
   vids.forEach((v) => {
     v.muted = true; v.defaultMuted = true; v.volume = 0; v.setAttribute('muted', '');
     v.removeAttribute('autoplay');
     v.addEventListener('playing', () => v.classList.add('is-playing'), { once: true });
     if (getComputedStyle(v).display === 'none') { v.pause(); v.removeAttribute('src'); v.load(); return; }
-    io.observe(v);
+    // the hero video lives inside a pinned scene: pin/unpin can confuse intersection reports, so it just plays
+    if (v.closest('#hero')) { v.play().catch(() => {}); return; }
+    io.observe(v); observed.push(v);
   });
+  // after ScrollTrigger moves things around (pin spacers, refresh), re-observe to get a fresh intersection report
+  ScrollTrigger.addEventListener('refresh', () => observed.forEach((v) => { io.unobserve(v); io.observe(v); }));
 }
 
 /* ---------------- Cursor glow (desktop only) ---------------- */
