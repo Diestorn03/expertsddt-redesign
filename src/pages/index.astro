@@ -259,12 +259,12 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .portal__feature h3 { color: #fff; font-size: 1rem; font-weight: 700; }
   .portal__feature p { font-size: .85rem; color: #b9c8e2; }
   .portal__cta { justify-content: center; }
-  @media (min-width: 961px) {
+  @media (min-width: 1181px) {
     .portal { position: absolute; inset: 0; z-index: 3; padding-top: calc(var(--nav-h) + 1vh); pointer-events: none; }
     .portal__head, .portal__features, .portal__cta { pointer-events: auto; }
     .hero__laptop { position: absolute; left: 0; right: 0; margin-inline: auto; top: 59vh; width: min(66vw, 1040px); z-index: 2; }
   }
-  @media (max-width: 960px) {
+  @media (max-width: 1180px) {
     .hero { padding-bottom: 3rem; }
     .hero__bg video { display: none; }
     .hero__poster { display: block; }
@@ -341,7 +341,8 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .stat strong { font-size: clamp(2.2rem, 4vw, 3.6rem); font-weight: 800; color: #fff; line-height: 1; letter-spacing: -.03em; }
   .stat strong span { color: #6fb6ff; }
   .stat > span { font-size: .85rem; color: #9fb3d4; }
-  @media (max-width: 960px) { .stats__grid { grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 3rem; } .stats { padding-bottom: 3.5rem; } }
+  @media (max-width: 1180px) { .stats__grid { grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 3rem; } .stats { padding-bottom: 3.5rem; } }
+  @media (max-width: 640px) { .stats__grid { grid-template-columns: 1fr 1fr; } }
 
   /* ---------- ABOUT ---------- */
   .about { overflow: hidden; }

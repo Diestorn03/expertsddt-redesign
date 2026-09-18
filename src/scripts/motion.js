@@ -22,7 +22,11 @@ gsap.registerPlugin(ScrollTrigger, SplitText);
 
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const coarse = window.matchMedia('(pointer: coarse)').matches;
-const isMobile = () => window.matchMedia('(max-width: 960px)').matches;
+const isMobile = () => window.matchMedia('(max-width: 1180px)').matches; // stacked layout up to tablet-landscape
+
+// Always start at the top on a reload: the pinned scenes must not initialise mid-scroll.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+window.scrollTo(0, 0);
 
 let lenis;
 let ctx;
@@ -70,7 +74,9 @@ function initNav() {
   const from = document.querySelector('[data-nav-solid-from]');
   nav.classList.remove('is-solid');
   // created after initHero so the pin spacer is accounted for
-  ScrollTrigger.create({ trigger: from || document.body, start: from ? 'bottom top+=90' : 80, onEnter: () => nav.classList.add('is-solid'), onLeaveBack: () => nav.classList.remove('is-solid') });
+  // desktop: solid once the hero scene is over; stacked layouts: solid after 80px so the logo never sits on images
+  const useHero = from && !isMobile();
+  ScrollTrigger.create({ trigger: useHero ? from : document.body, start: useHero ? 'bottom top+=90' : 80, onEnter: () => nav.classList.add('is-solid'), onLeaveBack: () => nav.classList.remove('is-solid') });
 
   const burger = document.querySelector('.burger');
   const menu = document.querySelector('.menu');
@@ -175,6 +181,7 @@ function initHero() {
     .from(q('.hero__scroll'), { opacity: 0, duration: .8 }, 1.4)
     .from(q('.hero__laptop'), { y: '+=160', opacity: 0, duration: 1.6, ease: 'expo.out' }, .7)
     .from(q('.hero__ghost .g1, .hero__ghost .g2'), { yPercent: 100, opacity: 0, duration: 1.2, stagger: .1 }, .5);
+  if (window.scrollY > 40) intro.progress(1); // not at the top (e.g. anchor link): skip the intro, no overlap with the scrub
 
   if (!desktop) return; // mobile: hero flows naturally, no pin
 
@@ -292,6 +299,23 @@ function initPointerFx() {
   });
 }
 
+/* ---------------- Videos: always muted, play only while visible ---------------- */
+function initVideos() {
+  const vids = gsap.utils.toArray('video');
+  if (!vids.length) return;
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+    const v = e.target;
+    if (e.isIntersecting && getComputedStyle(v).display !== 'none') v.play().catch(() => {});
+    else v.pause();
+  }), { threshold: .05 });
+  vids.forEach((v) => {
+    v.muted = true; v.defaultMuted = true; v.volume = 0; v.setAttribute('muted', '');
+    v.removeAttribute('autoplay');
+    if (getComputedStyle(v).display === 'none') { v.pause(); v.removeAttribute('src'); v.load(); return; }
+    io.observe(v);
+  });
+}
+
 /* ---------------- Cursor glow (desktop only) ---------------- */
 function initGlow() {
   if (coarse || reduced) return;
@@ -310,6 +334,7 @@ function boot() {
   ScrollTrigger.getAll().forEach((t) => t.kill());
   ctx = gsap.context(() => {
     initTheme();
+    initVideos();
     initHero();
     initNav();
     initPillars();
