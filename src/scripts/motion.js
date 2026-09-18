@@ -170,23 +170,23 @@ function initHero() {
   const laptopFrom = { x: '22vw', y: '12vh', scale: .82 };
   if (desktop) gsap.set(q('.hero__laptop'), laptopFrom);
 
-  // Intro (time-based). Created paused so initial states apply at once; plays when the laptop image is decoded
-  // and fonts are in, so the first frames don't stutter on decode/reflow (capped at 900ms).
+  // Intro (time-based). Created paused so initial states apply at once; plays as soon as the laptop image is decoded
+  // and fonts are in (capped at 400ms) so the first frames don't stutter on decode/reflow.
   const intro = gsap.timeline({ paused: true, defaults: { ease: 'power4.out' } });
   const img = q('.hero__laptop img')[0];
   const ready = Promise.all([
     img ? img.decode().catch(() => {}) : Promise.resolve(),
     document.fonts?.ready ?? Promise.resolve(),
   ]);
-  Promise.race([ready, new Promise((r) => setTimeout(r, 900))]).then(() => requestAnimationFrame(() => intro.play()));
+  Promise.race([ready, new Promise((r) => setTimeout(r, 400))]).then(() => requestAnimationFrame(() => intro.play()));
   intro
     .from(q('.hero__bg video, .hero__bg img'), { scale: 1.15, duration: 2.2, ease: 'power2.out' }, 0)
     .from(q('.hero__eyebrow'), { y: 24, opacity: 0, duration: .8 }, .3)
     .from(q('.hero__title .w'), { yPercent: 110, opacity: 0, rotate: 3, duration: 1.1, stagger: .06 }, .35)
     .from(q('.hero__lead'), { y: 28, opacity: 0, duration: .9 }, .9)
     .from(q('.hero__cta > *'), { y: 28, opacity: 0, duration: .8, stagger: .1 }, 1.05)
-    .from(q('.hero__scroll'), { opacity: 0, duration: .8 }, 1.4)
-    .from(q('.hero__laptop'), { y: '+=160', opacity: 0, duration: 1.6, ease: 'expo.out' }, .7)
+    // intro and scrub own different layers: .hero__rise (intro) vs .hero__laptop (scrub); .g1/.g2 (intro) vs .line-mask (scrub)
+    .from(q('.hero__rise'), { y: 160, opacity: 0, duration: 1.6, ease: 'expo.out' }, .7)
     .from(q('.hero__ghost .g1, .hero__ghost .g2'), { yPercent: 100, opacity: 0, duration: 1.2, stagger: .1 }, .5);
   if (window.scrollY > 40) intro.progress(1).pause(); // not at the top (e.g. anchor link): skip the intro, no overlap with the scrub
 
@@ -196,8 +196,8 @@ function initHero() {
   const tl = gsap.timeline({ scrollTrigger: { trigger: hero, start: 'top top', end: '+=220%', pin: true, scrub: 1.1, anticipatePin: 1 } });
   tl
     .to(q('.hero__copy'), { yPercent: -30, opacity: 0, duration: .22, ease: 'power2.in' }, 0)
-    .to(q('.hero__ghost .g1'), { xPercent: -25, opacity: 0, duration: .3 }, 0)
-    .to(q('.hero__ghost .g2'), { xPercent: 25, opacity: 0, duration: .3 }, 0)
+    .to(q('.hero__ghost .line-mask:first-child'), { xPercent: -25, opacity: 0, duration: .3 }, 0)
+    .to(q('.hero__ghost .line-mask:last-child'), { xPercent: 25, opacity: 0, duration: .3 }, 0)
     .to(q('.hero__bg'), { scale: 1.12, filter: 'brightness(.55) blur(6px)', duration: .45 }, 0)
     .to(q('.hero__scroll'), { opacity: 0, duration: .1 }, 0)
     .fromTo(q('.hero__laptop'), laptopFrom, { x: 0, y: 0, scale: 1, duration: .45, ease: 'power2.inOut', immediateRender: false }, .05)
