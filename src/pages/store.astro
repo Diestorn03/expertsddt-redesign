@@ -65,7 +65,7 @@ const visuals = [asset('/img/lib-occlusion.webp'), asset('/img/lib-natural.webp'
 </Base>
 
 <style>
-  .cat { display: grid; gap: .8rem; align-content: start; min-height: 240px; transition: box-shadow .4s; }
+  .cat { display: flex; flex-direction: column; align-items: flex-start; gap: .8rem; min-height: 240px; transition: box-shadow .4s; }
   .cat:hover { box-shadow: 0 30px 60px -28px rgba(29,50,115,.5); }
   .cat__cta { margin-top: auto; color: var(--blue); font-weight: 600; }
   .products { display: grid; gap: 1.5rem; }

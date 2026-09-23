@@ -116,6 +116,7 @@ p { margin: 0; }
 .btn--outline:hover { background: var(--blue); color: #fff; }
 [data-theme="dark"] .btn--outline { border-color: #6fb6ff; color: #6fb6ff; }
 .btn--white { background: #fff; color: var(--navy); box-shadow: 0 10px 30px -12px rgba(0,0,0,.45); }
+.btn svg { flex-shrink: 0; }
 .btn .arrow { transition: transform .35s var(--ease-out); }
 .btn:hover .arrow { transform: translateX(4px); }
 

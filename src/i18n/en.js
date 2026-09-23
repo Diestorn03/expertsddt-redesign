@@ -103,7 +103,7 @@ export default {
     store: { pill: 'Templates · Sale', t: 'Teeth in occlusion with virtual gingiva', d: 'Pre-occluded tooth libraries by Fernando Polanco. Save up to 70% of design time on dentures, overdentures and All-on-X.', was: '$699.99', now: '$399.99', cta: 'Visit the store' },
   },
   cta: {
-    eyebrow: 'Get to know more about us',
+    eyebrow: 'Get to know more about us',
     title: 'Ready to go <span class="cta__accent">fully digital?</span>',
     text: 'Book a 1-hour consultation, talk to our team, or ask Apex, our digital concierge, to guide you through services and workflows.',
     book: 'Book your session',

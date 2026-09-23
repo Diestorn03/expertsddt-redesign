@@ -70,7 +70,7 @@ export default {
   stats: {
     keywords: ['Exocad', 'All-on-X', 'Escaneo facial', 'Escaneo intraoral', 'Impresión 3D', 'Fotogrametría', 'CBCT', 'Zirconia', 'Guías quirúrgicas', 'PMMA', 'Diseño de sonrisa'],
     items: [
-      { v: 2019, label: 'Fundada en Florida, EE. UU.' },
+      { v: 2019, label: 'Fundada en Florida, EE. UU.' },
       { v: 13, suffix: '+', label: 'Años de colaboración diaria con dentistas y pacientes' },
       { v: 10, prefix: '<', suffix: 's', label: 'Para capturar un escaneo facial, de mordida o de prótesis en alta resolución' },
       { v: 80, suffix: '%', label: 'De tiempo de sillón ahorrado con la tecnología de escaneo facial 5.0' },
@@ -87,22 +87,22 @@ export default {
   reviews: {
     eyebrow: 'Tus reseñas', title: 'Cuéntanos', titleLine2: 'cómo te', titleAccent: 'sientes',
     lead: 'Especialistas, prostodoncistas y dueños de laboratorio sobre lo que cambia cuando Experts DDT se suma al flujo de trabajo.',
-    trust: 'Con la confianza de clínicas y laboratorios de todo EE. UU.',
+    trust: 'Con la confianza de clínicas y laboratorios de todo EE. UU.',
     sample: 'Testimonios de muestra. Se reemplazarán por reseñas verificadas de clientes antes del lanzamiento.',
     items: [
       { n: 'Dr. Michael R.', r: 'Especialista en implantes', q: 'La capacitación práctica con Fernando cambió por completo mi clínica. Llevaba meses luchando con Exocad, pero su forma de desglosar flujos de trabajo complejos lo hizo increíblemente intuitivo. Salí del curso con la confianza para manejar casos de arcada completa al día siguiente. Verdaderamente el “Mago” de la odontología digital.' },
-      { n: 'Sarah L.', r: 'Dueña de laboratorio dental', q: 'En implantología la precisión lo es todo, y Experts DDT entrega exactamente eso. El ajuste de sus barras de zirconio y la exactitud de las guías quirúrgicas no tienen comparación. Hemos reducido significativamente el tiempo de ajustes en sillón desde que empezamos a trabajar con ellos. Un socio en el que puedes confiar.' },
+      { n: 'Sarah L.', r: 'Dueña de laboratorio dental', q: 'En implantología la precisión lo es todo, y Experts DDT entrega exactamente eso. El ajuste de sus barras de zirconia y la exactitud de las guías quirúrgicas no tienen comparación. Hemos reducido significativamente el tiempo de ajustes en sillón desde que empezamos a trabajar con ellos. Un socio en el que puedes confiar.' },
       { n: 'Dr. James K.', r: 'Prostodoncista', q: 'Le llevé a Fernando un caso de pesadilla que otros dos laboratorios habían rechazado. No solo diseñó una solución; construyó un flujo de trabajo que salvó el tratamiento del paciente. Su profundo conocimiento tanto del lado clínico como del técnico es difícil de encontrar. Altamente recomendado.' },
     ],
   },
   resources: {
     eyebrow: 'Aprende, descarga, mejora', title: 'Recursos creados para tu', titleAccent: 'flujo de trabajo Exocad',
     free: { pill: 'Descarga gratis', t: 'Librerías de implantes ExpertsDDT', d: 'Componentes de implantes según especificaciones del fabricante, para restauraciones precisas en los principales sistemas. Listas para importar en Exocad.', cta: 'Descargar' },
-    course: { pill: 'Curso online · Oferta', t: 'Teeth & virtual gingiva libraries in Exocad', d: 'Capacitación en video sobre cómo usar las librerías de dientes y encía virtual, a tu propio ritmo.', was: '$149.99', now: '$99.99', cta: 'Únete hoy' },
+    course: { pill: 'Curso online · Oferta', t: 'Librerías de dientes y encía virtual en Exocad', d: 'Capacitación en video sobre cómo usar las librerías de dientes y encía virtual, a tu propio ritmo.', was: '$149.99', now: '$99.99', cta: 'Únete hoy' },
     store: { pill: 'Plantillas · Oferta', t: 'Teeth in occlusion with virtual gingiva', d: 'Librerías de dientes pre-ocluidos de Fernando Polanco. Ahorra hasta un 70% del tiempo de diseño en prótesis totales, sobredentaduras y All-on-X.', was: '$699.99', now: '$399.99', cta: 'Visita la tienda' },
   },
   cta: {
-    eyebrow: 'Conoce más sobre nosotros',
+    eyebrow: 'Conoce más sobre nosotros',
     title: '¿Listo para ser <span class="cta__accent">100% digital?</span>',
     text: 'Reserva una consulta de 1 hora, habla con nuestro equipo o pídele a Apex, nuestro concierge digital, que te guíe por servicios y flujos de trabajo.',
     book: 'Reserva tu sesión',
@@ -121,12 +121,12 @@ export default {
   pages: {
     services: {
       eyebrow: 'Servicios', title: 'Servicios premium para el consultorio 100% digital.',
-      lead: 'Desde el primer escaneo hasta el zirconio final. Diseño, manufactura, tecnología, capacitación y soporte, a cargo de los expertos de Fernando Polanco DDT.',
+      lead: 'Desde el primer escaneo hasta la zirconia final. Diseño, manufactura, tecnología, capacitación y soporte, a cargo de los expertos de Fernando Polanco DDT.',
       jumpLabel: 'Servicios en esta página', ctaTitle: 'Diseñemos juntos tu <span class="cta__accent">próximo caso</span>.',
       panel: { tags: ['PMMA', 'Zirconia', 'Impresión 3D'], big: 'Arcada completa' },
       rows: [
         { id: 'design', n: '01', t: 'Servicios de diseño premium', p: 'Diseños de alto nivel para casos complejos como All-on-X de principio a fin, además de prótesis totales, sobredentaduras, barras, puentes y coronas de rehabilitación completa (FMR), carillas y guías quirúrgicas.', cta: 'Reserva tu sesión ahora', tags: ['All-on-X', 'Prótesis totales', 'Barras y puentes', 'Carillas', 'Guías quirúrgicas'] },
-        { id: 'manufacturing', n: '02', t: 'Impresión 3D y manufactura final', p: 'Producción de arcada completa mediante impresión 3D, PMMA y zirconio final. Creación de modelos o prótesis de arcada completa con tecnología de impresión 3D.', cta: 'Agenda una consulta', tags: ['Impresión 3D', 'PMMA', 'Zirconia', 'Modelos'] },
+        { id: 'manufacturing', n: '02', t: 'Impresión 3D y manufactura final', p: 'Producción de arcada completa mediante impresión 3D, PMMA y zirconia final. Creación de modelos o prótesis de arcada completa con tecnología de impresión 3D.', cta: 'Agenda una consulta', tags: ['Impresión 3D', 'PMMA', 'Zirconia', 'Modelos'] },
         { id: 'scanning', n: '03', t: 'Tecnología de vanguardia en escaneo facial 3D', p: 'Incorporación de tecnología avanzada de escaneo facial para mayor precisión en el diagnóstico y la planificación. Captura escaneos faciales, de mordida y de prótesis en menos de 10 segundos y ahorra hasta un 80% del tiempo de sillón.', cta: 'Reserva tu sesión ahora', tags: ['Escaneo facial 5.0', 'Fotogrametría', 'CBCT'] },
         { id: 'training', n: '04', t: 'Capacitación especializada', p: 'Capacitación integral en el uso de tecnología de escaneo intraoral y facial, así como Exocad, impresión 3D, fresado y acabado; esencial para lograr tiempos de entrega rápidos.', cta: 'Agenda una consulta', tags: ['Escaneo intraoral', 'Exocad', 'Fresado', 'Acabado'] },
         { id: 'support', n: '05', t: 'Visitas de consultoría y soporte', p: 'Ofrecemos visitas locales a consultorios en Florida para agilizar el proceso de tratamiento y la atención al paciente. También recibirás soporte experto especializado exactamente cuando lo necesites.', cta: 'Reserva tu sesión ahora', tags: ['Visitas en sitio', 'Florida', 'Soporte bajo demanda'] },
@@ -156,7 +156,7 @@ export default {
       products: [
         { cat: 'Plantillas', t: 'Teeth in occlusion with virtual gingiva libraries by Fernando Polanco', d: 'Dientes pre-ocluidos y posicionados anatómicamente con encía virtual lista para usar. Compatible con Exocad y 3Shape. Ahorra hasta un 70% del tiempo de diseño en prótesis totales, sobredentaduras y All-on-X.', was: '$699.99', now: '$399.99' },
         { cat: 'Plantillas', t: '3D aesthetic guidelines: Smile Creator 8mm by Fernando Polanco', d: 'Plantilla avanzada de guías 3D que garantiza un posicionamiento y una simetría precisos en coronas, puentes y casos All-on-X.', was: '$49.99', now: '$24.99' },
-        { cat: 'Cursos', t: 'Exocad training video: teeth and virtual gingiva libraries', d: 'Cómo usar las librerías de dientes y encía virtual dentro de Exocad. Incluye una masterclass opcional de 30 minutos con las librerías.', was: '$149.99', now: '$99.99' },
+        { cat: 'Cursos', t: 'Video de capacitación en Exocad: librerías de dientes y encía virtual', d: 'Cómo usar las librerías de dientes y encía virtual dentro de Exocad. Incluye una masterclass opcional de 30 minutos con las librerías.', was: '$149.99', now: '$99.99' },
       ],
       ctaTitle: '¿Necesitas una librería personalizada o <span class="cta__accent">una cotización por volumen?</span>',
     },

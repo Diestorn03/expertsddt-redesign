@@ -151,7 +151,8 @@ function initReveals() {
   // staggered children
   gsap.utils.toArray('[data-stagger]').forEach((group) => {
     const kids = group.children;
-    gsap.from(kids, { y: 60, opacity: 0, skewY: 3, duration: .9, ease: 'power3.out', stagger: +(group.dataset.stagger || .1), scrollTrigger: { trigger: group, start: 'top 82%', once: true } });
+    // fromTo + clearProps: a .btn child has a CSS transform transition, and a from() tween re-reads its mid-transition transform as the end value on refresh
+    gsap.fromTo(kids, { y: 60, opacity: 0, skewY: 3 }, { y: 0, opacity: 1, skewY: 0, duration: .9, ease: 'power3.out', stagger: +(group.dataset.stagger || .1), clearProps: 'transform', scrollTrigger: { trigger: group, start: 'top 82%', once: true } });
   });
 }
 
@@ -197,16 +198,8 @@ function initHero() {
   const q = gsap.utils.selector(hero);
   const desktop = !reduced && !isMobile();
   // desktop start pose: laptop peeks in from the bottom-right, scrub brings it to centre
-  const laptopFrom = { x: '22vw', y: '12vh', scale: .82 };
+  const laptopFrom = { x: '6vw', y: '18vh', scale: .86 }; // must match the html.js pre-position in index.astro
   if (desktop) gsap.set(q('.hero__laptop'), laptopFrom);
-  const placeLaptop = () => {
-    const laptop = q('.hero__laptop')[0], portal = q('.portal')[0], cta = q('.portal__cta')[0];
-    if (laptop && !desktop) laptop.style.top = ''; // stacked layout: back to normal flow (matters after a resize across 1180px)
-    if (!desktop || !laptop || !portal || !cta) return;
-    laptop.style.top = `${Math.round(portal.offsetTop + cta.offsetTop + cta.offsetHeight + 18)}px`; // offsets ignore the scrub transforms
-  };
-  placeLaptop();
-  onRefresh(placeLaptop);
 
   // Intro (time-based). Created paused so initial states apply at once; plays when the loader wipes away
   // (first load) or as soon as the laptop image is decoded and fonts are in (client-side navigation, capped at 400ms).
@@ -276,7 +269,7 @@ function initPillars() {
     if (p.classList.contains('pillar--intro')) return; // its heading/lead/hint already reveal with data-split / data-reveal on the vertical scroll
     const media = p.querySelector('.pillar__media > :is(img, video)');
     if (media) gsap.fromTo(media, { xPercent: -12, scale: 1.15 }, { xPercent: 12, scale: 1.15, ease: 'none', scrollTrigger: { trigger: p, containerAnimation: tween, start: 'left right', end: 'right left', scrub: true } });
-    gsap.from(p.querySelectorAll('.pillar__copy > *'), { y: 50, opacity: 0, stagger: .08, duration: .8, ease: 'power3.out', scrollTrigger: { trigger: p, containerAnimation: tween, start: 'left 70%', once: true } });
+    gsap.fromTo(p.querySelectorAll('.pillar__copy > *'), { y: 50, opacity: 0 }, { y: 0, opacity: 1, stagger: .08, duration: .8, ease: 'power3.out', clearProps: 'transform', scrollTrigger: { trigger: p, containerAnimation: tween, start: 'left 70%', once: true } });
   });
 }
 
