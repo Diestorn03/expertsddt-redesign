@@ -13,7 +13,7 @@
   --line: #d1d5db;
   --white: #ffffff;
   --surface: #ffffff;     /* page + card background (theme aware) */
-  --nav-bg: rgba(255,255,255,.86);
+  --nav-bg: rgba(255,255,255,.9);
   --muted: #64748b;
   --grad: linear-gradient(160deg, var(--blue-mid) 0%, var(--navy) 100%);
   --grad-blue: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
@@ -29,7 +29,7 @@
   --mist: #101d3a;
   --line: #24345a;
   --surface: #0b1630;
-  --nav-bg: rgba(11,22,48,.84);
+  --nav-bg: rgba(11,22,48,.9);
   --muted: #8fa0bd;
   color-scheme: dark;
 }
@@ -52,6 +52,7 @@ body {
   transition: background .3s, color .3s;
 }
 img, video { max-width: 100%; display: block; }
+main { overflow-x: clip; } /* off-canvas reveal offsets must never widen the page (body's overflow is handed to the viewport) */
 a { color: inherit; text-decoration: none; }
 button { font: inherit; }
 h1, h2, h3, h4 { color: var(--ink); line-height: 1.08; margin: 0; letter-spacing: -0.02em; font-weight: 700; text-wrap: balance; }
@@ -80,14 +81,17 @@ p { margin: 0; }
 .section--navy .lead, .page-hero .lead { color: #c7d6ee; }
 .accent { color: var(--blue); }
 [data-theme="dark"] .accent { color: #6fb6ff; }
-.underline-accent { position: relative; display: inline-block; }
-.underline-accent::after {
-  content: ''; position: absolute; left: 0; right: 0; bottom: .04em; height: .14em;
-  background: var(--blue); border-radius: 4px; transform: scaleX(0); transform-origin: left;
-  transition: transform .9s var(--ease-out) .25s;
+/* underline drawn as a background so it follows the text when a phrase wraps onto two lines */
+.underline-accent {
+  --ul: var(--blue);
+  background-image: linear-gradient(var(--ul), var(--ul)); background-repeat: no-repeat;
+  background-position: 0 92%; background-size: 0% .12em;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  transition: background-size .9s var(--ease-out) .25s;
 }
-.is-inview .underline-accent::after { transform: scaleX(1); }
-.section--navy .underline-accent::after { background: #8fc1ff; }
+.is-inview .underline-accent, .is-inview.underline-accent { background-size: 100% .12em; }
+.section--navy .underline-accent, .page-hero .underline-accent, .cta__box .underline-accent { --ul: #8fc1ff; }
+[data-theme="dark"] .underline-accent { --ul: #6fb6ff; }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -137,7 +141,9 @@ p { margin: 0; }
   transition: background .4s, box-shadow .4s, color .3s;
   color: #fff;
 }
-.nav.is-solid { background: var(--nav-bg); backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%); box-shadow: 0 1px 0 rgba(29,50,115,.08); color: var(--ink); }
+.nav.is-solid { background: var(--nav-bg); -webkit-backdrop-filter: blur(16px) saturate(160%); backdrop-filter: blur(16px) saturate(160%); box-shadow: 0 1px 0 rgba(29,50,115,.08); color: var(--ink); }
+/* mobile menu open: header turns transparent over the navy menu so the X and logo stay visible */
+.nav.is-menu { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; color: #fff; }
 .nav__inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: min(1240px, 100% - 2rem); margin-inline: auto; }
 .nav__links { display: flex; gap: 1.5rem; list-style: none; margin: 0; padding: 0; }
 .nav__links a { font-size: .86rem; font-weight: 500; letter-spacing: .02em; position: relative; padding-block: .35rem; }
@@ -182,7 +188,7 @@ p { margin: 0; }
 .menu .theme-toggle { color: #fff; }
 
 /* ---------- footer ---------- */
-.footer { background: #0a1a3a; color: #9fb3d4; padding: 4.5rem 0 2rem; font-size: .92rem; position: relative; overflow: hidden; }
+.footer { background: #0a1a3a; color: #9fb3d4; padding: 4.5rem 0 calc(2rem + 120px); font-size: .92rem; position: relative; overflow: hidden; }
 .footer__grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1.2fr; gap: 2.5rem; position: relative; z-index: 1; }
 .footer h4 { color: #fff; font-size: .8rem; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 1rem; }
 .footer ul { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
@@ -236,6 +242,10 @@ p { margin: 0; }
 .price s { color: var(--muted); font-weight: 500; font-size: .9em; margin-right: .5rem; }
 .stack { display: grid; gap: 1.25rem; align-content: start; }
 .stack > .pill, .stack > .eyebrow { justify-self: start; }
+.res > .pill, .cat > .pill { justify-self: start; } /* grid cards would stretch the pill into a bar */
+/* dark theme: brand blue #046bd2 is below AA on navy, use the light blue for text */
+:root[data-theme="dark"] :is(.pillar__hint, .about__badge span, .res__cta, .cat__cta, .booking__meta b, .channels li > span:first-child, .channels a:hover, .svc__link) { color: #6fb6ff; }
+:root[data-theme="dark"] .res.res--free > .res__cta.res__cta { color: #fff; } /* stays white on the blue gradient card */
 .cta-row { display: flex; gap: .9rem; flex-wrap: wrap; align-items: center; }
 .note { font-size: .85rem; color: var(--muted); display: flex; gap: .5rem; align-items: flex-start; }
 .note::before { content: 'ⓘ'; flex: none; }

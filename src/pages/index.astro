@@ -14,7 +14,13 @@ const icons = [
   'M4 13a8 8 0 0 1 16 0M4 13v4a2 2 0 0 0 2 2h2v-6H4M20 13v4a2 2 0 0 1-2 2h-2v-6h4M12 21h4',
 ];
 const featureIcons = ['M12 16V4M7 9l5-5 5 5M4 20h16', 'M3 12h4l3-8 4 16 3-8h4', 'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z'];
-const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset('/img/design-services.webp') }, { img: asset('/img/training-main.webp') }, { img: asset('/img/training.webp') }];
+// client assets: Exocad smile-design recording, Experts DDT scanner + its capture software, clinic photo, real team photo
+const pillarMedia = [
+  { video: asset('/video/exocad-smile.mp4'), poster: asset('/video/exocad-smile.webp') },
+  { product: true },
+  { img: asset('/img/training-main.webp') },
+  { img: asset('/img/team.webp') },
+];
 ---
 <Base title={t.meta.home}>
   <Fragment slot="head">
@@ -29,6 +35,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
       <img class="hero__poster" src={asset('/img/design-services.webp')} alt="" loading="eager" />
       <video class="hero__video" autoplay muted loop playsinline preload="auto" poster={asset('/img/design-services.webp')} src={asset('/video/smile-design.mp4')}></video>
       <div class="hero__veil"></div>
+      <div class="hero__dim"></div>
     </div>
     <div class="hero__glow" aria-hidden="true"><i></i><i></i><i></i></div>
     <div class="grid-bg" aria-hidden="true"></div>
@@ -94,8 +101,16 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
       </article>
       {t.pillars.items.map((p, i) => (
         <article class="pillar">
-          <div class="pillar__media" aria-hidden="true">
-            {pillarMedia[i].video ? <video autoplay muted loop playsinline preload="metadata" src={pillarMedia[i].video}></video> : <img src={pillarMedia[i].img} alt="" loading="lazy" />}
+          <div class={`pillar__media ${pillarMedia[i].product ? 'pillar__media--product' : ''}`} aria-hidden="true">
+            {pillarMedia[i].video && <video autoplay muted loop playsinline preload="metadata" poster={pillarMedia[i].poster} src={pillarMedia[i].video}></video>}
+            {pillarMedia[i].img && <img src={pillarMedia[i].img} alt="" loading="lazy" />}
+            {pillarMedia[i].product && (
+              <div class="product-stage">
+                <span class="product-stage__ring"></span>
+                <img class="product-stage__scanner float-loop" src={asset('/img/scanner-front.webp')} alt="" loading="lazy" width="468" height="1083" />
+                <video class="product-stage__screen" muted loop playsinline preload="none" poster={asset('/video/scan-ui.webp')} src={asset('/video/scan-ui.mp4')}></video>
+              </div>
+            )}
           </div>
           <div class="pillar__copy">
             <span class="pillar__num">{p.n}</span>
@@ -128,6 +143,31 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
           </article>
         ))}
       </div>
+    </div>
+  </section>
+
+  <!-- ================= SMILE DESIGN: BEFORE / AFTER ================= -->
+  <section id="smiles" class="section smiles" data-scene>
+    <div class="wrap">
+      <div class="smiles__head" data-reveal-scope>
+        <span class="eyebrow" data-reveal="up">{t.smiles.eyebrow}</span>
+        <h2 class="h-xl" data-split="lines">{t.smiles.title} <span class="underline-accent">{t.smiles.titleAccent}</span></h2>
+        <p class="lead" data-reveal="up" data-delay=".2">{t.smiles.lead}</p>
+      </div>
+      <div class="smiles__grid" data-stagger=".12">
+        {[['a', t.smiles.caseA], ['b', t.smiles.caseB]].map(([k, cap]) => (
+          <figure class="ba" style="--pos:50%">
+            <img class="ba__img" src={asset(`/img/smile-${k}-after.webp`)} alt={`${cap} · ${t.smiles.after}`} width="1400" height="875" loading="lazy" />
+            <img class="ba__img ba__before" src={asset(`/img/smile-${k}-before.webp`)} alt={`${cap} · ${t.smiles.before}`} width="1400" height="875" loading="lazy" />
+            <span class="ba__line" aria-hidden="true"><i></i></span>
+            <span class="ba__tag ba__tag--before" aria-hidden="true">{t.smiles.before}</span>
+            <span class="ba__tag ba__tag--after" aria-hidden="true">{t.smiles.after}</span>
+            <input class="ba__range" type="range" min="0" max="100" value="50" aria-label={`${t.smiles.compare}: ${cap}`} />
+            <figcaption class="sr-only">{cap}</figcaption>
+          </figure>
+        ))}
+      </div>
+      <p class="note smiles__note" data-reveal="up">{t.smiles.note}</p>
     </div>
   </section>
 
@@ -205,6 +245,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
           <span class="res__cta">{t.resources.free.cta} <span class="arrow">→</span></span>
         </a>
         <a class="res res--course" href={shop || href('/courses/')} data-reveal="drop" data-delay=".12">
+          <img class="res__img" src={asset('/img/lib-gingiva.webp')} alt="" loading="lazy" width="900" height="532" />
           <span class="pill">{t.resources.course.pill}</span>
           <h3>{t.resources.course.t}</h3>
           <p>{t.resources.course.d}</p>
@@ -212,6 +253,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
           <span class="res__cta">{t.resources.course.cta} <span class="arrow">→</span></span>
         </a>
         <a class="res res--store" href={shop || href('/store/')} data-reveal="drop" data-delay=".24">
+          <img class="res__img" src={asset('/img/lib-occlusion.webp')} alt="" loading="lazy" width="900" height="567" />
           <span class="pill">{t.resources.store.pill}</span>
           <h3>{t.resources.store.t}</h3>
           <p>{t.resources.store.d}</p>
@@ -228,7 +270,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
 <style>
   /* ---------- HERO ---------- */
   .hero { position: relative; min-height: 100vh; min-height: 100svh; color: #fff; overflow: hidden; isolation: isolate; display: flex; align-items: center; background: #0a1a3a; }
-  .hero__bg { position: absolute; inset: 0; z-index: -3; }
+  .hero__bg { position: absolute; inset: 0; z-index: -3; will-change: transform; }
   .hero__bg video, .hero__poster { width: 100%; height: 100%; object-fit: cover; will-change: transform; }
   .hero__copy, .hero__title .w { will-change: transform, opacity; }
   .hero__poster { position: absolute; inset: 0; }
@@ -236,6 +278,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .hero__bg video { position: relative; opacity: 0; transition: opacity .8s ease; }
   .hero__bg video.is-playing { opacity: 1; }
   .hero__veil { position: absolute; inset: 0; background: linear-gradient(110deg, rgba(10,26,58,.96) 0%, rgba(15,52,110,.85) 45%, rgba(4,107,210,.35) 100%), linear-gradient(0deg, rgba(10,26,58,.9), transparent 40%); }
+  .hero__dim { position: absolute; inset: 0; background: #0a1a3a; opacity: 0; } /* scrubbed instead of a filter: opacity is compositor-only */
   .hero__glow { position: absolute; inset: 0; z-index: -2; pointer-events: none; }
   .hero__glow i { position: absolute; border-radius: 50%; filter: blur(50px); opacity: .55; animation: drift 14s ease-in-out infinite alternate; will-change: transform; }
   .hero__glow i:nth-child(1) { width: 46vw; height: 46vw; left: -12vw; top: -10vw; background: #046bd2; }
@@ -248,6 +291,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .hero__stage { position: relative; display: grid; grid-template-columns: 1fr; gap: 2rem; align-items: center; padding-top: var(--nav-h); min-height: 100vh; }
   .hero__copy { position: relative; z-index: 2; max-width: 640px; }
   .hero__eyebrow { margin-bottom: 1.4rem; }
+  .hero .pill { background: rgba(255,255,255,.1); color: #bcdcff; } /* light variant: the default blue pill vanished on the navy hero */
   .hero__title { font-size: clamp(2.6rem, 6.4vw, 5.4rem); font-weight: 800; color: #fff; line-height: 1.02; letter-spacing: -.03em; }
   .hero__title .line-mask { padding-bottom: .08em; }
   .hero__title .w { display: inline-block; }
@@ -269,10 +313,10 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .portal__head h2 { color: #fff; font-size: clamp(1.7rem, 3.6vw, 2.9rem); font-weight: 800; }
   .portal__head p { max-width: 56ch; }
   .portal__features { list-style: none; padding: 0; margin: 2rem auto 1.6rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; max-width: 980px; }
-  .portal__feature { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 18px; padding: 1.2rem 1.3rem; text-align: left; display: grid; grid-template-columns: 44px 1fr; gap: .2rem .9rem; align-items: center; }
+  .portal__feature { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-radius: 18px; padding: 1.2rem 1.3rem; text-align: left; display: grid; grid-template-columns: 44px 1fr; gap: .2rem .9rem; align-items: center; }
   .portal__feature i { grid-row: span 2; width: 44px; height: 44px; border-radius: 12px; background: var(--grad-blue); display: grid; place-items: center; }
   .portal__feature svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .portal__feature h3 { color: #fff; font-size: 1rem; font-weight: 700; }
+  .portal__feature h3 { color: #fff; font-size: 1rem; font-weight: 700; line-height: 1.25; }
   .portal__feature p { font-size: .85rem; color: #b9c8e2; }
   .portal__cta { justify-content: center; }
   @media (min-width: 1181px) {
@@ -295,7 +339,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
     .hero__laptop { margin-inline: -.5rem; }
     .portal { padding-top: 1rem; }
     .portal__features { grid-template-columns: 1fr; margin: 1.5rem auto 1.2rem; }
-    .portal__feature { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(255,255,255,.09); }
+    .portal__feature { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255,255,255,.09); }
     .hero__scroll, .hero__ghost { display: none; }
   }
 
@@ -312,16 +356,43 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .pillar__hint { font-size: .8rem; letter-spacing: .2em; text-transform: uppercase; color: var(--blue); font-weight: 600; display: inline-flex; gap: .6rem; }
   .pillar__hint .arrow { animation: nudge 1.4s ease-in-out infinite; display: inline-block; }
   @keyframes nudge { 50% { transform: translateX(6px) } }
-  .pillar__media { position: relative; height: min(70vh, 640px); border-radius: 28px; overflow: hidden; box-shadow: 0 40px 80px -40px rgba(15,52,110,.55); background: var(--mist); }
-  .pillar__media > * { width: 100%; height: 100%; object-fit: cover; }
-  .pillar__media::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 60%, rgba(15,52,110,.35)); }
+  .pillar__media { position: relative; height: min(70vh, 640px); border-radius: 28px; overflow: hidden; isolation: isolate; box-shadow: 0 40px 80px -40px rgba(15,52,110,.55); background: var(--mist); }
+  .pillar__media > :is(img, video) { width: 100%; height: 100%; object-fit: cover; }
+  .pillar__media::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(180deg, transparent 60%, rgba(15,52,110,.35)); pointer-events: none; }
+  /* Experts DDT scanner floating over a navy stage, its capture software inset bottom-left */
+  .pillar__media--product { background: radial-gradient(circle at 55% 42%, #1d63bf 0%, #0f346e 45%, #0a1a3a 80%); }
+  .pillar__media--product::after { display: none; }
+  .product-stage { position: absolute; inset: 0; display: grid; place-items: center; }
+  .product-stage__ring { position: absolute; width: 62%; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(143,193,255,.28); box-shadow: 0 0 0 36px rgba(4,107,210,.08), 0 0 0 80px rgba(4,107,210,.05); }
+  .product-stage__scanner { position: absolute; top: 8%; height: 80%; width: auto; left: 0; right: 0; margin-inline: auto; }
+  .product-stage::before { content: ''; position: absolute; left: 30%; right: 30%; bottom: 7%; height: 7%; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(0,0,0,.55), transparent 70%); }
+  .product-stage__screen { position: absolute; left: 5%; bottom: 5%; width: 36%; aspect-ratio: 1; object-fit: cover; border-radius: 14px; border: 1px solid rgba(255,255,255,.22); box-shadow: 0 24px 50px -18px rgba(0,0,0,.7); background: #0a1a3a; }
+
+  /* ---------- SMILES (before / after) ---------- */
+  .smiles__head { display: grid; gap: 1rem; max-width: 760px; margin-bottom: 2.8rem; }
+  .smiles__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .ba { position: relative; margin: 0; border-radius: var(--radius); overflow: hidden; aspect-ratio: 16 / 10; background: #dfe3e8; box-shadow: 0 30px 60px -32px rgba(15,52,110,.55); user-select: none; }
+  .ba__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .ba__before { clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+  .ba__line { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 12px rgba(0,0,0,.35); pointer-events: none; }
+  .ba__line i { position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+  .ba__line i::before, .ba__line i::after { content: ''; position: absolute; top: 50%; width: 0; height: 0; border: 6px solid transparent; margin-top: -6px; }
+  .ba__line i::before { left: 8px; border-right-color: var(--blue); }
+  .ba__line i::after { right: 8px; border-left-color: var(--blue); }
+  .ba__tag { position: absolute; top: 1rem; padding: .35rem .75rem; border-radius: 999px; font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; background: rgba(10,26,58,.72); color: #fff; pointer-events: none; }
+  .ba__tag--before { left: 1rem; }
+  .ba__tag--after { right: 1rem; background: var(--blue); }
+  .ba__range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; touch-action: pan-y; -webkit-appearance: none; appearance: none; }
+  .ba__range:focus-visible + figcaption, .ba:focus-within { outline: 3px solid var(--blue); outline-offset: 3px; }
+  .smiles__note { margin-top: 1.4rem; }
+  @media (max-width: 960px) { .smiles__grid { grid-template-columns: 1fr; } .smiles__head { margin-bottom: 2rem; } }
   .pillar__copy { display: grid; gap: 1.2rem; justify-items: start; }
   .pillar__num { font-size: clamp(3.5rem, 9vw, 7rem); font-weight: 800; line-height: .8; color: transparent; -webkit-text-stroke: 1.5px rgba(4,107,210,.35); letter-spacing: -.04em; }
   .pillars.is-static .pillars__hud { display: none; }
   .pillars.is-static .pillars__track { flex-direction: column; height: auto; width: 100%; }
   .pillars.is-static .pillar { width: 100%; height: auto; grid-template-columns: 1fr; padding: 3.5rem 1.25rem; gap: 1.5rem; }
   .pillars.is-static .pillar--intro { padding-block: 4rem; }
-  .pillars.is-static .pillar__media { height: auto; aspect-ratio: 4 / 3; border-radius: 18px; }
+  .pillars.is-static .pillar__media { height: auto; aspect-ratio: 4 / 3; max-height: min(62vh, 560px); width: 100%; border-radius: 18px; }
   .pillars.is-static .pillar__hint { display: none; }
   .pillars.is-static .pillar__copy { gap: .9rem; }
   .pillars.is-static .pillar__num { font-size: 3rem; }
@@ -404,6 +475,7 @@ const pillarMedia = [{ video: asset('/video/smile-preview.mp4') }, { img: asset(
   .res { position: relative; display: grid; gap: .9rem; align-content: start; padding: 2.2rem; border-radius: var(--radius); min-height: 360px; overflow: hidden; border: 1px solid var(--line); background: var(--mist); transition: transform .45s var(--ease-out), box-shadow .45s var(--ease-out); }
   .res:hover { transform: translateY(-8px); box-shadow: 0 40px 70px -35px rgba(15,52,110,.6); }
   .res h3 { font-size: 1.4rem; }
+  .res__img { height: auto; width: calc(100% + 1.2rem); max-width: none; margin: -.6rem -.6rem .4rem; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 14px; background: #4b3f8f; }
   .res p { font-size: .95rem; }
   .res__cta { margin-top: auto; font-weight: 600; color: var(--blue); display: inline-flex; gap: .4rem; }
   .res:hover .arrow { transform: translateX(4px); }

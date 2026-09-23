@@ -15,7 +15,7 @@ export default {
     skip: 'Ir al contenido',
     home: 'Inicio', about: 'Nosotros', services: 'Servicios', courses: 'Cursos online', store: 'Tienda', libraries: 'Librerías de implantes',
     booking: 'Reservas', book: 'Reservar', cart: 'Carrito', portal: 'Doctor Portal', contact: 'Contacto y reservas',
-    menu: 'Abrir menú', theme: 'Alternar modo oscuro', langSwitch: 'English', langCode: 'EN',
+    menu: 'Abrir menú', theme: 'Alternar modo oscuro', toDark: 'Modo oscuro', toLight: 'Modo claro', langSwitch: 'English', langCode: 'EN',
     whatsapp: 'Chatear por WhatsApp', apex: 'Pregúntale a Apex', apexLabel: 'Chatea con Apex, nuestro concierge digital',
   },
   hero: {
@@ -44,7 +44,7 @@ export default {
       { n: '01', k: 'Servicios de diseño', h: ['Descubre servicios', 'de diseño premium'], p: 'Eleva tus resultados clínicos con nuestras soluciones de diseño digital de principio a fin. Desde la planificación integral de All-on-X hasta guías quirúrgicas de alta precisión, entregamos calidad de diseño sin concesiones en cada caso.', cta: 'Ver servicios de diseño', href: '/services/' },
       { n: '02', k: 'Escáner facial', h: ['La nueva generación', 'del escaneo facial'], p: 'Transforma tu consultorio con la tecnología de escaneo facial 5.0 de Fernando Polanco. Captura escaneos faciales, de mordida y de prótesis en alta resolución en menos de 10 segundos, con máxima comodidad para el paciente y hasta un 80% menos de tiempo de sillón.', cta: 'Descubre la tecnología', href: '/services/#scanning' },
       { n: '03', k: 'Capacitación e implementación', h: ['Domina el flujo digital', 'con capacitación práctica'], p: 'No solo tercerices; comprende. Únete a nuestros cursos prácticos intensivos, diseñados para cerrar la brecha entre la odontología clínica y la tecnología digital. Domina el escaneo intraoral y los flujos de trabajo en Exocad en días, no en meses.', cta: 'Capacitación y cursos', href: '/courses/' },
-      { n: '04', k: 'Soporte y contacto', h: ['Soporte dedicado para', 'tu flujo de trabajo digital'], p: 'Mantente a la vanguardia en una industria en constante evolución. Integramos escaneo facial, planificación asistida por IA y manufactura automatizada para ofrecer los resultados más predecibles y centrados en el paciente que existen hoy.', cta: 'Contactar soporte', href: '/contact/' },
+      { n: '04', k: 'Soporte y contacto', h: ['Soporte dedicado', 'para tu flujo de trabajo digital'], p: 'Mantente a la vanguardia en una industria en constante evolución. Integramos escaneo facial, planificación asistida por IA y manufactura automatizada para ofrecer los resultados más predecibles y centrados en el paciente que existen hoy.', cta: 'Contactar soporte', href: '/contact/' },
     ],
   },
   services: {
@@ -59,6 +59,13 @@ export default {
       { t: 'Componentes', d: 'Componentes premium diseñados para optimizar tus flujos de trabajo digitales, garantizando mejor ajuste y máxima comodidad para el paciente.' },
       { t: 'Soporte', d: 'Soporte técnico experto, confiable y bajo demanda, para que tus equipos digitales y software sigan funcionando sin problemas.' },
     ],
+  },
+  smiles: {
+    eyebrow: 'Diseño digital de sonrisa', title: 'Mira la', titleAccent: 'transformación',
+    lead: 'El escaneo facial y el diseño digital permiten que el paciente vea su nueva sonrisa antes de iniciar el tratamiento. Desliza para comparar.',
+    before: 'Antes', after: 'Después', compare: 'Comparar antes y después',
+    caseA: 'Rehabilitación de arcada completa', caseB: 'Rediseño de sonrisa anterior',
+    note: 'Simulaciones ilustrativas con fines demostrativos, no resultados clínicos.',
   },
   stats: {
     keywords: ['Exocad', 'All-on-X', 'Escaneo facial', 'Escaneo intraoral', 'Impresión 3D', 'Fotogrametría', 'CBCT', 'Zirconia', 'Guías quirúrgicas', 'PMMA', 'Diseño de sonrisa'],
@@ -171,7 +178,7 @@ export default {
       bookingPill: 'Reservas', bookingTitle: 'Consulta', duration: '1 hora', mode: 'Online o presencial en Florida',
       bookingText: 'Elige un horario en nuestro calendario y te confirmamos el mismo día. La zona horaria se detecta automáticamente.',
       bookingCta: 'Ver citas disponibles',
-      calendarNote: 'Calendario de reservas: conecta la agenda de citas de Google Calendar de la empresa (ver README).',
+      calendarNote: 'Muy pronto: reservas online con confirmación inmediata. Mientras tanto, llámanos o escríbenos por WhatsApp.',
       channels: { phone: 'Teléfono', email: 'Correo', portal: 'Doctor Portal', concierge: 'Concierge', conciergeText: 'Apex, nuestro concierge digital, te guía por servicios y flujos de trabajo 24/7.', whatsapp: 'WhatsApp' },
       form: { title: 'Envíanos un mensaje', name: 'Nombre', email: 'Correo electrónico', clinic: 'Clínica o laboratorio', message: '¿Cómo podemos ayudarte?', send: 'Enviar mensaje', sending: 'Enviando…', sent: '¡Gracias! Te responderemos en breve.', error: 'Algo salió mal. Por favor escríbenos directamente por correo.', note: 'Respondemos en un día hábil.' },
     },

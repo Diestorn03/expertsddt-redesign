@@ -30,11 +30,14 @@ window.scrollTo(0, 0);
 
 let lenis;
 let ctx;
+const pageHooks = []; // ScrollTrigger refresh listeners owned by the current page
+const onRefresh = (fn) => { ScrollTrigger.addEventListener('refresh', fn); pageHooks.push(fn); };
 
 /* ---------------- Lenis ---------------- */
 function initLenis() {
   if (reduced || lenis) return;
-  lenis = new Lenis({ duration: 1.15, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
+  // lerp follows the wheel frame by frame; the old 1.15s duration made every flick take ~1s to settle
+  lenis = new Lenis({ lerp: 0.16, wheelMultiplier: 1, smoothWheel: true });
   lenis.on('scroll', ScrollTrigger.update);
   gsap.ticker.add((t) => lenis.raf(t * 1000));
   gsap.ticker.lagSmoothing(0);
@@ -69,7 +72,7 @@ function initTheme() {
   const root = document.documentElement;
   const sync = () => document.querySelectorAll('.theme-toggle').forEach((b) => {
     b.setAttribute('aria-pressed', String(root.dataset.theme === 'dark'));
-    const l = b.querySelector('.theme-toggle__label'); if (l) l.textContent = root.dataset.theme === 'dark' ? 'Light' : 'Dark';
+    const l = b.querySelector('.theme-toggle__label'); if (l) l.textContent = root.dataset.theme === 'dark' ? l.dataset.toLight : l.dataset.toDark;
   });
   document.querySelectorAll('.theme-toggle').forEach((b) => {
     if (b.dataset.bound) return; b.dataset.bound = '1';
@@ -93,10 +96,16 @@ function initNav() {
     const here = a.getAttribute('href') === location.pathname;
     if (here) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-  // created after initHero so the pin spacer is accounted for
-  // desktop: solid once the hero scene is over; stacked layouts: solid after 80px so the logo never sits on images
-  const useHero = from && !isMobile();
-  ScrollTrigger.create({ trigger: useHero ? from : document.body, start: useHero ? 'bottom top+=90' : 80, onEnter: () => nav.classList.add('is-solid'), onLeaveBack: () => nav.classList.remove('is-solid') });
+  // the persisted header would keep the previous page's language link: point it at this page's alternate (from <head>)
+  const langLink = nav.querySelector('.nav__lang');
+  const altHead = langLink && document.querySelector(`link[rel="alternate"][hreflang="${langLink.getAttribute('hreflang')}"]`);
+  if (altHead) langLink.setAttribute('href', new URL(altHead.href).pathname);
+  // created after initHero so the pin spacer is accounted for.
+  // Desktop home: transparent over the pinned hero, solid the moment the hero is released and content starts moving under
+  // the bar. Everywhere else: solid after 80px, before any heading can slide under the transparent links.
+  const pinned = document.querySelector('#hero')?.parentElement?.classList.contains('pin-spacer');
+  const next = pinned && document.querySelector('#hero').parentElement.nextElementSibling;
+  ScrollTrigger.create({ trigger: next || document.body, start: next ? 'top bottom' : 80, onEnter: () => nav.classList.add('is-solid'), onLeaveBack: () => nav.classList.remove('is-solid') });
 
   const burger = document.querySelector('.burger');
   const menu = document.querySelector('.menu');
@@ -105,6 +114,7 @@ function initNav() {
     const toggle = (open) => {
       burger.setAttribute('aria-expanded', String(open));
       menu.classList.toggle('is-open', open);
+      document.querySelector('.nav')?.classList.toggle('is-menu', open);
       lenis ? (open ? lenis.stop() : lenis.start()) : (document.body.style.overflow = open ? 'hidden' : '');
     };
     burger.addEventListener('click', () => toggle(burger.getAttribute('aria-expanded') !== 'true'));
@@ -189,6 +199,14 @@ function initHero() {
   // desktop start pose: laptop peeks in from the bottom-right, scrub brings it to centre
   const laptopFrom = { x: '22vw', y: '12vh', scale: .82 };
   if (desktop) gsap.set(q('.hero__laptop'), laptopFrom);
+  const placeLaptop = () => {
+    const laptop = q('.hero__laptop')[0], portal = q('.portal')[0], cta = q('.portal__cta')[0];
+    if (laptop && !desktop) laptop.style.top = ''; // stacked layout: back to normal flow (matters after a resize across 1180px)
+    if (!desktop || !laptop || !portal || !cta) return;
+    laptop.style.top = `${Math.round(portal.offsetTop + cta.offsetTop + cta.offsetHeight + 18)}px`; // offsets ignore the scrub transforms
+  };
+  placeLaptop();
+  onRefresh(placeLaptop);
 
   // Intro (time-based). Created paused so initial states apply at once; plays when the loader wipes away
   // (first load) or as soon as the laptop image is decoded and fonts are in (client-side navigation, capped at 400ms).
@@ -213,13 +231,14 @@ function initHero() {
   if (!desktop) return; // mobile: hero flows naturally, no pin
 
   // Scrub chapter: hero text exits, laptop rises to centre, portal chapter fades in
-  const tl = gsap.timeline({ scrollTrigger: { trigger: hero, start: 'top top', end: '+=220%', pin: true, scrub: 1.1, anticipatePin: 1 } });
+  const tl = gsap.timeline({ scrollTrigger: { trigger: hero, start: 'top top', end: '+=120%', pin: true, scrub: .5, anticipatePin: 1 } });
   tl
     .to(q('.hero__copy'), { yPercent: -30, opacity: 0, duration: .22, ease: 'power2.in' }, 0)
     .to(q('.hero__ghost .line-mask:first-child'), { xPercent: -25, opacity: 0, duration: .3 }, 0)
     .to(q('.hero__ghost .line-mask:last-child'), { xPercent: 25, opacity: 0, duration: .3 }, 0)
-    // explicit start values: from "filter: none" GSAP would infer brightness(0) and black out the hero on the first tick
-    .fromTo(q('.hero__bg'), { scale: 1, filter: 'brightness(1) blur(0px)' }, { scale: 1.12, filter: 'brightness(.55) blur(4px)', duration: .45, immediateRender: false }, 0)
+    // scale + a dark overlay's opacity: both compositor-only (an animated filter on a full-screen video repaints every frame)
+    .fromTo(q('.hero__bg'), { scale: 1 }, { scale: 1.08, duration: .45, immediateRender: false }, 0)
+    .fromTo(q('.hero__dim'), { opacity: 0 }, { opacity: .45, duration: .45, immediateRender: false }, 0)
     .to(q('.hero__scroll'), { opacity: 0, duration: .1 }, 0)
     .fromTo(q('.hero__laptop'), laptopFrom, { x: 0, y: 0, scale: 1, duration: .45, ease: 'power2.inOut', immediateRender: false }, .05)
     .fromTo(q('.portal__head'), { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: .22, ease: 'power3.out' }, .24)
@@ -241,18 +260,21 @@ function initPillars() {
     return;
   }
   const scroll = () => track.scrollWidth - window.innerWidth;
+  const RATIO = .55; // vertical scroll spent per horizontal px: < 1 so the pinned chapter is short and never feels stuck
   const tween = gsap.to(track, {
     x: () => -scroll(), ease: 'none',
     scrollTrigger: {
-      trigger: wrap, start: 'top top', end: () => `+=${scroll()}`, pin: true, scrub: 1, anticipatePin: 1, invalidateOnRefresh: true,
+      trigger: wrap, start: 'top top', end: () => `+=${scroll() * RATIO}`, pin: true, scrub: .4, anticipatePin: 1, invalidateOnRefresh: true,
       onUpdate: (self) => {
         if (bar) bar.style.transform = `scaleX(${self.progress})`;
-        if (count) count.textContent = String(Math.min(panels.length, Math.round(self.progress * (panels.length - 1)) + 1)).padStart(2, '0');
+        // panels[0] is the intro: it shares "01" with the first pillar, so the HUD reads 01-04 like the pillar numbers
+        if (count) count.textContent = String(Math.min(panels.length - 1, Math.max(1, Math.round(self.progress * (panels.length - 1))))).padStart(2, '0');
       },
     },
   });
   panels.forEach((p) => {
-    const media = p.querySelector('.pillar__media > *');
+    if (p.classList.contains('pillar--intro')) return; // its heading/lead/hint already reveal with data-split / data-reveal on the vertical scroll
+    const media = p.querySelector('.pillar__media > :is(img, video)');
     if (media) gsap.fromTo(media, { xPercent: -12, scale: 1.15 }, { xPercent: 12, scale: 1.15, ease: 'none', scrollTrigger: { trigger: p, containerAnimation: tween, start: 'left right', end: 'right left', scrub: true } });
     gsap.from(p.querySelectorAll('.pillar__copy > *'), { y: 50, opacity: 0, stagger: .08, duration: .8, ease: 'power3.out', scrollTrigger: { trigger: p, containerAnimation: tween, start: 'left 70%', once: true } });
   });
@@ -273,25 +295,58 @@ function initStack() {
   if (!cards.length || reduced) return;
   cards.forEach((card, i) => {
     if (i === cards.length - 1) return;
-    gsap.to(card, { scale: .94 - (cards.length - 2 - i) * .02, opacity: .55, ease: 'none', scrollTrigger: { trigger: cards[i + 1], start: 'top 85%', end: 'top 12%', scrub: true } });
+    // only the contents fade: the card background stays opaque so the card behind it never shows through
+    const st = { trigger: cards[i + 1], start: 'top 85%', end: 'top 12%', scrub: true };
+    gsap.to(card, { scale: .94 - (cards.length - 2 - i) * .02, ease: 'none', scrollTrigger: st });
+    gsap.to(card.children, { opacity: .35, ease: 'none', scrollTrigger: { ...st } });
   });
 }
 
 /* ---------------- Marquee (scroll-speed reactive) ---------------- */
+// one ticker for the whole session (booted on every page view, so it must not stack), width cached, idle when off-screen
+let marqueeTick;
 function initMarquee() {
-  gsap.utils.toArray('.marquee').forEach((m) => {
+  if (marqueeTick) gsap.ticker.remove(marqueeTick);
+  marqueeTick = null;
+  const items = gsap.utils.toArray('.marquee').map((m) => {
     const track = m.querySelector('.marquee__track');
-    if (!track) return;
-    track.innerHTML += track.innerHTML;
-    const half = () => track.scrollWidth / 2;
-    let x = 0, vel = 0, last = window.scrollY;
-    gsap.ticker.add(() => {
-      const dy = window.scrollY - last; last = window.scrollY;
-      vel = Math.min(18, Math.abs(dy) * .35 + vel * .9);
-      x -= (reduced ? 0 : .9) + vel;
-      if (-x >= half()) x += half();
-      track.style.transform = `translate3d(${x}px,0,0)`;
+    if (!track) return null;
+    if (!track.dataset.cloned) { track.innerHTML += track.innerHTML; track.dataset.cloned = '1'; }
+    const it = { track, x: 0, half: track.scrollWidth / 2, visible: false };
+    new IntersectionObserver(([e]) => { it.visible = e.isIntersecting; }).observe(m);
+    return it;
+  }).filter(Boolean);
+  if (!items.length) return;
+  onRefresh(() => items.forEach((it) => { it.half = it.track.scrollWidth / 2; }));
+  let vel = 0, last = window.scrollY;
+  marqueeTick = () => {
+    const dy = window.scrollY - last; last = window.scrollY;
+    vel = Math.min(18, Math.abs(dy) * .35 + vel * .9);
+    items.forEach((it) => {
+      if (!it.visible) return;
+      it.x -= (reduced ? 0 : .9) + vel;
+      if (-it.x >= it.half) it.x += it.half;
+      it.track.style.transform = `translate3d(${it.x}px,0,0)`;
     });
+  };
+  gsap.ticker.add(marqueeTick);
+}
+
+/* ---------------- Before / after comparison ---------------- */
+function initCompare() {
+  gsap.utils.toArray('.ba').forEach((fig) => {
+    const range = fig.querySelector('.ba__range');
+    if (!range) return;
+    const set = (v) => fig.style.setProperty('--pos', `${v}%`);
+    range.addEventListener('input', () => set(range.value));
+    if (reduced) return;
+    // one-time hint that the image is draggable; any interaction cancels it
+    const o = { v: 50 };
+    const tl = gsap.timeline({ scrollTrigger: { trigger: fig, start: 'top 70%', once: true } })
+      .to(o, { v: 26, duration: .8, ease: 'power2.inOut', onUpdate: () => set(o.v) })
+      .to(o, { v: 72, duration: 1, ease: 'power2.inOut', onUpdate: () => set(o.v) })
+      .to(o, { v: 50, duration: .7, ease: 'power2.out', onUpdate: () => set(o.v) });
+    ['pointerdown', 'keydown', 'focus'].forEach((ev) => range.addEventListener(ev, () => tl.kill(), { once: true }));
   });
 }
 
@@ -347,13 +402,14 @@ function initVideos() {
     io.observe(v); observed.push(v);
   });
   // after ScrollTrigger moves things around (pin spacers, refresh), re-observe to get a fresh intersection report
-  ScrollTrigger.addEventListener('refresh', () => observed.forEach((v) => { io.unobserve(v); io.observe(v); }));
-  // browsers pause muted videos in hidden/occluded tabs and do not always resume them: resume the hero video ourselves
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) return;
-    vids.forEach((v) => { if (v.closest('#hero') && v.paused && v.isConnected) v.play().catch(() => {}); });
-  });
+  onRefresh(() => observed.forEach((v) => { io.unobserve(v); io.observe(v); }));
 }
+// browsers pause muted videos in hidden/occluded tabs and do not always resume them: resume the hero video (registered once)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const v = document.querySelector('#hero video');
+  if (v && v.paused && getComputedStyle(v).display !== 'none') v.play().catch(() => {});
+});
 
 /* ---------------- Cursor glow (desktop only) ---------------- */
 function initGlow() {
@@ -370,6 +426,7 @@ function initGlow() {
 /* ---------------- Boot / teardown (View Transitions aware) ---------------- */
 function boot() {
   ctx?.revert();
+  pageHooks.splice(0).forEach((fn) => ScrollTrigger.removeEventListener('refresh', fn));
   ScrollTrigger.getAll().forEach((t) => t.kill());
   ctx = gsap.context(() => {
     initTheme();
@@ -385,6 +442,7 @@ function boot() {
     initStack();
     initMarquee();
     initCounters();
+    initCompare();
     initPointerFx();
     initGlow();
   });
@@ -395,6 +453,8 @@ function boot() {
 
 initLenis();
 document.addEventListener('astro:page-load', boot);
+let bpTimer;
+window.matchMedia('(max-width: 1180px)').addEventListener('change', () => { clearTimeout(bpTimer); bpTimer = setTimeout(() => { window.scrollTo(0, 0); lenis?.scrollTo(0, { immediate: true }); boot(); }, 150); });
 document.addEventListener('astro:before-swap', () => { ctx?.revert(); ScrollTrigger.getAll().forEach((t) => t.kill()); });
 document.addEventListener('astro:after-swap', () => {
   document.getElementById('loader')?.remove(); // client-side navigation: no loader

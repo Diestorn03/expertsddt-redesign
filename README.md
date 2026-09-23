@@ -87,14 +87,32 @@ src/
   pages/                    index, services, courses, store, exocad-libraries, contact (+ es/)
   scripts/motion.js         motor de animación por data-attributes
   styles/global.css         tokens (claro/oscuro), botones, nav, footer, reduced-motion
-public/img, public/video    assets descargados de expertsddt.com
+public/img, public/video    assets de expertsddt.com y del paquete del cliente (ver abajo)
+public/img/brand            logo oficial (original y versión clara para fondos oscuros) y símbolo
 ```
+
+## Assets del cliente
+
+Procesados desde el paquete `assets.rar` del cliente (el original pesa 850 MB y no se versiona).
+
+| Uso | Archivo | Origen |
+|---|---|---|
+| Logo en cabecera, pie, loader, favicon e imagen para compartir | `img/brand/*`, `favicon-32.png`, `apple-touch-icon.png`, `og.jpg` | LOGO EXPERTS DDT.png (la versión clara se genera a partir del original) |
+| Pilar 02 "Facial scanner" | `img/scanner-front.webp`, `video/scan-ui.mp4` | Foto del escáner Experts DDT (fondo limpiado) y grabación de su software |
+| Pilar 01 y servicios 01 | `video/exocad-smile.mp4` | Grabación de diseño de sonrisa en Exocad |
+| Cursos, tienda y recursos | `video/exocad-denture.mp4`, `img/lib-*.webp` | Grabación de prótesis y renders de las librerías en oclusión |
+| Servicios 04 | `video/clinic-scan.mp4` | Escaneo intraoral en clínica |
+| Pilar 04 y servicios 05 | `img/team.webp` | Foto del equipo |
+| Comparador antes/después | `img/smile-*.webp` | Simulaciones generadas; se muestran con aviso de "simulación ilustrativa" |
+
+Vídeos: bucles de 10 a 14 s, 720 px, H.264 sin audio (0,4 a 1 MB). Imágenes: WebP con pérdida.
 
 ## Accesibilidad y rendimiento
 
 - `prefers-reduced-motion`: desactiva scroll suave y animaciones.
 - Móvil: sin vídeo de fondo ni escenas fijadas, reveals suaves, botones a ancho completo, áreas táctiles ≥ 44 px.
-- Solo se animan `transform`, `opacity`, `filter` y `clip-path`.
+- Durante el scroll solo se animan `transform`, `opacity` y `clip-path`; el oscurecido del hero es una capa de opacidad, no un filtro.
+- Scroll suave con Lenis en modo `lerp` (sigue la rueda fotograma a fotograma). Escenas fijadas cortas: el recorrido horizontal de los pilares avanza unos 1,8 px por px de rueda.
 - Elementos decorativos con `aria-hidden`, foco visible, skip link, formulario con honeypot.
 
 ## Decisiones acordadas y pendientes
@@ -103,5 +121,5 @@ public/img, public/video    assets descargados de expertsddt.com
 - Tienda, cursos y plantillas se venderán en **Shopify** (pendiente `PUBLIC_SHOP_URL`).
 - Membresías eliminadas. Portal solo con enlaces a login/signup.
 - Reseñas marcadas como **muestra** hasta tener testimonios verificados.
-- Logo definitivo en vectorial pendiente de subir (hoy se usa un SVG recreado).
+- Logo: se usa el PNG oficial del cliente (2250 px). Si aparece el vectorial (SVG o AI), basta con sustituir `public/img/brand/*`.
 - Productos físicos: sin datos públicos, se cubren desde Shopify.

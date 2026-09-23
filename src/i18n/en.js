@@ -16,7 +16,7 @@ export default {
     skip: 'Skip to content',
     home: 'Home', about: 'About us', services: 'Services', courses: 'Online courses', store: 'Store', libraries: 'Implant libraries',
     booking: 'Booking', book: 'Book', cart: 'Cart', portal: 'Doctor portal', contact: 'Contact & booking',
-    menu: 'Open menu', theme: 'Toggle dark mode', langSwitch: 'Español', langCode: 'ES',
+    menu: 'Open menu', theme: 'Toggle dark mode', toDark: 'Dark mode', toLight: 'Light mode', langSwitch: 'Español', langCode: 'ES',
     whatsapp: 'Chat on WhatsApp', apex: 'Ask Apex', apexLabel: 'Chat with Apex, our digital concierge',
   },
   hero: {
@@ -60,6 +60,13 @@ export default {
       { t: 'Components', d: 'Premium components engineered to optimize your digital workflows, ensuring better fit and maximum patient comfort.' },
       { t: 'Support', d: 'Reliable, on-demand technical expert support to ensure your digital equipment and software keep running smoothly.' },
     ],
+  },
+  smiles: {
+    eyebrow: 'Digital smile design', title: 'See the', titleAccent: 'transformation',
+    lead: 'Facial scanning and digital design let patients preview their new smile before treatment begins. Drag the handle to compare.',
+    before: 'Before', after: 'After', compare: 'Compare before and after',
+    caseA: 'Full-arch rehabilitation', caseB: 'Anterior smile makeover',
+    note: 'Illustrative simulations for demonstration purposes, not clinical results.',
   },
   stats: {
     keywords: ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning', '3D printing', 'Photogrammetry', 'CBCT', 'Zirconia', 'Surgical guides', 'PMMA', 'Smile design'],
@@ -172,7 +179,7 @@ export default {
       bookingPill: 'Booking', bookingTitle: 'Consultation', duration: '1 hour', mode: 'Online or on-site in Florida',
       bookingText: 'Choose a slot in our calendar and we’ll confirm within the day. Time zones are detected automatically.',
       bookingCta: 'See available appointments',
-      calendarNote: 'Booking calendar: connect the company’s Google Calendar appointment schedule (see README).',
+      calendarNote: 'Online booking with instant confirmation is coming soon. Meanwhile, call us or message us on WhatsApp.',
       channels: { phone: 'Phone', email: 'Email', portal: 'Doctor portal', concierge: 'Concierge', conciergeText: 'Apex, our digital concierge, guides you through services and workflows 24/7.', whatsapp: 'WhatsApp' },
       form: { title: 'Send a message', name: 'Name', email: 'Email', clinic: 'Clinic or lab', message: 'How can we help?', send: 'Send message', sending: 'Sending…', sent: 'Thank you! We’ll get back to you shortly.', error: 'Something went wrong. Please email us directly.', note: 'We reply within one business day.' },
     },

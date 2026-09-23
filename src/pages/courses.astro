@@ -28,7 +28,7 @@ const shop = import.meta.env.PUBLIC_SHOP_URL || 'https://expertsddt.com/courses/
       </div>
       <article class="course card" data-reveal="drop" data-tilt>
         <div class="course__media">
-          <video autoplay muted loop playsinline preload="metadata" src={asset('/video/smile-preview.mp4')}></video>
+          <video autoplay muted loop playsinline preload="metadata" poster={asset('/video/exocad-denture.webp')} src={asset('/video/exocad-denture.mp4')}></video>
           <span class="pill">{c.sale}</span>
         </div>
         <div class="course__body stack">
@@ -51,6 +51,7 @@ const shop = import.meta.env.PUBLIC_SHOP_URL || 'https://expertsddt.com/courses/
 <style>
   .courses-hero__inner { text-align: center; justify-items: center; }
   .courses-hero__inner .cta-row { justify-content: center; }
+  .courses-hero__inner > .eyebrow { justify-self: center; }
   .courses-hero__ring { position: absolute; right: -10vw; top: -10vw; width: 40vw; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(255,255,255,.12); box-shadow: inset 0 0 0 40px rgba(4,107,210,.15); z-index: -1; }
   .course { display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.5rem; padding: 1.2rem; overflow: hidden; }
   .course__media { position: relative; border-radius: 16px; overflow: hidden; min-height: 320px; }
@@ -59,5 +60,5 @@ const shop = import.meta.env.PUBLIC_SHOP_URL || 'https://expertsddt.com/courses/
   .course__body { padding: 1.5rem 1.5rem 1.5rem 0; align-content: center; }
   .course__meta { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-start; }
   .course__meta li { font-size: .8rem; font-weight: 600; padding: .4rem .8rem; border-radius: 999px; background: var(--mist); color: var(--ink); }
-  @media (max-width: 960px) { .course { grid-template-columns: 1fr; padding: .8rem; } .course__body { padding: .8rem; } .course__media { min-height: 220px; aspect-ratio: 16 / 10; } }
+  @media (max-width: 960px) { .course { grid-template-columns: minmax(0, 1fr); padding: .8rem; } .course__body { padding: .8rem; } .course__media { min-height: 0; aspect-ratio: 16 / 10; } }
 </style>

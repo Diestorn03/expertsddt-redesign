@@ -4,7 +4,14 @@ import Cta from '../components/Cta.astro';
 import { useI18n } from '../i18n/index.js';
 const { t, href, asset } = useI18n(Astro);
 const s = t.pages.services;
-const media = [{ video: asset('/video/smile-design.mp4') }, { panel: true }, { img: asset('/img/design-services.webp') }, { img: asset('/img/training-main.webp') }, { img: asset('/img/training.webp') }];
+// client assets: Exocad smile design, facial-scanner software, clinic intraoral scanning, real team photo
+const media = [
+  { video: asset('/video/exocad-smile.mp4'), poster: asset('/video/exocad-smile.webp') },
+  { panel: true },
+  { video: asset('/video/scan-ui.mp4'), poster: asset('/video/scan-ui.webp') },
+  { video: asset('/video/clinic-scan.mp4'), poster: asset('/video/clinic-scan.webp') },
+  { img: asset('/img/team.webp') },
+];
 ---
 <Base title={t.meta.services}>
   <section class="page-hero" data-nav-solid-from data-scene>
@@ -23,7 +30,7 @@ const media = [{ video: asset('/video/smile-design.mp4') }, { panel: true }, { i
     <section id={r.id} class={`section row ${i % 2 ? 'row--flip section--mist' : ''}`} data-scene>
       <div class="wrap grid-2">
         <div class="row__media" data-reveal={i % 2 ? 'right' : 'left'}>
-          {media[i].video && <video class="img-frame" autoplay muted loop playsinline preload="metadata" src={media[i].video}></video>}
+          {media[i].video && <video class="img-frame" autoplay muted loop playsinline preload="metadata" poster={media[i].poster} src={media[i].video}></video>}
           {media[i].img && <div class="img-frame"><img src={media[i].img} alt="" loading="lazy" /></div>}
           {media[i].panel && (
             <div class="row__panel img-frame" aria-hidden="true">
