@@ -74,6 +74,11 @@ jobs:
           PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
           PUBLIC_N8N_FORM_WEBHOOK: ${{ vars.PUBLIC_N8N_FORM_WEBHOOK }}
           PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
+      - name: Shopify store is public and every linked product exists
+        if: inputs.target == 'production'
+        run: npm run check:shop
+        env:
+          PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: site-${{ inputs.target }}

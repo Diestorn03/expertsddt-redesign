@@ -3,7 +3,7 @@ import Base from '../layouts/Base.astro';
 import Cta from '../components/Cta.astro';
 import { useI18n } from '../i18n/index.js';
 const { t, href, asset } = useI18n(Astro);
-const shop = import.meta.env.PUBLIC_SHOP_URL;
+import { shopProduct, handles } from '../shop.js';
 // Testimonials stay hidden until Fernando provides verified ones (fake reviews are illegal in the US). Set PUBLIC_SHOW_REVIEWS=1 to show them.
 const showReviews = import.meta.env.PUBLIC_SHOW_REVIEWS === '1';
 
@@ -247,7 +247,7 @@ const pillarMedia = [
           <p>{t.resources.free.d}</p>
           <span class="res__cta">{t.resources.free.cta} <span class="arrow">→</span></span>
         </a>
-        <a class="res res--course" href={shop || href('/courses/')} data-reveal="drop" data-delay=".12">
+        <a class="res res--course" href={shopProduct(handles.course) || href('/courses/')} data-reveal="drop" data-delay=".12">
           <img class="res__img" src={asset('/img/lib-gingiva.webp')} alt="" loading="lazy" width="900" height="532" />
           <span class="pill">{t.resources.course.pill}</span>
           <h3>{t.resources.course.t}</h3>
@@ -255,7 +255,7 @@ const pillarMedia = [
           <span class="price"><s>{t.resources.course.was}</s>{t.resources.course.now}</span>
           <span class="res__cta">{t.resources.course.cta} <span class="arrow">→</span></span>
         </a>
-        <a class="res res--store" href={shop || href('/store/')} data-reveal="drop" data-delay=".24">
+        <a class="res res--store" href={shopProduct(handles.occlusion) || href('/store/')} data-reveal="drop" data-delay=".24">
           <img class="res__img" src={asset('/img/lib-occlusion.webp')} alt="" loading="lazy" width="900" height="567" />
           <span class="pill">{t.resources.store.pill}</span>
           <h3>{t.resources.store.t}</h3>

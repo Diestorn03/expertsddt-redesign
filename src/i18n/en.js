@@ -162,8 +162,8 @@ export default {
       shopifyNote: 'Purchases are completed in our secure Shopify store.',
       cats: [
         { t: 'Courses', n: '1 product', d: 'On-demand Exocad video training.' },
-        { t: 'Physical products', n: '4 products', d: 'Hardware and components for your digital workflow.' },
-        { t: 'Templates', n: '3 products', d: 'Libraries and guidelines by Fernando Polanco.' },
+        { t: 'Physical products', n: '5 products', d: 'Hardware and components for your digital workflow.' },
+        { t: 'Templates', n: '2 products', d: 'Libraries and guidelines by Fernando Polanco.' },
       ],
       products: [
         { cat: 'Templates', t: 'Teeth in occlusion with virtual gingiva libraries by Fernando Polanco', d: 'Pre-occluded, anatomically positioned teeth with ready-to-go virtual gingiva. Compatible with Exocad and 3Shape. Save up to 70% in design time on full dentures, overdentures and All-on-X.', was: '$699.99', now: '$399.99' },

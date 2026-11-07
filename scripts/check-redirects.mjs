@@ -19,10 +19,19 @@ function resolve(path) { // path without the leading slash, like Apache in a per
 }
 
 const portal = 'https://portal.expertsddt.com';
+const shop = 'https://shop.expertsddt.com';
 const cases = {
   'libraries/': '301 /exocad-libraries/',
-  'carrito/': '301 /store/', 'finalizar-compra/': '301 /store/', 'shop/': '301 /store/', 'categoria-producto/cursos/': '301 /store/',
-  'producto/templates-package/': '301 /store/', 'pricing-2/': '301 /courses/',
+  'carrito/': `301 ${shop}/cart`, 'finalizar-compra/': `301 ${shop}/cart`, 'shop/': `301 ${shop}/`,
+  'categoria-producto/cursos/': `301 ${shop}/collections/courses`, 'categoria-producto/plantillas/': `301 ${shop}/collections/templates`, 'categoria-producto/productos-fisicos/': `301 ${shop}/collections/all`,
+  'producto/templates-package/': `301 ${shop}/products/teeth-in-occlusion-virtual-gingiva-libraries`,
+  'producto/vision-x-extraoral-photogrammetry-system/': `301 ${shop}/products/vision-x-extraoral-photogrammetry`,
+  'producto/5-0-facial-scanning-technology-by-fernando-polanco/': `301 ${shop}/products/facial-scanning-5-0-fernando-polanco`,
+  'producto/titanium-fp1-healing-abutment-for-surgery-patent-pending/': `301 ${shop}/products/fp1-healing-abutment`,
+  'producto/titanium-fp3-healing-abutment-for-surgery-patent-pending/': `301 ${shop}/products/fp3-healing-abutment`,
+  'producto/3d-aesthetic-guidelines-smile-creator-8mm-dr-fernando-polanco/': `301 ${shop}/products/3d-aesthetic-guidelines-smile-creator-8mm`,
+  'producto/masterclass-master-the-virtual-teeth-in-occlusion-libraries/': `301 ${shop}/products/exocad-training-teeth-virtual-gingiva-libraries`,
+  'producto/some-future-product/': `301 ${shop}/collections/all`, 'pricing-2/': '301 /courses/',
   'register/': `301 ${portal}/signup`, 'login/': `301 ${portal}/login`, 'mi-cuenta/': `301 ${portal}/login`, 'account/': `301 ${portal}/login`,
   'pagina-ejemplo/': '301 /', 'category/sin-categoria/': '301 /',
   '2025/11/27/design/': '301 /services/#design', '2025/11/18/hola-mundo/': '301 /services/#manufacturing',

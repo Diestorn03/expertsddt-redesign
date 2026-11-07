@@ -161,8 +161,8 @@ export default {
       shopifyNote: 'Las compras se completan en nuestra tienda segura de Shopify.',
       cats: [
         { t: 'Cursos', n: '1 producto', d: 'Capacitación en video bajo demanda sobre Exocad.' },
-        { t: 'Productos físicos', n: '4 productos', d: 'Hardware y componentes para tu flujo de trabajo digital.' },
-        { t: 'Plantillas', n: '3 productos', d: 'Librerías y guías de diseño de Fernando Polanco.' },
+        { t: 'Productos físicos', n: '5 productos', d: 'Hardware y componentes para tu flujo de trabajo digital.' },
+        { t: 'Plantillas', n: '2 productos', d: 'Librerías y guías de diseño de Fernando Polanco.' },
       ],
       products: [
         { cat: 'Plantillas', t: 'Teeth in occlusion with virtual gingiva libraries by Fernando Polanco', d: 'Dientes pre-ocluidos y posicionados anatómicamente con encía virtual lista para usar. Compatible con Exocad y 3Shape. Ahorra hasta un 70% del tiempo de diseño en prótesis totales, sobredentaduras y All-on-X.', was: '$699.99', now: '$399.99' },

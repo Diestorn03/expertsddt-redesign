@@ -22,10 +22,21 @@ RewriteRule ^wp-content/uploads/.*exocad-implant-libraries.*\.zip$ /exocad-libra
 
 # ---- Old WordPress / WooCommerce URLs -> new site ---------------------------
 RewriteRule ^libraries/?$ /exocad-libraries/ [L,R=301]
-RewriteRule ^(shop|carrito|finalizar-compra|categoria-producto(/.*)?)/?$ /store/ [L,R=301]
-# TODO(shopify): when the Shopify store is live, point each product to its handle, e.g.
-#   RewriteRule ^producto/templates-package/?$ https://<shop-domain>/products/<handle> [L,R=301]
-RewriteRule ^producto(/.*)?$ /store/ [L,R=301]
+# Shop = Shopify (shop.expertsddt.com). Old WooCommerce URLs go to the same product/collection there.
+# Handles mirror the store catalogue; scripts/check-shop.mjs checks each one before every production deploy.
+RewriteRule ^producto/vision-x-extraoral-photogrammetry-system/?$ https://shop.expertsddt.com/products/vision-x-extraoral-photogrammetry [L,R=301]
+RewriteRule ^producto/5-0-facial-scanning-technology-by-fernando-polanco/?$ https://shop.expertsddt.com/products/facial-scanning-5-0-fernando-polanco [L,R=301]
+RewriteRule ^producto/titanium-fp1-healing-abutment-for-surgery-patent-pending/?$ https://shop.expertsddt.com/products/fp1-healing-abutment [L,R=301]
+RewriteRule ^producto/titanium-fp3-healing-abutment-for-surgery-patent-pending/?$ https://shop.expertsddt.com/products/fp3-healing-abutment [L,R=301]
+RewriteRule ^producto/templates-package/?$ https://shop.expertsddt.com/products/teeth-in-occlusion-virtual-gingiva-libraries [L,R=301]
+RewriteRule ^producto/3d-aesthetic-guidelines-smile-creator-8mm-dr-fernando-polanco/?$ https://shop.expertsddt.com/products/3d-aesthetic-guidelines-smile-creator-8mm [L,R=301]
+RewriteRule ^producto/masterclass-master-the-virtual-teeth-in-occlusion-libraries/?$ https://shop.expertsddt.com/products/exocad-training-teeth-virtual-gingiva-libraries [L,R=301]
+RewriteRule ^producto(/.*)?$ https://shop.expertsddt.com/collections/all [L,R=301]
+RewriteRule ^categoria-producto/cursos/?$ https://shop.expertsddt.com/collections/courses [L,R=301]
+RewriteRule ^categoria-producto/plantillas/?$ https://shop.expertsddt.com/collections/templates [L,R=301]
+RewriteRule ^categoria-producto(/.*)?$ https://shop.expertsddt.com/collections/all [L,R=301]
+RewriteRule ^(carrito|finalizar-compra)/?$ https://shop.expertsddt.com/cart [L,R=301]
+RewriteRule ^shop/?$ https://shop.expertsddt.com/ [L,R=301]
 RewriteRule ^pricing-2/?$ /courses/ [L,R=301]
 RewriteRule ^register/?$ https://portal.expertsddt.com/signup [L,R=301]
 RewriteRule ^(login|mi-cuenta|account|password-reset)/?$ https://portal.expertsddt.com/login [L,R=301]

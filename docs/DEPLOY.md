@@ -24,6 +24,7 @@ El webhook de n8n recibe JSON con `source`: `contact` (formulario de contacto) o
 
 - [ ] Respaldo completo de Hostinger (archivos + base de datos) y copia del `.htaccess` actual como `.htaccess.wp-backup`.
 - [ ] Exportar de WordPress: pedidos y clientes de WooCommerce, citas de Simply Schedule Appointments y envíos del formulario de librerías (Contact Form 7). Quien ya compró el curso pierde su acceso al cerrar WordPress: migrarlo a Shopify antes.
+- [ ] **Tienda:** `PUBLIC_SHOP_URL=https://shop.expertsddt.com` (confirmado: Shopify, tienda `xg6mcx-9e.myshopify.com`). Hoy está cerrada con contraseña: hay que abrirla antes del corte. `npm run check:shop` (y el workflow de producción) falla mientras siga cerrada o falte algún producto redirigido. Las políticas de Shopify (privacidad, términos, reembolso) deben tener el mismo texto que las páginas legales del sitio.
 - [ ] Subir a `/downloads/libraries/` el zip v10 y su `latest.json`.
 - [ ] Probar en `staging`: formulario de contacto, descarga de librerías, reserva en Google Calendar, enlaces a Shopify, ES/EN, claro/oscuro, móvil.
 - [ ] Producción en modo **dry run**: revisar la lista de archivos que subiría.

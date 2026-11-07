@@ -10,7 +10,8 @@
     "test:redirects": "node scripts/check-redirects.mjs",
     "test:dist": "node scripts/check-dist.mjs",
     "test": "npm run test:i18n && npm run test:redirects && npm run test:dist",
-    "test:i18n": "node scripts/check-i18n.mjs"
+    "test:i18n": "node scripts/check-i18n.mjs",
+    "check:shop": "node scripts/check-shop.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
