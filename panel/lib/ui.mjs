@@ -26,11 +26,14 @@ export const layout = ({ title, body, user, csrf }) => `<!doctype html><html lan
 ${user ? `<header><b>Experts DDT · Panel de contenido</b><span><a href="/">Contenido</a><a href="/history">Historial</a>${esc(user)} <form method="post" action="/logout" style="display:inline"><input type="hidden" name="_csrf" value="${esc(csrf)}"><button class="ghost" type="submit">Salir</button></form></span></header>` : ''}
 <main>${body}</main></body></html>`;
 
-export const loginPage = (flash) => layout({ title: 'Ingresar', body: `<form class="login stack" method="post" action="/login" autocomplete="on">
-<h1>Panel de contenido</h1>${flash ? `<p class="flash err">${esc(flash)}</p>` : ''}
-<label>Correo<input type="email" name="email" required autocomplete="username"></label>
+// flash: { type: 'ok'|'err'|'warn'|'info', title, text } from lib/panel.mjs
+const flashBox = (f) => (f ? `<p class="flash ${f.type === 'ok' || f.type === 'info' ? 'ok' : 'err'}" data-flash="${esc(f.type)}">${esc(`${f.title} ${f.text}`.trim())}</p>` : '');
+
+export const loginPage = (flash, email = '') => layout({ title: 'Ingresar', body: `<form class="login stack" method="post" action="/login" autocomplete="on">
+<h1>Panel de contenido</h1>${flashBox(flash)}
+<label>Correo<input type="email" name="email" value="${esc(email)}" required autocomplete="username"></label>
 <label>Contraseña<input type="password" name="password" required autocomplete="current-password"></label>
-<label>Código de 6 dígitos (app de autenticación)<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code"></label>
+<label>Código de 6 dígitos (app de autenticación)<input type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" required autocomplete="one-time-code"></label>
 <button type="submit">Entrar</button></form>` });
 
 const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`);
@@ -47,7 +50,7 @@ export function dashboard({ user, csrf, flash, siteUrl, items, libs }) {
   };
   const cur = libs.latest;
   const versions = libs.versions.map((v) => `<tr><td>${esc(v.version)}${cur?.file === v.file ? ' <span class="tag">activa</span>' : ''}</td><td>${esc(v.dataDate)}</td><td>${kb(v.bytes)}</td><td>${v.files}</td><td>${cur?.file === v.file ? '' : `<form method="post" action="/libraries/activate"><input type="hidden" name="_csrf" value="${esc(csrf)}"><input type="hidden" name="file" value="${esc(v.file)}"><button class="sec" type="submit">Activar</button></form>`}</td></tr>`).join('');
-  return layout({ title: 'Contenido', user, csrf, body: `<h1>Contenido del sitio</h1>${flash ? `<p class="flash ${flash.type === 'ok' ? 'ok' : 'err'}">${esc(flash.text)}</p>` : ''}
+  return layout({ title: 'Contenido', user, csrf, body: `<h1>Contenido del sitio</h1>${flashBox(flash)}
 <p class="muted">Los cambios se ven en la web en cuanto termina la subida (el navegador puede tardar hasta un día en olvidar la imagen anterior). Cada reemplazo guarda una copia de seguridad.</p>
 <h2>Librerías Exocad gratuitas</h2>
 <div class="card">${cur ? `<b>Versión activa: ${esc(cur.version)}</b><span class="muted">Datos del ${esc(cur.dataDate)} · ${kb(cur.bytes)} · ${cur.files ?? '?'} archivos · sha256 ${esc(String(cur.sha256 || '').slice(0, 12))}…</span>` : '<b>Todavía no hay una versión publicada</b>'}
