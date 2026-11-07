@@ -3,26 +3,34 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Web leads (expertsddt.com)\nUN solo webhook recibe los dos formularios de la web. El campo `source` decide la rama:\n- `contact` -> correo a Polanco@expertsddt.com\n- `exocad-libraries` -> fila en Google Sheets (name, email, version, lang, page)\n\nPASOS: 1) conectar credenciales de Gmail/SMTP y Google Sheets. 2) elegir el documento y la hoja. 3) activar el workflow. 4) copiar la **Production URL** del webhook a la variable de GitHub `PUBLIC_N8N_FORM_WEBHOOK`.\nCORS: el webhook solo acepta el origen `https://expertsddt.com` (Options > Allowed Origins). Plantilla sin probar: importar y comprobar con un POST de prueba.",
+        "content": "## Web leads (expertsddt.com)\nUN solo webhook recibe los dos formularios de la web. El campo `source` decide la rama:\n- `contact` -> correo a Polanco@expertsddt.com\n- `exocad-libraries` -> fila en Google Sheets, pestaña Libraries (name, email, version, lang, page)\n- `ddt-xchange` -> fila en Google Sheets, pestaña DDT Xchange (email, lang, page)\n\nPASOS: 1) conectar credenciales de Gmail/SMTP y Google Sheets. 2) elegir el documento y la hoja. 3) activar el workflow. 4) copiar la **Production URL** del webhook a la variable de GitHub `PUBLIC_N8N_FORM_WEBHOOK`.\nCORS: el webhook solo acepta el origen `https://expertsddt.com` (Options > Allowed Origins). Plantilla sin probar: importar y comprobar con un POST de prueba.",
         "height": 330,
         "width": 520
       },
       "name": "Nota",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-120, -120]
+      "position": [
+        -120,
+        -120
+      ]
     },
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "expertsddt-web",
         "responseMode": "responseNode",
-        "options": { "allowedOrigins": "https://expertsddt.com" }
+        "options": {
+          "allowedOrigins": "https://expertsddt.com"
+        }
       },
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 260],
+      "position": [
+        0,
+        260
+      ],
       "webhookId": "expertsddt-web"
     },
     {
@@ -31,9 +39,20 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
                 "conditions": [
-                  { "leftValue": "={{ $json.body.source }}", "rightValue": "contact", "operator": { "type": "string", "operation": "equals" } }
+                  {
+                    "leftValue": "={{ $json.body.source }}",
+                    "rightValue": "contact",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
                 ],
                 "combinator": "and"
               },
@@ -42,14 +61,47 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
                 "conditions": [
-                  { "leftValue": "={{ $json.body.source }}", "rightValue": "exocad-libraries", "operator": { "type": "string", "operation": "equals" } }
+                  {
+                    "leftValue": "={{ $json.body.source }}",
+                    "rightValue": "exocad-libraries",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
                 ],
                 "combinator": "and"
               },
               "renameOutput": true,
               "outputKey": "libraries"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.source }}",
+                    "rightValue": "ddt-xchange",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ddt-xchange"
             }
           ]
         },
@@ -58,7 +110,10 @@
       "name": "Por source",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [240, 260]
+      "position": [
+        240,
+        260
+      ]
     },
     {
       "parameters": {
@@ -67,18 +122,31 @@
         "subject": "={{ 'Website inquiry from ' + $json.body.name }}",
         "emailFormat": "text",
         "text": "={{ 'Name: ' + $json.body.name + '\\nEmail: ' + $json.body.email + '\\nClinic: ' + ($json.body.clinic || '-') + '\\nLanguage: ' + $json.body.lang + '\\nPage: ' + $json.body.page + '\\n\\n' + $json.body.message }}",
-        "options": { "replyTo": "={{ $json.body.email }}" }
+        "options": {
+          "replyTo": "={{ $json.body.email }}"
+        }
       },
       "name": "Correo a Experts DDT",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [520, 160]
+      "position": [
+        520,
+        160
+      ]
     },
     {
       "parameters": {
         "operation": "append",
-        "documentId": { "__rl": true, "value": "", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "Libraries", "mode": "name" },
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Libraries",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -97,7 +165,10 @@
       "name": "Fila en Google Sheets",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [520, 360]
+      "position": [
+        520,
+        360
+      ]
     },
     {
       "parameters": {
@@ -108,19 +179,118 @@
       "name": "Responder OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [800, 260]
+      "position": [
+        800,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "DDT Xchange",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $now.toISO() }}",
+            "email": "={{ $json.body.email }}",
+            "lang": "={{ $json.body.lang }}",
+            "page": "={{ $json.body.page }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "name": "Fila DDT Xchange",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        520,
+        560
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Por source", "type": "main", "index": 0 }]] },
-    "Por source": {
+    "Webhook": {
       "main": [
-        [{ "node": "Correo a Experts DDT", "type": "main", "index": 0 }],
-        [{ "node": "Fila en Google Sheets", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Por source",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Correo a Experts DDT": { "main": [[{ "node": "Responder OK", "type": "main", "index": 0 }]] },
-    "Fila en Google Sheets": { "main": [[{ "node": "Responder OK", "type": "main", "index": 0 }]] }
+    "Por source": {
+      "main": [
+        [
+          {
+            "node": "Correo a Experts DDT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fila en Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fila DDT Xchange",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Correo a Experts DDT": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fila en Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fila DDT Xchange": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" }
+  "settings": {
+    "executionOrder": "v1"
+  }
 }
