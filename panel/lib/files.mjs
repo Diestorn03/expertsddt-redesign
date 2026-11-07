@@ -64,20 +64,35 @@ export async function inspectZip(path, { maxEntries = 5000, maxUncompressed = 10
     const eocd = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
     if (eocd < 0 || eocd + 22 > tail.length) return { ok: false, code: 'no_eocd' };
     const entries = tail.readUInt16LE(eocd + 10), cdSize = tail.readUInt32LE(eocd + 12), cdOffset = tail.readUInt32LE(eocd + 16);
+    const eocdAt = size - tailLen + eocd;
     if (entries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) return { ok: false, code: 'zip64' };
     if (entries > maxEntries) return { ok: false, code: 'too_many', detail: entries };
-    if (cdSize > 4 * 1024 * 1024 || cdOffset + cdSize > size) return { ok: false, code: 'corrupt' };
+    // the EOCD's self-description is only a claim: the central directory must end exactly where the EOCD starts
+    if (cdSize > 4 * 1024 * 1024 || cdOffset + cdSize !== eocdAt) return { ok: false, code: 'corrupt' };
     const cd = Buffer.alloc(cdSize); await fh.read(cd, 0, cdSize, cdOffset);
-    let p = 0, total = 0, files = 0; const unsafe = [];
+    let p = 0, total = 0, files = 0; const unsafe = [], spans = [];
     for (let n = 0; n < entries; n++) {
       if (p + 46 > cd.length || cd.readUInt32LE(p) !== 0x02014b50) return { ok: false, code: 'corrupt' };
       const csize = cd.readUInt32LE(p + 20), usize = cd.readUInt32LE(p + 24), nlen = cd.readUInt16LE(p + 28), xlen = cd.readUInt16LE(p + 30), clen = cd.readUInt16LE(p + 32);
       if (csize === 0xffffffff || usize === 0xffffffff || cd.readUInt32LE(p + 42) === 0xffffffff) return { ok: false, code: 'zip64' }; // per-entry zip64
+      if (p + 46 + nlen > cd.length) return { ok: false, code: 'corrupt' };
       const name = cd.toString('utf8', p + 46, p + 46 + nlen);
+      spans.push({ at: cd.readUInt32LE(p + 42), csize, raw: cd.subarray(p + 46, p + 46 + nlen), dd: cd.readUInt16LE(p + 8) & 8 });
       total += usize; if (!name.endsWith('/')) files++;
       if (name.startsWith('/') || name.includes('\\') || name.split('/').includes('..') || /^[A-Za-z]:/.test(name)) unsafe.push(name);
       p += 46 + nlen + xlen + clen;
     }
+    if (p !== cd.length) return { ok: false, code: 'corrupt' }; // records the count left out
+    // The local file headers are what streaming unzip tools extract: they must tile the file from byte 0 to the central
+    // directory, one per listed entry and with the same name, so nothing can hide outside what was inspected.
+    let at = 0;
+    for (const s of spans.sort((a, b) => a.at - b.at)) {
+      const lh = Buffer.alloc(30 + s.raw.length), { bytesRead } = await fh.read(lh, 0, lh.length, s.at);
+      if (s.at !== at || bytesRead < lh.length || lh.readUInt32LE(0) !== 0x04034b50 || lh.readUInt16LE(26) !== s.raw.length || !lh.subarray(30).equals(s.raw)) return { ok: false, code: 'corrupt' };
+      at += 30 + s.raw.length + lh.readUInt16LE(28) + s.csize;
+      if (s.dd) { const d = Buffer.alloc(4); await fh.read(d, 0, 4, at); at += d.readUInt32LE(0) === 0x08074b50 ? 16 : 12; } // data descriptor (macOS zips)
+    }
+    if (at !== cdOffset) return { ok: false, code: 'corrupt' };
     if (unsafe.length) return { ok: false, code: 'unsafe_path', detail: unsafe[0] };
     if (total > maxUncompressed) return { ok: false, code: 'too_big' };
     return { ok: true, entries: files, uncompressed: total };

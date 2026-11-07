@@ -1,0 +1,16 @@
+---
+// §5.14: «Actual» and «Nueva» side by side on the card's own stage, plus the checks list. Shown by the bundle after a file is chosen.
+import Icon from './Icon.astro';
+interface Props { stage: string; frame: string; current?: string | null }
+const { stage, frame, current } = Astro.props;
+---
+<div class="compare" data-compare hidden>
+  <div class="compare__row">
+    <figure class:list={['frame', `r-${frame}`, `stage--${stage}`]}><span class="badge">Actual</span>
+      {current ? <img src={current} alt="Foto actual" loading="lazy" decoding="async" data-compare-old /> : <span class="frame__empty"><Icon name="image-off" size={22} /></span>}</figure>
+    <Icon name="arrow-right" size={20} class="compare__arrow" />
+    <figure class:list={['frame', `r-${frame}`, `stage--${stage}`, frame === 'og' && 'frame--cover']}><span class="badge">Nueva</span><img alt="Foto nueva" data-compare-new /></figure>
+  </div>
+  <p class="compare__cap"><span data-compare-name></span><br /><span data-compare-save></span></p>
+</div>
+<ul class="checks" data-checks hidden></ul>

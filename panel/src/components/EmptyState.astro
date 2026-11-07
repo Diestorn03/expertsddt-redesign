@@ -1,0 +1,12 @@
+---
+// §5.24
+import Icon from './Icon.astro';
+interface Props { icon: string; title: string; text?: string }
+const { icon, title, text } = Astro.props;
+---
+<div class="empty">
+  <span class="tile"><Icon name={icon} size={20} /></span>
+  <p class="empty__t">{title}</p>
+  {text && <p class="empty__x">{text}</p>}
+  <slot />
+</div>

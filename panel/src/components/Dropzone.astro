@@ -1,0 +1,23 @@
+---
+// §5.12: the native file input inside a dashed box. Without JS the input is visible; with html.js it covers the box (still clickable,
+// keyboard-operable and a native drop target) and the drawn UI shows. data-* carry the server rules the bundle checks before uploading.
+import Icon from './Icon.astro';
+interface Props {
+  id: string; label: string; name?: string; kind: 'image' | 'poster' | 'video' | 'document' | 'library'; accept: string; maxBytes: number;
+  title: string; touch: string; req: string; error?: string; small?: boolean; required?: boolean; rules?: Record<string, string | number | boolean | undefined>;
+}
+const { id, label, name = 'file', kind, accept, maxBytes, title, touch, req, error, small, required = true, rules = {} } = Astro.props;
+const data = Object.fromEntries(Object.entries(rules).filter(([, v]) => v !== undefined && v !== false).map(([k, v]) => [`data-${k}`, v === true ? '' : String(v)]));
+const tileSize = small ? 20 : 22;
+---
+<label class:list={['drop', small && 'drop--sm', kind === 'library' && 'drop--zip', error && 'is-invalid']} data-drop data-kind={kind} data-max-bytes={maxBytes} {...data}>
+  <input type="file" name={name} id={id} aria-label={label} accept={accept} required={required} aria-describedby={`${id}-req ${id}-err`} aria-invalid={error ? 'true' : undefined} />
+  <span class="drop__ui" aria-hidden="true">
+    <span class:list={['tile', !small && 'tile--56']}><Icon name="upload" size={tileSize} /></span>
+    <b class="drop__t"><span class="drop__mouse">{title}</span><span class="drop__touch">{touch}</span><span class="drop__over">Suelta el archivo para revisarlo</span></b>
+    <span class="drop__or">o <u>elige un archivo</u></span>
+  </span>
+  <span class="drop__file" hidden></span>
+</label>
+<p class="hint" id={`${id}-req`}>{req}</p>
+<p class="field__error" id={`${id}-err`} role="alert" hidden={!error}><Icon name="alert-circle" size={14} /><span data-error-text>{error}</span></p>

@@ -1,0 +1,6 @@
+---
+// §5.30: «Bueno saber» lines, each with an info icon.
+import Icon from './Icon.astro';
+interface Props { items: string[] }
+---
+<ul class="info">{Astro.props.items.map((t) => <li><Icon name="info" size={18} /><span>{t}</span></li>)}</ul>

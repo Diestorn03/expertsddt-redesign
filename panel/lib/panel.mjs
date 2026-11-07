@@ -1,10 +1,11 @@
 // Content panel core, framework-agnostic: config, slots, sessions, uploads, restore, libraries, audit log and the data the pages render.
 // Operations take plain inputs (a headers object or Headers, a Web ReadableStream or Node stream body, an AbortSignal, the client ip)
-// and return plain results { status, location?, json?, view?, data?, setCookies[] } that a thin Astro endpoint (or server.mjs) sends.
-import { readFile, writeFile, appendFile, mkdir, stat, readdir, unlink, rename, copyFile } from 'node:fs/promises';
+// and return plain results { status, location?, json?, view?, data?, setCookies[] } that the thin Astro endpoints in src/pages send.
+import { readFile, writeFile, appendFile, mkdir, stat, readdir, unlink, rename, copyFile, open } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { join, extname, basename, resolve, sep } from 'node:path';
+import { isIP } from 'node:net';
+import { join, extname, basename, dirname, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { once } from 'node:events';
@@ -13,8 +14,8 @@ import { verifyPassword, verifyTotp, sign, verify, csrfFor, createThrottle } fro
 import { sniff, imageSize, inspectZip, sha256File, safeJoin, placeFile, parseBackup } from './files.mjs';
 import * as fmt from './format.mjs';
 
-let sharp = null;
-try { sharp = (await import('sharp')).default; sharp.cache(false); } catch { /* optional: without it only files already in the right format are accepted */ }
+let sharp = null, sharpError = null;
+try { sharp = (await import('sharp')).default; sharp.cache(false); } catch (e) { sharpError = e; /* optional: without it only files already in the right format are accepted */ }
 
 const MB = 1024 * 1024;
 const IMG_MAX = 13 * MB; // images and posters; videos and the PDF have smaller limits in slots.json
@@ -35,7 +36,7 @@ const parseCookies = (s) => Object.fromEntries(String(s || '').split(/;\s*/).fil
 const lowerFirst = (s) => s && s[0].toLowerCase() + s.slice(1);
 const num = (v) => Number(String(v ?? '').replace(/^v/i, '')) || 0;
 const nextFree = (list) => list.reduce((m, v) => Math.max(m, num(v.version)), 0) + 1;
-const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d);
+const isDay = (d) => { const t = Date.parse(`${d}T00:00:00Z`); return /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(t) && new Date(t).toISOString().startsWith(d); }; // NaN, never a RangeError
 const initials = (name) => {
   const w = String(name || '').split('@')[0].trim().split(/[\s._-]+/).filter(Boolean);
   return (w.length > 1 ? w[0][0] + w[1][0] : (w[0] || '?').slice(0, 2)).toLocaleUpperCase('es');
@@ -85,18 +86,23 @@ export const MESSAGES = {
   login_429: ['warn', 'Acceso pausado por seguridad.', 'Hubo demasiados intentos fallidos. Espera 15 minutos y vuelve a intentarlo.'],
 };
 const fill = (s, p = {}) => s.replace(/\{(\w+)\}/g, (_, k) => String(p[k] ?? ''));
-/** { type, key, title, text } for a §7.13 key; errors always end with «Nada cambió en la web.». */
+/** { type, key, title, text } for a §7.13 key; errors end with «Nada cambió en la web.» (not the login one: nothing could change before signing in). */
 export function message(key, params = {}) {
   const [type, title, text] = MESSAGES[key];
-  return { type, key, title: fill(title, params), text: fill(text, params) + (type === 'err' ? ' Nada cambió en la web.' : '') };
+  return { type, key, title: fill(title, params), text: fill(text, params) + (type === 'err' && key !== 'login_401' ? ' Nada cambió en la web.' : '') };
 }
+
+/** A request the client got wrong (unparseable or oversized body): answered with a 4xx, never the 500 page. */
+const clientFault = (why, code = 'bad_request') => Object.assign(new Error(why), { code });
 
 /** Reads a small urlencoded form (login, logout, activate, restore) from a Web or Node stream, without formData(). */
 async function readForm(body, limit = 8192) {
   const parts = []; let n = 0;
-  if (body) for await (const c of body) { n += c.length; if (n > limit) throw new Error('form too large'); parts.push(Buffer.from(c)); }
+  if (body) for await (const c of body) { n += c.length; if (n > limit) throw clientFault('form too large'); parts.push(Buffer.from(c)); }
   return new URLSearchParams(Buffer.concat(parts).toString());
 }
+/** readForm, or null for a body the client got wrong (the caller answers 403/400). */
+const formOrNull = (body) => readForm(body).catch((e) => { if (e.code === 'bad_request') return null; throw e; });
 
 /** Sends a result that has no view: a redirect, a JSON answer or an empty status (e.g. 499). */
 export function toResponse(r, headers = {}) {
@@ -109,23 +115,37 @@ export function toResponse(r, headers = {}) {
 
 export function configFromEnv(env = process.env) {
   return {
-    secret: env.PANEL_SECRET, siteRoot: env.SITE_ROOT, dataDir: env.DATA_DIR, siteUrl: env.SITE_URL || 'https://expertsddt.com',
-    cookieSecure: env.COOKIE_SECURE !== '0', trustProxy: env.TRUST_PROXY !== '0', libMaxMb: Number(env.LIB_MAX_MB) > 0 ? Number(env.LIB_MAX_MB) : 300,
+    secret: env.PANEL_SECRET, siteRoot: env.SITE_ROOT, dataDir: env.DATA_DIR, siteUrl: env.SITE_URL || 'https://expertsddt.com', panelUrl: env.PANEL_URL || 'https://admin.expertsddt.com',
+    cookieSecure: env.COOKIE_SECURE !== '0', trustProxy: env.TRUST_PROXY === '1', libMaxMb: env.LIB_MAX_MB ? Number(env.LIB_MAX_MB) : 300,
   };
 }
+/** An http(s) URL reduced to its origin (no path, no trailing slash), or an error that names the variable. */
+const originOf = (v, name) => {
+  let u; try { u = new URL(v); } catch { u = null; }
+  if (!u || !/^https?:$/.test(u.protocol)) throw new Error(`${name} must be a full http(s) URL such as https://expertsddt.com (got ${JSON.stringify(v)})`);
+  return u.origin;
+};
+const AUDIT_MAX = 5 * 1024 * 1024, AUDIT_TAIL = 2 * 1024 * 1024; // rotate at 5 MB into audit.jsonl.1; pages read the last 2 MB
+const isLoopback = (a) => /^(127\.|::1$|::ffff:127\.)/.test(a);
 
 /**
- * cfg: { secret, siteRoot, dataDir, siteUrl?, cookieSecure?, trustProxy?, libMaxMb?, now?, slots? | slotsPath? }.
+ * cfg: { secret, siteRoot, dataDir, siteUrl?, panelUrl?, cookieSecure?, trustProxy?, libMaxMb?, now?, slots? | slotsPath? }.
  * Pass `slots` (the parsed slots.json) when this file is bundled (Astro/Vite), because import.meta.url then points into dist/.
+ * Throws on a bad configuration, so a server can refuse to start before it listens.
  */
 export async function createPanel(cfg) {
   const { secret, siteRoot, dataDir } = cfg;
-  const siteUrl = cfg.siteUrl || 'https://expertsddt.com';
-  const libMaxMb = cfg.libMaxMb > 0 ? cfg.libMaxMb : 300;
+  const siteUrl = originOf(cfg.siteUrl || 'https://expertsddt.com', 'SITE_URL');
+  const panelOrigin = originOf(cfg.panelUrl || 'https://admin.expertsddt.com', 'PANEL_URL');
+  const libMaxMb = cfg.libMaxMb ?? 300;
+  if (!(libMaxMb > 0)) throw new Error(`LIB_MAX_MB must be a number of megabytes such as 300 (got ${JSON.stringify(cfg.libMaxMb)})`);
   if (!secret || secret.length < 32) throw new Error('PANEL_SECRET must be at least 32 characters');
   if (!siteRoot || !dataDir) throw new Error('SITE_ROOT and DATA_DIR are required');
   const [site, data] = [resolve(siteRoot), resolve(dataDir)];
   if (data === site || data.startsWith(site + sep)) throw new Error('DATA_DIR must be outside SITE_ROOT: it holds the users, the backups and the audit log');
+  const siteExists = () => stat(site).then((s) => s.isDirectory(), () => false);
+  if (!(await siteExists())) console.error(`panel: SITE_ROOT ${site} does not exist; uploads are refused until it does (is the path right?)`);
+  if (!sharp) console.warn(`panel: sharp could not be loaded (${sharpError?.message}); photos are NOT re-encoded, so their metadata (EXIF, GPS) is kept, and only files already in each slot's format are accepted`);
   const slotsFile = cfg.slots ?? JSON.parse(await readFile(cfg.slotsPath ?? new URL('../slots.json', import.meta.url), 'utf8'));
   const slots = [
     ...slotsFile.images.map((s) => ({ ...s, kind: 'image' })),
@@ -137,20 +157,52 @@ export async function createPanel(cfg) {
   const byEmail = createThrottle({ max: 8, now }), byIp = createThrottle({ max: 20, now });
   await mkdir(join(dataDir, 'tmp'), { recursive: true });
   await mkdir(join(dataDir, 'backups'), { recursive: true });
+  // start-up sweep: uploads and copies cut by a crash, restart or redeploy leave partial files behind
+  const sweep = async (dir, re) => { for (const f of await readdir(dir).catch(() => [])) if (re.test(f)) await unlink(join(dir, f)).catch(() => {}); };
+  await sweep(join(dataDir, 'tmp'), /./);
+  const placedDirs = slots.flatMap((s) => [s.path, s.poster]).filter(Boolean).map((p) => dirname(p));
+  for (const d of new Set([...placedDirs, 'downloads/libraries'])) await sweep(join(site, d), /^\.[0-9a-f]{16}\.tmp$|\.json\.[0-9a-f]{12}\.tmp$/);
 
   // ---------- storage ----------
   const auditFile = join(dataDir, 'audit.jsonl');
-  const audit = (user, action, detail = '', ip = '', extra = {}) =>
-    appendFile(auditFile, JSON.stringify({ ts: new Date(now()).toISOString(), user, action, detail, ip, ...extra }) + '\n');
-  // ponytail: reads the whole log; switch to reading its tail once it passes a few MB
-  const readAudit = async () => (await readFile(auditFile, 'utf8').catch(() => '')).split('\n').filter(Boolean)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((l) => l?.action && !Number.isNaN(Date.parse(l.ts)));
-  const users = async () => { try { return JSON.parse(await readFile(join(dataDir, 'users.json'), 'utf8')); } catch { return []; } };
+  const cap = (v, n) => String(v ?? '').slice(0, n);
+  let auditQueue = Promise.resolve(); // one append (and rotation check) at a time
+  const audit = (user, action, detail = '', ip = '', extra = {}) => (auditQueue = auditQueue.catch(() => {}).then(async () => {
+    await appendFile(auditFile, JSON.stringify({ ts: new Date(now()).toISOString(), user: cap(user, 254), action, detail: cap(detail, 500), ip: cap(ip, 45), ...extra }) + '\n');
+    if ((await stat(auditFile).catch(() => null))?.size > AUDIT_MAX) await rename(auditFile, `${auditFile}.1`).catch(() => {}); // one old file is kept
+  }));
+  async function tail(file, max) { // the last `max` bytes, from the first whole line
+    let fh;
+    try { fh = await open(file, 'r'); } catch (e) { if (e.code !== 'ENOENT') console.error(`panel: cannot read ${file}:`, e.message); return ''; }
+    try {
+      const { size } = await fh.stat(), len = Math.min(size, max), b = Buffer.alloc(len);
+      await fh.read(b, 0, len, size - len);
+      const s = b.toString('utf8');
+      return len < size ? s.slice(s.indexOf('\n') + 1) : s;
+    } finally { await fh.close(); }
+  }
+  const readAudit = async () => {
+    const cur = await tail(auditFile, AUDIT_TAIL), left = AUDIT_TAIL - Buffer.byteLength(cur);
+    const old = left > 4096 ? await tail(`${auditFile}.1`, left) : '';
+    return `${old}\n${cur}`.split('\n').filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((l) => l?.action && !Number.isNaN(Date.parse(l.ts)));
+  };
+  let lastUsers = [];
+  const users = async () => { // a broken users.json is logged and the last good copy kept, not every session ended in silence
+    try { return (lastUsers = JSON.parse(await readFile(join(dataDir, 'users.json'), 'utf8'))); } catch (e) {
+      if (e.code === 'ENOENT') return (lastUsers = []);
+      console.error(`panel: ${join(dataDir, 'users.json')} cannot be read (${e.message}); using the last good copy`);
+      return lastUsers;
+    }
+  };
   const nameOf = (list) => (email) => displayName(list.find((u) => u.email === email)) || String(email || '');
   const readJson = async (p, d) => { try { return JSON.parse(await readFile(p, 'utf8')); } catch { return d; } };
   async function writeJsonAtomic(p, obj) { const t = `${p}.${randomBytes(6).toString('hex')}.tmp`; await writeFile(t, JSON.stringify(obj, null, 2) + '\n'); await rename(t, p); }
   const cleanup = (...paths) => Promise.all(paths.filter(Boolean).map((p) => unlink(p).catch(() => {})));
   const libDir = () => safeJoin(siteRoot, 'downloads/libraries');
+  let libQueue = Promise.resolve();
+  const libLock = (fn) => { const run = libQueue.then(fn, fn); libQueue = run.catch(() => {}); return run; }; // one instance only (README)
+  const requireSite = async () => { if (!(await siteExists())) throw new Error(`SITE_ROOT ${site} does not exist: nothing was written`); }; // never mkdir a typo
   async function readVersions(dir, latest) { // versions.json joined with latest.json: the active version can never drop off the list
     const list = await readJson(join(dir, 'versions.json'), null);
     const out = Array.isArray(list) ? list : [];
@@ -163,27 +215,35 @@ export async function createPanel(cfg) {
 
   // ---------- cookies, flash notices, session ----------
   const cookieOf = (name, val, maxAge) => `${name}=${val}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${cfg.cookieSecure === false ? '' : '; Secure'}`;
+  // __Host-: browsers refuse a copy with a Domain or another Path, so no sibling host under expertsddt.com can shadow the session.
+  // The prefix requires Secure, so a COOKIE_SECURE=0 local run keeps the plain name.
+  const SID = cfg.cookieSecure === false ? 'edp_sid' : '__Host-edp_sid';
   const clear = (name) => cookieOf(name, '', 0);
   const flashCookie = (f) => cookieOf('edp_flash', sign({ ...f, exp: now() + 60_000 }, secret), 60);
   const note = (key, params, extra) => ({ ...message(key, params), ...extra }); // + slot, undo {action, fields, label}, keep {version, dataDate}
   const readFlash = (c) => { const f = verify(c.edp_flash, secret, now()); if (!f) return null; const { exp, ...rest } = f; return rest; };
   async function readSession(c) {
-    const s = verify(c.edp_sid, secret, now());
+    const s = verify(c[SID], secret, now());
     if (!s) return null;
     const u = (await users()).find((x) => x.email === s.uid);
     return u && (u.tokenVersion ?? 0) === s.tv ? { ...s, user: u } : null;
   }
-  function sameOrigin(h) { // a missing Origin is accepted (SameSite=Strict + CSRF still apply); 'null' and foreign origins are not
+  // A missing Origin is accepted (SameSite=Strict + CSRF still apply); 'null' and foreign origins are not. The expected origin is
+  // PANEL_URL (what the browser sees behind the proxy, whatever Host the proxy sends) or the request's own Host, never X-Forwarded-Host.
+  function sameOrigin(h) {
     if (!h.origin) return true;
-    try {
-      const o = new URL(h.origin).host;
-      return o === h.host || (!!cfg.trustProxy && o === String(h['x-forwarded-host'] || '').split(',')[0].trim());
-    } catch { return false; }
+    try { const o = new URL(h.origin); return o.origin === panelOrigin || o.host === h.host; } catch { return false; }
   }
   const done = (h, to, flash) => { const setCookies = flash ? [flashCookie(flash)] : []; return isXhr(h) ? { status: 200, json: { to }, setCookies } : { status: 303, location: to, setCookies }; };
   const forbidden = (h) => (isXhr(h) ? { status: 403, json: { to: '/' }, setCookies: [flashCookie(message('csrf'))] } : { status: 403, view: '403', setCookies: [] });
   const unauth = (h) => (isXhr(h) ? { status: 401, json: { to: '/login' }, setCookies: [] } : { status: 303, location: '/login', setCookies: [] });
-  const aborted = (e, signal) => { if (signal?.aborted || e?.message === 'aborted') return { status: 499, setCookies: [] }; throw e; };
+  /** Maps what a client caused (abort, unparseable or oversized body) to an answer; anything else is a real fault and is rethrown. */
+  const clientError = (e, signal, h, tooLarge) => {
+    if (signal?.aborted || e?.message === 'aborted') return { status: 499, setCookies: [] };
+    if (e?.code === 'too_large' && tooLarge) return tooLarge();
+    if (e?.code === 'bad_request' || e?.code === 'too_large') return forbidden(h); // the CSRF token could not be read either
+    throw e;
+  };
   const authed = (fn) => (io = {}) => { const h = plain(io.headers); return io.session ? fn({ ...io, h }) : unauth(h); };
 
   /** Runs before every route (the middleware): origin check on POST, flash, session, expiry notice. */
@@ -193,8 +253,8 @@ export async function createPanel(cfg) {
     const flash = readFlash(c);
     const session = await readSession(c);
     if (!session && path !== '/login') {
-      const setCookies = [clear('edp_sid')];
-      if (c.edp_sid) setCookies.push(flashCookie(message(method === 'POST' && path.startsWith('/upload/') ? 'expired_upload' : 'expired')));
+      const setCookies = [clear(SID)];
+      if (c[SID]) setCookies.push(flashCookie(message(method === 'POST' && path.startsWith('/upload/') ? 'expired_upload' : 'expired')));
       return { response: isXhr(h) ? { status: 401, json: { to: '/login' }, setCookies } : { status: 303, location: '/login', setCookies } };
     }
     if (session && path === '/login' && method === 'GET') return { response: { status: 303, location: '/', setCookies: [] } };
@@ -206,8 +266,15 @@ export async function createPanel(cfg) {
     return new Promise((resolve, reject) => {
       const fields = {}, files = {}, writers = [];
       let csrfOk = false, tooBig = null, settled = false, bb;
+      // no unparseable content type or missing boundary reaches the 500 page
+      if (!/^multipart\/form-data\b/i.test(h['content-type'] || '')) return reject(clientFault('not multipart')); // busboy would also take urlencoded
+      try { bb = Busboy({ headers: h, limits: { files: maxFiles, fields: 10, parts: 20, fileSize: maxFile } }); } catch (e) { return reject(clientFault(e.message)); }
       const src = typeof body?.getReader === 'function' ? Readable.fromWeb(body) : body;
-      try { bb = Busboy({ headers: h, limits: { files: maxFiles, fields: 10, parts: 20, fileSize: maxFile } }); } catch (e) { return reject(e); }
+      // An over-limit file is drained so the browser gets the notice instead of «connection reset» (the body has no cap in
+      // astro.config.mjs, so LIB_MAX_MB is read at run time); past twice the allowance the body is cut.
+      const maxBody = 2 * maxFile * maxFiles + MB;
+      let seen = 0;
+      src?.on?.('data', (c) => { seen += c.length; if (seen > maxBody) fail(clientFault('body too large', 'too_large')); });
       const fail = (e) => {
         if (settled) return; settled = true;
         src?.destroy?.(); bb.destroy();
@@ -216,7 +283,7 @@ export async function createPanel(cfg) {
       };
       if (signal?.aborted) return fail(new Error('aborted'));
       signal?.addEventListener('abort', () => fail(new Error('aborted')), { once: true }); // «Cancelar subida» or a closed tab
-      src?.on('error', fail); bb.on('error', fail);
+      src?.on('error', fail); bb.on('error', (e) => fail(clientFault(e.message))); // a malformed multipart body
       bb.on('field', (n, v) => { fields[n] = v; if (n === '_csrf') csrfOk = eq(v, csrf); });
       bb.on('file', (name, stream, info) => {
         stream.on('error', fail);
@@ -262,11 +329,21 @@ export async function createPanel(cfg) {
   }
 
   // ---------- operations (POST) ----------
+  const blockedLogged = new Map(); // throttle key → the lock already written to the log: one login_blocked line per lock, not per request
   async function login({ body, ip = '' } = {}) {
-    const f = await readForm(body);
+    const f = await formOrNull(body);
+    if (!f) return { status: 400, view: 'login', data: { email: '', flash: message('login_401') }, setCookies: [] };
     const email = String(f.get('email') || '').toLowerCase().trim().slice(0, 254);
     const again = (status, key) => ({ status, view: 'login', data: { email, flash: message(key) }, setCookies: [] });
-    if (byEmail.blocked(email) || byIp.blocked(ip)) { await audit(email, 'login_blocked', '', ip); return again(429, 'login_429'); }
+    if (byEmail.blocked(email) || byIp.blocked(ip)) {
+      const [key, until] = byIp.blocked(ip) ? [`ip ${ip}`, byIp.until(ip)] : [`email ${email}`, byEmail.until(email)];
+      if (blockedLogged.get(key) !== until) {
+        if (blockedLogged.size > 1000) for (const [k, u] of blockedLogged) if (u <= now()) blockedLogged.delete(k);
+        blockedLogged.set(key, until);
+        await audit(email, 'login_blocked', '', ip);
+      }
+      return again(429, 'login_429');
+    }
     const u = (await users()).find((x) => x.email === email);
     const pwOk = await verifyPassword(String(f.get('password') || ''), u?.hash ?? DUMMY_HASH);
     const totpOk = u ? verifyTotp(u.totp, String(f.get('code') || '').replace(/\s+/g, ''), now()) : false; // «123 456» works
@@ -274,14 +351,14 @@ export async function createPanel(cfg) {
     byEmail.ok(email);
     const tok = sign({ sid: randomBytes(12).toString('hex'), uid: u.email, tv: u.tokenVersion ?? 0, exp: now() + SESSION_MS }, secret);
     await audit(u.email, 'login', '', ip);
-    return { status: 303, location: '/', setCookies: [cookieOf('edp_sid', tok, SESSION_MS / 1000)] };
+    return { status: 303, location: '/', setCookies: [cookieOf(SID, tok, SESSION_MS / 1000)] };
   }
 
   const logout = authed(async ({ session, h, body, ip = '' }) => {
-    const f = await readForm(body);
-    if (!eq(f.get('_csrf'), csrfFor(session, secret))) return forbidden(h);
+    const f = await formOrNull(body);
+    if (!f || !eq(f.get('_csrf'), csrfFor(session, secret))) return forbidden(h);
     await audit(session.uid, 'logout', '', ip);
-    return { status: 303, location: '/login', setCookies: [clear('edp_sid'), flashCookie(message('logout'))] };
+    return { status: 303, location: '/login', setCookies: [clear(SID), flashCookie(message('logout'))] };
   });
 
   const uploadSlot = authed(async ({ session, h, body, signal, ip = '' }) => {
@@ -314,6 +391,7 @@ export async function createPanel(cfg) {
           poster = pp.path;
         }
       } else if ((await sniff(r.files.file)).type !== 'pdf' || (await stat(r.files.file)).size > slot.maxBytes) return fail('pdf');
+      await requireSite();
       const backupDir = join(dataDir, 'backups', slot.id), created = [];
       const a = await placeFile(placed, dest, backupDir); if (a.backup) created.push(basename(a.backup));
       if (poster) { const b = await placeFile(poster, safeJoin(siteRoot, slot.poster), backupDir); if (b.backup) created.push(basename(b.backup)); }
@@ -323,7 +401,7 @@ export async function createPanel(cfg) {
       });
       if (poster) ok.title = 'Listo: el video y su portada ya están en la web.';
       return done(h, to, ok);
-    } catch (e) { return aborted(e, signal); } finally { await cleanup(...tmps); }
+    } catch (e) { return clientError(e, signal, h); } finally { await cleanup(...tmps); }
   });
 
   const uploadLibrary = authed(async ({ session, h, body, signal, ip = '' }) => {
@@ -340,31 +418,39 @@ export async function createPanel(cfg) {
       if ((await sniff(r.files.file)).type !== 'zip') return fail('lib_not_zip');
       const z = await inspectZip(r.files.file);
       if (!z.ok) return fail(ZIP_KEYS[z.code], { n: z.detail, ruta: String(z.detail ?? '').slice(0, 80) });
-      const dir = libDir(); await mkdir(dir, { recursive: true });
-      const prev = await readJson(join(dir, 'latest.json'), null);
-      const index = await readVersions(dir, prev); // seeds versions.json from latest.json the first time
-      if (index.some((v) => v.version === version)) return fail('lib_dup', { v: version, n: nextFree(index) });
-      const file = `exocad-implant-libraries-${version}-${dataDate}.zip`;
-      const entry = { version, dataDate, file, bytes: (await stat(r.files.file)).size, sha256: await sha256File(r.files.file), files: z.entries };
-      await placeFile(r.files.file, join(dir, file), join(dataDir, 'backups', 'libraries'));
-      index.push(entry);
-      await writeJsonAtomic(join(dir, 'versions.json'), index);
-      await writeJsonAtomic(join(dir, 'latest.json'), entry);
-      await audit(session.uid, 'library_publish', `${version} · ${fmt.files(entry.files)} · ${fmt.size(entry.bytes)}`, ip, { version, files: entry.files, bytes: entry.bytes });
-      const back = prev?.version && prev.file !== file ? prev : null;
-      const extra = { slot: 'libraries', undo: back ? { action: '/libraries/activate', fields: { file: back.file }, label: `Volver a la ${back.version}` } : undefined };
-      return done(h, '/#librerias', back?.files > 0 && entry.files < back.files / 2
-        ? note('warn_publish', { v: version, n: entry.files, anterior: back.version, m: back.files }, extra)
-        : note('ok_publish', { v: version, n: entry.files }, extra));
-    } catch (e) { return aborted(e, signal); } finally { await cleanup(...tmps); }
+      const bytes = (await stat(r.files.file)).size, sha256 = await sha256File(r.files.file);
+      await requireSite();
+      return await libLock(async () => { // latest.json + versions.json are read, checked and written by one publish or activation at a time
+        const dir = libDir(); await mkdir(dir, { recursive: true });
+        const prev = await readJson(join(dir, 'latest.json'), null);
+        const index = await readVersions(dir, prev); // seeds versions.json from latest.json the first time
+        if (index.some((v) => v.version === version)) return fail('lib_dup', { v: version, n: nextFree(index) });
+        const file = `exocad-implant-libraries-${version}-${dataDate}.zip`;
+        const entry = { version, dataDate, file, bytes, sha256, files: z.entries };
+        await placeFile(r.files.file, join(dir, file), join(dataDir, 'backups', 'libraries'));
+        index.push(entry);
+        await writeJsonAtomic(join(dir, 'versions.json'), index);
+        await writeJsonAtomic(join(dir, 'latest.json'), entry);
+        await audit(session.uid, 'library_publish', `${version} · ${fmt.files(entry.files)} · ${fmt.size(entry.bytes)}`, ip, { version, files: entry.files, bytes: entry.bytes });
+        const back = prev?.version && prev.file !== file ? prev : null;
+        const extra = { slot: 'libraries', undo: back ? { action: '/libraries/activate', fields: { file: back.file }, label: `Volver a la ${back.version}` } : undefined };
+        return done(h, '/#librerias', back?.files > 0 && entry.files < back.files / 2
+          ? note('warn_publish', { v: version, n: entry.files, anterior: back.version, m: back.files }, extra)
+          : note('ok_publish', { v: version, n: entry.files }, extra));
+      });
+    } catch (e) {
+      return clientError(e, signal, h, () => done(h, '/#librerias', note('lib_file', { max: libMaxMb }, { slot: 'libraries' })));
+    } finally { await cleanup(...tmps); }
   });
 
   const activate = authed(async ({ session, h, body, ip = '' }) => {
-    const f = await readForm(body);
-    if (!eq(f.get('_csrf'), csrfFor(session, secret))) return forbidden(h);
-    const dir = libDir();
+    const f = await formOrNull(body);
+    if (!f || !eq(f.get('_csrf'), csrfFor(session, secret))) return forbidden(h);
+    return libLock(() => activateIn(libDir(), f.get('file'), session, h, ip));
+  });
+  async function activateIn(dir, wanted, session, h, ip) {
     const prev = await readJson(join(dir, 'latest.json'), null);
-    const entry = (await readVersions(dir, prev)).find((v) => v.file === f.get('file'));
+    const entry = (await readVersions(dir, prev)).find((v) => v.file === wanted);
     if (!entry) return done(h, '/#librerias', note('lib_unknown', {}, { slot: 'libraries' }));
     await writeJsonAtomic(join(dir, 'latest.json'), entry);
     await audit(session.uid, 'library_activate', entry.version, ip, { version: entry.version });
@@ -374,11 +460,11 @@ export async function createPanel(cfg) {
     });
     if (!back) ok.text = '';
     return done(h, '/#librerias', ok);
-  });
+  }
 
   const restore = authed(async ({ session, h, body, ip = '' }) => {
-    const f = await readForm(body);
-    if (!eq(f.get('_csrf'), csrfFor(session, secret))) return forbidden(h);
+    const f = await formOrNull(body);
+    if (!f || !eq(f.get('_csrf'), csrfFor(session, secret))) return forbidden(h);
     const slot = slots.find((s) => s.id === f.get('slot'));
     if (!slot) return done(h, '/', note('unknown_slot'));
     const to = `/#slot-${slot.id}`, dir = join(dataDir, 'backups', slot.id);
@@ -389,6 +475,7 @@ export async function createPanel(cfg) {
       return done(h, to, note('restore_unknown', {}, { slot: slot.id }));
     }
     const tmps = [], created = [];
+    await requireSite();
     try {
       for (const p of picks) { // the copy goes through tmp + placeFile, so what is live now becomes a new copy (restoring can be undone)
         const tmp = join(dataDir, 'tmp', randomBytes(12).toString('hex')); tmps.push(tmp);
@@ -506,10 +593,22 @@ export async function createPanel(cfg) {
     'Cache-Control': 'no-store', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()', 'X-Robots-Tag': 'noindex, nofollow',
     ...(cfg.cookieSecure === false ? {} : { 'Strict-Transport-Security': 'max-age=31536000' }),
   });
-  const clientIp = (headers, remote = '') => (cfg.trustProxy ? String(plain(headers)['x-forwarded-for'] || '').split(',')[0].trim() : '') || remote || '';
+  /**
+   * The client address for the throttle and the log: the socket address, unless that socket is a proxy (loopback always,
+   * any address with TRUST_PROXY=1); then the LAST X-Forwarded-For entry, the one the proxy itself appended (the entries
+   * before it are whatever the client sent). Only a real IP is ever returned.
+   */
+  const clientIp = (headers, remote = '') => {
+    const peer = isIP(String(remote)) ? String(remote) : '';
+    if (cfg.trustProxy || isLoopback(peer)) {
+      const last = String(plain(headers)['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean).at(-1);
+      if (last && isIP(last)) return last;
+    }
+    return peer;
+  };
 
   return {
-    config: { siteUrl, libMaxMb, cookieSecure: cfg.cookieSecure !== false }, slots, canConvert: !!sharp,
+    config: { siteUrl, panelOrigin, libMaxMb, cookieSecure: cfg.cookieSecure !== false }, slots, canConvert: !!sharp,
     securityHeaders, clientIp, guard, login, logout, uploadSlot, uploadLibrary, activate, restore, dashboard, history, audit,
   };
 }

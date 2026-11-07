@@ -1810,6 +1810,7 @@ xhr.send(new FormData(form));                              // el orden del DOM m
   - Título: «Publicar una versión nueva» / «La versión actual queda guardada por si necesitas volver a ella.».
   - Pasos: «Elige el archivo .zip» · «Ponle número y fecha» · «Revisa y publica».
   - Zona: «Arrastra aquí el .zip» / «o elige un archivo» / «Solo .zip · hasta {LIB_MAX_MB} MB». En táctil: «Toca para elegir el .zip». Al arrastrar: «Suelta el archivo para revisarlo».
+  - Tras un error del servidor (la página vuelve sin el archivo elegido): con un error del zip, la zona dice «Vuelve a elegir el archivo .zip.»; con un error de número o fecha, la línea de requisitos pasa a «Vuelve a elegir el archivo .zip · hasta {LIB_MAX_MB} MB».
   - «Número de versión», con ayuda «La siguiente libre es la {n}. Usa siempre un número nuevo.» (sin versiones: «Solo números, por ejemplo 1.»).
   - «Fecha de los datos», con ayuda «El día en que se actualizaron los archivos. Los doctores la ven junto a la versión.».
   - Vista previa (JS): «Así se verá en la web» y «Versión {v} · actualizada el {d} · {s} MB».

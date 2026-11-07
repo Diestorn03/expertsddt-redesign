@@ -1,0 +1,115 @@
+---
+// §5.16: one replaceable file (image, video or the PDF). State first (preview, where it appears, size, date), then one action.
+// The server opens at most one card: the one whose notice is an error. The result of a POST is painted inside its own card.
+import Icon from './Icon.astro';
+import Chip from './Chip.astro';
+import Alert from './Alert.astro';
+import Dropzone from './Dropzone.astro';
+import Compare from './Compare.astro';
+import UploadProgress from './UploadProgress.astro';
+import Copies from './Copies.astro';
+import Tech from './Tech.astro';
+import * as fmt from '../../lib/format.mjs';
+
+interface Props { item: any; csrf: string; flash?: any; canConvert: boolean; level?: 3 | 4; pairLabel?: string }
+const { item: s, csrf, flash, canConvert, level = 3, pairLabel } = Astro.props;
+const H = level === 4 ? 'h4' : 'h3';
+const MB = 1048576;
+const id = `slot-${s.id}`;
+const isImg = s.kind === 'image', isVideo = s.kind === 'video', isDoc = s.kind === 'document';
+const noun = isImg ? 'foto' : isVideo ? 'video' : 'PDF';
+const err = flash?.type === 'err' ? flash.text : undefined;
+const pages = [...new Set((s.where ?? []).map((w) => w.page))];
+const meta = s.missing ? (isDoc ? 'Todavía no hay PDF en la web.' : '') // the frame already says «Falta en la web» (§4.5 H)
+  : isImg ? `${fmt.size(s.size)} · ${fmt.dateTime(s.mtime)}`
+  : isVideo ? `${fmt.size(s.size)} de ${Math.round(s.maxBytes / MB)} MB · ${fmt.date(s.mtime)}`
+  : `${fmt.size(s.size)} · actualizada el ${fmt.dateTime(s.mtime)}`;
+const consequence = isImg
+  ? (s.crop === 'og' ? 'Al publicar, esta será la imagen que se ve al compartir expertsddt.com. La actual queda guardada.'
+    : s.missing ? `Al publicar, esta foto aparecerá en ${s.places}.` : `Al publicar, la foto nueva reemplaza a la actual en ${s.places}. La actual queda guardada.`)
+  : isVideo ? `Al publicar, el video nuevo reemplaza al actual en ${s.places}. El actual queda guardado.`
+  : 'Al publicar, quien descargue la guía desde la web recibe este PDF. El actual queda guardado.';
+const fmtExt = { WebP: 'webp', JPG: 'jpg' }[s.format];
+const imgAccept = canConvert ? 'image/png,image/jpeg,image/webp' : fmtExt === 'jpg' ? 'image/jpeg' : 'image/webp';
+const imgKinds = canConvert ? 'PNG, JPG o WebP' : s.format;
+const drop = isImg
+  ? { kind: 'image', accept: imgAccept, maxBytes: 13 * MB, title: 'Arrastra la foto aquí', touch: 'Toca para elegir la foto', req: `${imgKinds} · al menos ${s.minWidth} px de ancho · hasta 13 MB`,
+      rules: { 'min-width': s.minWidth, 'max-width': s.maxWidth, alpha: !!s.alpha, crop: s.crop, format: canConvert ? undefined : fmtExt, pair: s.pair, 'pair-label': pairLabel } }
+  : isVideo ? { kind: 'video', accept: 'video/mp4,.mp4', maxBytes: s.maxBytes, title: 'Arrastra el video aquí', touch: 'Toca para elegir el video', req: `Solo MP4, hasta ${Math.round(s.maxBytes / MB)} MB`, rules: {} }
+  : { kind: 'document', accept: 'application/pdf,.pdf', maxBytes: s.maxBytes, title: 'Arrastra el PDF aquí', touch: 'Toca para elegir el PDF', req: `Solo PDF, hasta ${Math.round(s.maxBytes / MB)} MB`, rules: {} };
+const tech = isImg
+  ? [['Archivo en la web', s.path], ['Formato final', canConvert ? `${s.format}, se convierte solo` : s.format], ['Ancho mínimo', `${s.minWidth} px`],
+     ['Ancho máximo guardado', s.crop === 'og' ? '1200 × 630 px' : `${s.maxWidth} px`], ['Medidas actuales', '—', 'dims']]
+  : isVideo ? [['Archivo en la web', s.path], ...(s.poster ? [['Portada', s.poster]] : []), ...(s.thumb ? [['Imagen mientras carga', s.thumb]] : []), ['Peso máximo', `${Math.round(s.maxBytes / MB)} MB`]]
+  : [['Archivo en la web', s.path], ['Peso máximo', `${Math.round(s.maxBytes / MB)} MB`]];
+const undoConfirm = { title: `¿Deshacer el cambio de «${s.label}»?`, text: 'Vuelve a la web lo que había antes de tu cambio. Lo que subiste queda guardado en «Versiones anteriores».', ok: 'Sí, deshacer' };
+const ext = { target: '_blank', rel: 'noopener' };
+---
+<article class:list={['card', 'slot', `slot--${isDoc ? 'doc' : s.kind}`, s.fresh && 'is-fresh', s.missing && 'is-missing', flash && 'is-flash']}
+  id={id} aria-labelledby={`${id}-t`} data-slot={s.id} data-label={s.label} data-drop-target>
+  {isDoc ? (
+    <span class="tile tile--56 slot__tile"><Icon name="file-text" size={22} /></span>
+  ) : (
+    <div class:list={['slot__media', 'frame', `r-${s.frame}`, `stage--${s.stage}`]}>
+      {s.missing ? <span class="frame__empty"><Icon name="image-off" size={22} /><span>Falta en la web</span></span>
+        : isImg ? <img src={s.url} alt={`Imagen actual de «${s.label}»`} loading="lazy" decoding="async" data-preview />
+        : <video src={s.url} poster={s.posterUrl ?? undefined} controls preload="none" muted playsinline aria-label={`Video actual: «${s.label}»`} />}
+      {s.fresh && <Chip tone="solid-ok" icon="check" class="frame__chip">Recién actualizado</Chip>}
+      {s.missing && <Chip tone="solid-warn" icon="alert-triangle" class="frame__chip">Falta</Chip>}
+    </div>
+  )}
+  {flash && (
+    <div class="slot__banner">
+      <Alert tone={flash.type} title={flash.title} text={flash.text} focus undo={flash.undo} csrf={csrf} confirm={undoConfirm} />
+    </div>
+  )}
+  <div class="slot__body">
+    {isDoc && <span class="eyebrow">Servicios · PDF</span>}
+    {!isDoc && s.fresh && <Chip tone="ok" icon="check" class="slot__state">Recién actualizado</Chip>}
+    {!isDoc && s.missing && <Chip tone="warn" icon="alert-triangle" class="slot__state">Falta</Chip>}
+    {!isDoc && pages.length > 0 && <ul class="tags">{pages.map((p) => <li>{p}</li>)}</ul>}
+    <H class="slot__title" id={`${id}-t`}>{s.label}</H>
+    <p class="meta">{meta && <span>{meta}</span>}
+      {!isDoc && s.webUrl && <a class="btn btn--quiet" href={s.webUrl} {...ext}>Ver en la web <Icon name="external-link" size={14} /><span class="sr-only"> (se abre en otra pestaña)</span></a>}</p>
+    {s.missing && isImg && <p class="slot__note">La web muestra un hueco aquí hasta que subas una.</p>}
+    {s.missing && isDoc && <p class="slot__note">La página Servicios enlaza este PDF: mientras falte, la descarga da error.</p>}
+    {isVideo && s.hint && <p class="hint"><Icon name="info" size={14} />{s.hint}</p>}
+    {isImg && s.hint && <p class="hint"><Icon name="info" size={14} />{s.hint}</p>}
+  </div>
+  {isDoc && !s.missing && (
+    <a class="btn btn--outline btn--sm slot__link" href={s.url} {...ext}>Abrir la guía actual <Icon name="external-link" size={16} /><span class="sr-only"> (se abre en otra pestaña)</span></a>
+  )}
+  <details class="slot__more" open={!!err}>
+    <summary class:list={['btn', 'btn--sm', !isDoc && 'btn--block', s.missing ? 'btn--primary' : 'btn--outline']}>
+      <Icon name="upload" size={16} /><span class="when-closed">{s.missing ? `Subir ${noun}` : `Reemplazar ${noun}`}</span><span class="when-open">Cerrar</span>
+      <span class="sr-only"> «{s.label}»</span><Icon name="chevron-down" size={16} class="chev" />
+    </summary>
+    <div class="slot__panel">
+      <form method="post" action="/upload/slot" enctype="multipart/form-data" data-upload data-kind={s.kind} data-label={s.label}>
+        <input type="hidden" name="_csrf" value={csrf} />
+        <input type="hidden" name="slot" value={s.id} />
+        <Dropzone id={`${id}-file`} label={`Elige un archivo para «${s.label}»`} error={err} {...drop} />
+        {isVideo && s.poster && (
+          <div class="field">
+            <p class="field__l">Portada <span class="opt">(opcional)</span></p>
+            <Dropzone id={`${id}-poster`} name="poster" small required={false} label="Portada (opcional)" kind="poster" accept={imgAccept} maxBytes={13 * MB}
+              title="Arrastra la portada aquí" touch="Toca para elegir la portada"
+              req="La imagen que se ve mientras carga el video. Si cambias el video, cambia también la portada para que coincidan. PNG, JPG o WebP, al menos 320 px de ancho."
+              rules={{ 'min-width': 320, format: canConvert ? undefined : 'webp' }} />
+          </div>
+        )}
+        {isImg ? <Compare stage={s.stage} frame={s.frame} current={s.url} /> : <ul class="checks" data-checks hidden></ul>}
+        {isDoc && s.hint && <Alert tone="warn" title={s.hint} fixed />}
+        <p class="consequence">{consequence}</p>
+        <UploadProgress />
+        <p class="hint" data-lock-note hidden>Espera a que termine la subida en curso.</p>
+        <div class="slot__actions">
+          <button class="btn btn--primary btn--sm" type="submit" data-submit>Publicar en la web</button>
+          <button class="btn btn--quiet" type="reset">Cancelar</button>
+        </div>
+      </form>
+      <div class="slot__extra"><Copies item={s} csrf={csrf} /><Tech rows={tech} /></div>
+    </div>
+  </details>
+  <span class="drop-veil" aria-hidden="true"><span>Suelta para reemplazar «{s.label}»</span></span>
+</article>

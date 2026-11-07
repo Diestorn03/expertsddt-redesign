@@ -2,19 +2,24 @@
   "name": "expertsddt-panel",
   "private": true,
   "type": "module",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Content panel: replace site images/videos/PDF and publish the free implant libraries.",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
   "scripts": {
-    "start": "node server.mjs",
-    "test": "node --test test/*.test.mjs"
+    "dev": "astro dev",
+    "build": "astro build",
+    "start": "node dist/server/entry.mjs",
+    "test": "astro build && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "busboy": "^1.6.0"
+    "@astrojs/node": "11.1.11",
+    "@fontsource/poppins": "5.3.0",
+    "astro": "7.3.3",
+    "busboy": "1.6.0"
   },
   "optionalDependencies": {
-    "sharp": "^0.35.5"
+    "sharp": "0.35.5"
   }
 }

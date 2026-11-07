@@ -1,0 +1,36 @@
+---
+// §5.7: in-flow notice painted by the server (results of a POST, login states). `data-flash` carries the tone for the tests.
+// An undo form ([Deshacer], [Volver a la v10]) is built from notice.undo; extra actions go in the default slot.
+import Icon from './Icon.astro';
+interface Confirm { title: string; text: string; ok: string; icon?: string }
+interface Props {
+  tone: 'ok' | 'warn' | 'err' | 'info'; title: string; text?: string; focus?: boolean; fixed?: boolean; id?: string; icon?: string; class?: string;
+  undo?: { action: string; fields: Record<string, string | string[]>; label: string }; csrf?: string | null; confirm?: Confirm;
+}
+const { tone, title, text, focus, fixed, id, undo, csrf, confirm, class: cls } = Astro.props;
+const icon = Astro.props.icon ?? { ok: 'check-circle', warn: 'alert-triangle', err: 'alert-circle', info: 'info' }[tone];
+const m = /^(Listo|Ojo|Publicada, pero revísala):\s*(.*)$/s.exec(title); // bold initial word, never colour alone (§8.7)
+const pairs = undo ? Object.entries(undo.fields).flatMap(([k, v]) => [].concat(v as any).map((x) => [k, String(x)])) : [];
+const hasSlot = Astro.slots.has('default');
+---
+<div class:list={['alert', `alert--${tone}`, cls]} role={fixed ? undefined : tone === 'ok' || tone === 'info' ? 'status' : 'alert'} data-flash={fixed ? undefined : tone}
+  id={id ?? (focus ? 'resultado' : undefined)} tabindex={focus ? '-1' : undefined} autofocus={focus}>
+  <Icon name={icon} size={20} />
+  <div class="alert__body">
+    <p class="alert__t">{m ? <><b>{m[1]}:</b> {m[2]}</> : <b>{title}</b>}</p>
+    {text && <p>{text}</p>}
+    {(undo || hasSlot) && (
+      <div class="alert__act">
+        <slot />
+        {undo && csrf && (
+          <form method="post" action={undo.action} data-confirm={confirm ? '' : undefined} data-confirm-title={confirm?.title}
+            data-confirm-text={confirm?.text} data-confirm-ok={confirm?.ok} data-confirm-icon={confirm?.icon ?? 'rotate-ccw'}>
+            <input type="hidden" name="_csrf" value={csrf} />
+            {pairs.map(([k, v]) => <input type="hidden" name={k} value={v} />)}
+            <button class="btn btn--outline btn--sm" type="submit"><Icon name="rotate-ccw" size={16} />{undo.label}</button>
+          </form>
+        )}
+      </div>
+    )}
+  </div>
+</div>

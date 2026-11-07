@@ -1,0 +1,35 @@
+---
+// §5.21: every published version; any inactive one can be activated again (nothing is deleted).
+import Icon from './Icon.astro';
+import Chip from './Chip.astro';
+import EmptyState from './EmptyState.astro';
+import * as fmt from '../../lib/format.mjs';
+interface Props { lib: any; csrf: string }
+const { lib, csrf } = Astro.props;
+const actual = lib.latest?.version;
+---
+<section class="card versions" aria-labelledby="vers-t">
+  <h3 class="card-t" id="vers-t">Versiones publicadas</h3>
+  <p>¿Algo salió mal? Activa una versión anterior y la web la ofrecerá al instante. No se borra ninguna.</p>
+  {lib.versions.length === 0 ? <EmptyState icon="package" title="Las versiones que publiques aparecerán aquí." /> : (
+    <>
+      <div class="ver ver--head" aria-hidden="true"><span>Versión</span><span>Datos del</span><span>Tamaño</span><span>Archivos</span><span></span></div>
+      <ol class="vlist">
+        {lib.versions.map((v) => (
+          <li class:list={['ver', v.active && 'is-active']}>
+            <b class="ver__v">{v.version}</b><span class="ver__meta"><span class="ver__d">datos del {fmt.dataDate(v.dataDate, 'short')}</span>
+            <span class="ver__s">{fmt.size(v.bytes)}</span><span class="ver__n">{fmt.files(v.files ?? 0)}</span></span>
+            <span class="ver__act">{v.active ? <Chip tone="ok" icon="check">Activa</Chip> : (
+              <form method="post" action="/libraries/activate" data-confirm data-confirm-icon="rotate-ccw" data-confirm-title={`¿Volver a la versión ${v.version}?`}
+                data-confirm-text={actual ? `Los doctores descargarán la ${v.version} (datos del ${fmt.dataDate(v.dataDate)}) en lugar de la ${actual}. La ${actual} no se borra: puedes volver a ella cuando quieras.` : `Los doctores descargarán la ${v.version} (datos del ${fmt.dataDate(v.dataDate)}).`}
+                data-confirm-ok={`Sí, activar la ${v.version}`}>
+                <input type="hidden" name="_csrf" value={csrf} /><input type="hidden" name="file" value={v.file} />
+                <button class="btn btn--outline btn--sm" type="submit"><Icon name="rotate-ccw" size={16} />Activar la {v.version}</button>
+              </form>
+            )}</span>
+          </li>
+        ))}
+      </ol>
+    </>
+  )}
+</section>

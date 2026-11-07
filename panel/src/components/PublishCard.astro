@@ -1,0 +1,46 @@
+---
+// §5.20: publish a new library version. Without JS: plain multipart post, server-proposed number and today's Florida date.
+// With JS: live «Así se verá en la web» line, duplicate check, confirm dialog, XHR progress.
+import Icon from './Icon.astro';
+import Field from './Field.astro';
+import Dropzone from './Dropzone.astro';
+import UploadProgress from './UploadProgress.astro';
+interface Props { lib: any; csrf: string; flash?: any; libMaxMb: number }
+const { lib, csrf, flash, libMaxMb } = Astro.props;
+const MB = 1048576;
+const err = flash?.type === 'err';
+const keep = err ? flash.keep : null;
+const version = String(keep?.version ?? lib.nextVersion).replace(/^v/i, '');
+const actual = lib.latest?.version ?? '';
+const verErr = err && ['lib_dup', 'lib_meta'].includes(flash.key) ? flash.text : undefined;
+---
+<form class="card pubcard" method="post" action="/upload/libraries" enctype="multipart/form-data" aria-labelledby="pub-t"
+  data-upload data-kind="library" data-label="librerías" data-version-form data-existing={lib.existing.join(',')} data-next={lib.nextVersion}
+  data-tpl="Versión {v} · actualizada el {d} · {s} MB" data-actual={actual}
+  data-confirm data-confirm-icon="package" data-confirm-title="¿Publicar la versión {v}?"
+  data-confirm-text={actual ? 'Los doctores empezarán a descargar este archivo de inmediato. La {actual} queda guardada y puedes volver a ella con un clic.' : 'La página de librerías empezará a ofrecer esta versión de inmediato.'}
+  data-confirm-detail="{v} · actualizada el {d} · {s} MB · {archivo}" data-confirm-ok="Sí, publicar la {v}">
+  <input type="hidden" name="_csrf" value={csrf} />
+  <h3 class="card-t" id="pub-t">Publicar una versión nueva</h3>
+  <p>La versión actual queda guardada por si necesitas volver a ella.</p>
+  <ol class="steps">
+    <li><span class="step-n" aria-hidden="true">01</span><div class="step__b"><h4>Elige el archivo .zip</h4>
+      <Dropzone id="lib-file" label="Elige el archivo .zip" kind="library" accept=".zip,application/zip,application/x-zip-compressed" maxBytes={libMaxMb * MB}
+        title="Arrastra aquí el .zip" touch="Toca para elegir el .zip" req={verErr ? `Vuelve a elegir el archivo .zip · hasta ${libMaxMb} MB` : `Solo .zip · hasta ${libMaxMb} MB`}
+        error={err && !verErr ? 'Vuelve a elegir el archivo .zip.' : undefined} /></div></li>
+    <li><span class="step-n" aria-hidden="true">02</span><div class="step__b"><h4>Ponle número y fecha</h4>
+      <div class="pair">
+        <Field label="Número de versión" name="version" id="lib-version" affix="v" value={version} inputmode="numeric" pattern="v?[0-9]{1,3}" required autocomplete="off"
+          hint={lib.existing.length ? `La siguiente libre es la ${lib.nextVersion}. Usa siempre un número nuevo.` : 'Solo números, por ejemplo 1.'} error={verErr} />
+        <Field label="Fecha de los datos" name="dataDate" id="lib-date" type="date" value={keep?.dataDate || lib.today} max={lib.today} required
+          hint="El día en que se actualizaron los archivos. Los doctores la ven junto a la versión." />
+      </div></div></li>
+    <li><span class="step-n" aria-hidden="true">03</span><div class="step__b"><h4>Revisa y publica</h4>
+      <div class="well preview" data-preview-line hidden><span class="micro">Así se verá en la web</span><p></p></div>
+      <p class="consequence" data-js-text={actual ? 'Al publicar, los doctores empiezan a descargar la {v} de inmediato. La {actual} queda guardada y puedes volver a ella con un clic.' : 'Al publicar, los doctores empiezan a descargar la {v} de inmediato.'}>Al publicar, los doctores empiezan a descargar esta versión de inmediato. La actual queda guardada y puedes volver a ella con un clic.</p>
+      <UploadProgress />
+      <p class="hint" data-lock-note hidden>Espera a que termine la subida en curso.</p>
+      <button class="btn btn--primary btn--block" type="submit" data-submit><span data-submit-text>Publicar esta versión</span> <Icon name="arrow-right" size={18} /></button>
+      <p class="hint"><Icon name="info" size={14} />Un archivo grande puede tardar varios minutos en subir: no cierres esta pestaña.</p></div></li>
+  </ol>
+</form>

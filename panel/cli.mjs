@@ -1,6 +1,6 @@
 // Account management (no sign-up page exists): node cli.mjs add-user|set-password|revoke|list [email] [name]
 // Needs DATA_DIR. Prints the one-time password and the TOTP secret; store them in a password manager.
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { hashPassword, newTotpSecret, totpUri } from './lib/auth.mjs';
@@ -9,7 +9,11 @@ const dir = process.env.DATA_DIR;
 if (!dir) { console.error('Set DATA_DIR (where users.json lives).'); process.exit(1); }
 const file = join(dir, 'users.json');
 const load = async () => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return []; } };
-const save = async (u) => { await mkdir(dir, { recursive: true }); await writeFile(file, JSON.stringify(u, null, 2) + '\n', { mode: 0o600 }); };
+const save = async (u) => { // tmp + rename: the running panel never reads a half-written users.json
+  await mkdir(dir, { recursive: true });
+  const tmp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
+  await writeFile(tmp, JSON.stringify(u, null, 2) + '\n', { mode: 0o600 }); await rename(tmp, file);
+};
 const strong = () => randomBytes(15).toString('base64url');
 
 const [cmd, emailArg, ...nameParts] = process.argv.slice(2);

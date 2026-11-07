@@ -1,0 +1,17 @@
+---
+// §5.11: labelled input with help and error lines wired through aria-describedby. Extra props go to the <input>.
+import Icon from './Icon.astro';
+interface Props { label: string; name: string; id: string; hint?: string; error?: string; affix?: string; variant?: 'code' | 'password'; [k: string]: any }
+const { label, name, id, hint, error, affix, variant, ...rest } = Astro.props;
+const describedBy = [hint && `${id}-h`, `${id}-e`, rest['aria-describedby']].filter(Boolean).join(' ');
+const input = { id, name, ...rest, 'aria-describedby': describedBy, 'aria-invalid': error ? 'true' : undefined, class: variant === 'code' ? 'code' : undefined };
+---
+<div class:list={['field', variant && `field--${variant}`]}>
+  <label for={id}>{label}</label>
+  {affix ? <span class="field--affix"><span aria-hidden="true">{affix}</span><input {...input} /></span>
+    : variant === 'password' ? <span class="field__pw"><input {...input} /><button type="button" class="btn btn--quiet" data-reveal-for={id} hidden aria-label="Mostrar contraseña">Mostrar</button></span>
+    : <input {...input} />}
+  {variant === 'password' && <span class="hint hint--warn" data-caps-for={id} hidden><Icon name="lock" size={14} />Bloq Mayús está activado.</span>}
+  {hint && <span class="hint" id={`${id}-h`}>{hint}</span>}
+  <span class="field__error" id={`${id}-e`} hidden={!error}><Icon name="alert-circle" size={14} /><span class="sr-only">Error: </span><span data-error-text>{error}</span></span>
+</div>

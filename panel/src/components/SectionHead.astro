@@ -1,0 +1,13 @@
+---
+// §5.6: numbered section of «Contenido».
+interface Props { id: string; n: string; eyebrow: string; title: string }
+const { id, n, eyebrow, title } = Astro.props;
+---
+<section id={id} class="psec" aria-labelledby={`${id}-t`}>
+  <div class="wrap">
+    <header class="shead"><span class="snum" aria-hidden="true">{n}</span>
+      <div class="stack shead__t"><span class="eyebrow">{eyebrow}</span>
+        <h2 class="h-lg" id={`${id}-t`}>{title}</h2><slot name="intro" /></div></header>
+    <slot />
+  </div>
+</section>

@@ -1,0 +1,18 @@
+---
+// §5.5: the navy band of the site's inner pages, with one glow (top right) and the 64 px grid.
+// Slots: default = the h1 content, "lead", "nav" (jump pills or history filters), "aside" (the glass summary, only on /).
+interface Props { eyebrow: string; compact?: boolean }
+const { eyebrow, compact } = Astro.props;
+---
+<section class:list={['page-hero', 'phero', 'on-navy', compact && 'phero--compact']}>
+  <div class="grid-bg" aria-hidden="true"></div>
+  <div class="wrap phero__in">
+    <div class="stack">
+      <span class="eyebrow">{eyebrow}</span>
+      <h1 class="h-xl" id="page-t"><slot /></h1>
+      <p class="lead"><slot name="lead" /></p>
+      <slot name="nav" />
+    </div>
+    <slot name="aside" />
+  </div>
+</section>

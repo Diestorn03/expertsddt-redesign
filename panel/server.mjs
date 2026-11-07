@@ -1,61 +1,34 @@
-// Legacy plain-HTML server on top of lib/panel.mjs (no client-side JS). Kept until the Astro UI replaces it (DESIGN §9.1).
+// The production server. astro.config.mjs copies this file to dist/server/entry.mjs at build time (Astro's own bundle is
+// dist/server/app.mjs), so the relative paths below are relative to dist/server/. It exists for what the adapter's
+// standalone server cannot do (DESIGN §9.10, plan B):
+//   - the configuration is checked, and the temporary files of cut uploads swept, BEFORE listening: a bad environment
+//     exits with a clear message (hPanel shows the app as failed) instead of answering 500 to every request;
+//   - Node's 300 s requestTimeout is off, so a 300 MB zip over a slow uplink is not cut with a 408 (headers still have
+//     60 s, and a socket that sends nothing for 2 minutes is closed);
+//   - methods the app does not use (TRACE...) get a 405 with the hardened headers, not the adapter's bare 500;
+//   - the socket address is passed on in X-Panel-Peer (overwritten on every request), for the throttle and the log.
+// HOST defaults to 127.0.0.1 and PORT to 8080 (Hostinger sets PORT).
 import http from 'node:http';
-import { fileURLToPath } from 'node:url';
-import { createPanel, configFromEnv } from './lib/panel.mjs';
-import { loginPage, dashboard, historyPage } from './lib/ui.mjs';
+import { createPanel, configFromEnv } from '../../lib/panel.mjs';
 
-export async function createApp(cfg) {
-  const panel = await createPanel(cfg);
-  const { siteUrl } = panel.config;
-  // ui.mjs uses an inline <style>, so this page keeps its old policy: still no scripts at all (default-src 'none')
-  const headers = { ...panel.securityHeaders(), 'Content-Security-Policy': `default-src 'none'; img-src 'self' ${siteUrl} data:; media-src ${siteUrl}; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'` };
-
-  const page = (r, g) => {
-    const d = r.data ?? {};
-    if (r.view === 'login') return loginPage(d.flash ?? g.flash, d.email);
-    if (r.view === 'dashboard') return dashboard({ user: d.user.email, csrf: d.csrf, flash: g.flash, siteUrl, items: d.slots, libs: { latest: d.libraries.latest, versions: d.libraries.versions } });
-    if (r.view === 'history') return historyPage({ user: d.user.email, csrf: d.csrf, rows: d.groups.flatMap((x) => x.items.map((i) => ({ ts: i.ts, user: i.who ?? '', action: i.text, detail: i.detail }))) });
-    return { 403: 'Forbidden', 404: 'No encontrado' }[r.status] ?? '';
-  };
-
-  function send(res, r, g = {}) {
-    const cookies = [...(g.setCookies ?? []), ...(r.setCookies ?? [])];
-    if (cookies.length) res.setHeader('Set-Cookie', cookies);
-    if (r.location) res.writeHead(r.status, { Location: r.location }).end();
-    else if (r.json) res.writeHead(r.status, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(r.json));
-    else if (r.view) res.writeHead(r.status, { 'Content-Type': 'text/html; charset=utf-8' }).end(page(r, g));
-    else res.writeHead(r.status).end();
-  }
-
-  async function handle(req, res) {
-    for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
-    const ac = new AbortController();
-    res.on('close', () => { if (!res.writableFinished) ac.abort(); }); // the client went away mid-request
-    try {
-      const url = new URL(req.url, 'http://panel');
-      const g = await panel.guard({ method: req.method, path: url.pathname, headers: req.headers });
-      if (g.response) return send(res, g.response);
-      const io = { session: g.session, headers: req.headers, body: req, signal: ac.signal, ip: panel.clientIp(req.headers, req.socket.remoteAddress) };
-      const route = `${req.method} ${url.pathname}`;
-      let r;
-      if (route === 'GET /login') r = { status: 200, view: 'login', data: {} };
-      else if (route === 'POST /login') r = await panel.login(io);
-      else if (route === 'GET /') r = { status: 200, view: 'dashboard', data: await panel.dashboard(g.session) };
-      else if (route === 'GET /history') r = { status: 200, view: 'history', data: await panel.history(g.session, url.searchParams.get('tipo')) };
-      else {
-        const op = { 'POST /upload/slot': panel.uploadSlot, 'POST /upload/libraries': panel.uploadLibrary, 'POST /libraries/activate': panel.activate, 'POST /restore': panel.restore, 'POST /logout': panel.logout }[route];
-        r = op ? await op(io) : { status: 404, view: '404' };
-      }
-      send(res, r, g);
-    } catch (e) {
-      console.error('panel error:', e?.message);
-      if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }).end('Error interno');
-    }
-  }
-  return { handle, audit: panel.audit, panel };
+let panel;
+try {
+  panel = await createPanel({ ...configFromEnv(process.env), slotsPath: new URL('../../slots.json', import.meta.url) });
+} catch (e) {
+  console.error(`panel: cannot start: ${e.message}`);
+  process.exit(1);
 }
+globalThis.__expertsddtPanel = panel;
+process.env.ASTRO_NODE_AUTOSTART = 'disabled';
+const { handler } = await import('./app.mjs');
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const app = await createApp(configFromEnv(process.env));
-  http.createServer(app.handle).listen(Number(process.env.PORT) || 3000, () => console.log('panel listening'));
-}
+const host = process.env.HOST || '127.0.0.1', port = Number(process.env.PORT) || 8080;
+const hardened = { ...panel.securityHeaders(), 'Content-Type': 'text/plain; charset=utf-8' };
+const server = http.createServer({ requestTimeout: 0, headersTimeout: 60_000, keepAliveTimeout: 65_000 }, (req, res) => {
+  if (!['GET', 'HEAD', 'POST'].includes(req.method)) { res.writeHead(405, { ...hardened, Allow: 'GET, HEAD, POST' }); res.end('Method Not Allowed'); return; }
+  req.headers['x-panel-peer'] = req.socket.remoteAddress ?? '';
+  handler(req, res);
+});
+server.timeout = 120_000; // inactivity, not total time
+server.on('error', (e) => { console.error(`panel: ${e.message}`); process.exit(1); });
+server.listen(port, host, () => console.log(`Server listening on http://${host.includes(':') ? `[${host}]` : host}:${port}`));

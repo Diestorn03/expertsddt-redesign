@@ -1,0 +1,7 @@
+---
+// §5.4: hidden until the bundle runs; without JS the panel stays light.
+import Icon from './Icon.astro';
+---
+<button class="theme-toggle tbtn" type="button" data-theme-toggle hidden aria-label="Cambiar a modo oscuro">
+  <Icon name="sun" size={18} class="sun" /><Icon name="moon" size={18} class="moon" />
+</button>

@@ -1,0 +1,122 @@
+---
+// §4.2–4.7: «Contenido». Band + 01 Librerías, 02 Documentos, 03 Imágenes, 04 Videos and «Bueno saber». The notice of the last POST is
+// painted where it belongs: inside its card, at the top of 01, or under the band.
+import Panel from '../layouts/Panel.astro';
+import Hero from '../components/Hero.astro';
+import SectionHead from '../components/SectionHead.astro';
+import Alert from '../components/Alert.astro';
+import Icon from '../components/Icon.astro';
+import SlotCard from '../components/SlotCard.astro';
+import VersionCard from '../components/VersionCard.astro';
+import PublishCard from '../components/PublishCard.astro';
+import VersionList from '../components/VersionList.astro';
+import InfoList from '../components/InfoList.astro';
+import { panel } from '../panel';
+import * as fmt from '../../lib/format.mjs';
+
+const { session, flash } = Astro.locals;
+const d = await panel.dashboard(session);
+const L = d.libraries;
+const ids = new Set(d.slots.map((s) => s.id));
+const forSlot = (id: string) => (flash?.slot === id ? flash : null);
+const libFlash = flash?.slot === 'libraries' ? flash : null;
+const pageFlash = flash && !libFlash && !ids.has(flash.slot) ? flash : null;
+const of = (kind: string, group?: string) => d.slots.filter((s) => s.kind === kind && (!group || s.group === group));
+const labelOf = (id?: string) => d.slots.find((s) => s.id === id)?.label;
+const name = d.user.name;
+
+const total = d.slots.length, present = total - d.missing.length;
+const filesLine = d.missing.length === 0 ? `${present} de ${total}` : d.missing.length === 1 ? `${present} de ${total} · falta «${d.missing[0]}»` : `${present} de ${total} · faltan ${d.missing.length}`;
+const pill = (k: string) => (d.counts[k].missing ? { n: `${d.counts[k].missing} ${d.counts[k].missing === 1 ? 'falta' : 'faltan'}`, warn: true } : { n: String(d.counts[k].total), warn: false });
+const jumps = [['librerias', '01', 'Librerías', null], ['documentos', '02', 'Documentos', null], ['imagenes', '03', 'Imágenes', pill('image')], ['videos', '04', 'Videos', pill('video')]] as const;
+
+const imgIntro = d.canConvert
+  ? 'Sube una foto PNG, JPG o WebP: el panel la convierte al formato de la web, la ajusta al tamaño correcto y le quita los datos ocultos (como la ubicación GPS). La foto anterior queda guardada.'
+  : `Sube una imagen ${[...new Set(of('image').map((s) => s.format))].join(' o ')} de al menos ${Math.min(...of('image').map((s) => s.minWidth))} px de ancho. La anterior queda guardada.`;
+const undoVersion = libFlash?.undo ? L.versions.find((v) => v.file === libFlash.undo.fields.file) : null;
+const activateConfirm = undoVersion && {
+  title: `¿Volver a la versión ${undoVersion.version}?`, ok: `Sí, activar la ${undoVersion.version}`,
+  text: `Los doctores descargarán la ${undoVersion.version} (datos del ${fmt.dataDate(undoVersion.dataDate)}) en lugar de la ${L.latest?.version}. La ${L.latest?.version} no se borra: puedes volver a ella cuando quieras.`,
+};
+const ext = { target: '_blank', rel: 'noopener' };
+const groups = [
+  ['paginas', 'Páginas del sitio', null],
+  ['casos', 'Casos antes y después', 'Las dos fotos de cada caso deben tener el mismo encuadre y proporción para que el comparador de la web funcione.'],
+  ['redes', 'Al compartir en redes', 'Es la imagen que aparece cuando alguien comparte expertsddt.com por WhatsApp, Facebook o LinkedIn. No se ve dentro de la web.'],
+] as const;
+---
+<Panel title="Contenido" user={d.user} csrf={d.csrf} current="home">
+  <Hero eyebrow="Panel de contenido">
+    {name ? <>Hola, <span class="accent">{name}</span>.</> : 'Hola.'}
+    <Fragment slot="lead">Aquí cambias las fotos, los videos y la guía PDF de expertsddt.com, y publicas las librerías Exocad. Cada cambio sale en la web al terminar la subida y guarda una copia del archivo anterior.</Fragment>
+    <nav class="jump" aria-label="Secciones del panel" slot="nav">
+      {jumps.map(([id, n, label, c]) => <a href={`#${id}`}><span class="jump__n">{n}</span>{label}{c && <b class:list={[c.warn && 'is-warn']}>{c.n}</b>}</a>)}
+    </nav>
+    <aside class="glass glance" aria-label="Resumen" slot="aside">
+      <dl>
+        <div><dt class="micro">Librería activa</dt><dd>{L.latest ? `${L.latest.version} · datos del ${fmt.dataDate(L.latest.dataDate, 'short')}` : 'Ninguna todavía'}</dd></div>
+        <div><dt class="micro">Último cambio</dt>{d.lastChange
+          ? <dd>«{d.lastChange.title}»<span>{d.lastChange.who} · {d.lastChange.rel}</span></dd> : <dd>Sin cambios todavía</dd>}</div>
+        <div><dt class="micro">Archivos en la web</dt><dd>{d.missing.length > 0 && <Icon name="alert-triangle" size={16} class="glance__warn" />}{filesLine}</dd></div>
+      </dl>
+    </aside>
+  </Hero>
+
+  {pageFlash && <div class="wrap page-alert"><Alert tone={pageFlash.type} title={pageFlash.title} text={pageFlash.text} focus /></div>}
+
+  <SectionHead id="librerias" n="01" eyebrow="Librerías Exocad gratuitas" title="Librerías de implantes">
+    <p slot="intro">Lo que publiques aquí es lo que descargan los doctores en expertsddt.com/exocad-libraries/. El cambio es inmediato.</p>
+    {libFlash && (
+      <Alert tone={libFlash.type} title={libFlash.title} text={libFlash.text} focus class="sec-alert" undo={libFlash.undo} csrf={d.csrf}
+        confirm={activateConfirm ? { ...activateConfirm, icon: 'rotate-ccw' } : undefined}>
+        {libFlash.key === 'ok_publish' && <a class="btn btn--quiet" href={L.pageUrl} {...ext}>Ver página pública <Icon name="external-link" size={14} /><span class="sr-only"> (se abre en otra pestaña)</span></a>}
+      </Alert>
+    )}
+    <div class="libs">
+      <VersionCard lib={L} />
+      <PublishCard lib={L} csrf={d.csrf} flash={libFlash} libMaxMb={d.libMaxMb} />
+    </div>
+    <VersionList lib={L} csrf={d.csrf} />
+  </SectionHead>
+
+  <SectionHead id="documentos" n="02" eyebrow="Documentos" title="Guía de servicios y tarifas">
+    <p slot="intro">Es el PDF que se descarga en la página Servicios con el botón «Descargar guía de servicios». El mismo archivo sirve a la web en inglés y en español.</p>
+    {of('document').map((s) => <SlotCard item={s} csrf={d.csrf} flash={forSlot(s.id)} canConvert={d.canConvert} />)}
+  </SectionHead>
+
+  <SectionHead id="imagenes" n="03" eyebrow="Imágenes" title="Fotos del sitio">
+    <Fragment slot="intro"><p>{imgIntro}</p>
+      <p class="hint"><Icon name="info" size={14} />Las fotos y precios de los productos de la tienda (shop.expertsddt.com) se cambian en Shopify, no aquí.</p></Fragment>
+    {groups.map(([g, title, help]) => {
+      const list = of('image', g);
+      return list.length > 0 && (
+        <div class="sgroup-wrap">
+          <h3 class="sgroup">{title} · {list.length}</h3>
+          {help && <p class="sgroup__help">{help}</p>}
+          <div class:list={['slots', g === 'casos' && 'slots--pairs', g === 'redes' && 'slots--og']}>
+            {list.map((s) => <SlotCard item={s} csrf={d.csrf} flash={forSlot(s.id)} canConvert={d.canConvert} level={4} pairLabel={labelOf(s.pair)} />)}
+          </div>
+        </div>
+      );
+    })}
+  </SectionHead>
+
+  <SectionHead id="videos" n="04" eyebrow="Videos" title="Videos del sitio">
+    <p slot="intro">Sube un MP4 de hasta 12 MB. En la web se reproducen solos, sin sonido y en bucle: deben entenderse sin audio.</p>
+    <div class="slots slots--video">
+      {of('video').map((s) => <SlotCard item={s} csrf={d.csrf} flash={forSlot(s.id)} canConvert={d.canConvert} />)}
+    </div>
+  </SectionHead>
+
+  <section id="bueno-saber" class="psec psec--last" aria-labelledby="bueno-saber-t">
+    <div class="wrap"><div class="card info-card">
+      <h2 id="bueno-saber-t">Bueno saber</h2>
+      <InfoList items={[
+        'Los textos de la web no se cambian aquí. Pídeselos a Diego o a David.',
+        'Las fotos y precios de los productos de la tienda (shop.expertsddt.com) se cambian en Shopify.',
+        'Si algo no quedó bien, abre ese archivo y usa «Deshacer» o «Versiones anteriores».',
+        'Si todavía ves lo anterior en la web, recarga la página: algunos navegadores guardan las imágenes hasta un día.',
+      ]} />
+    </div></div>
+  </section>
+</Panel>

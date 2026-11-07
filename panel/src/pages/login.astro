@@ -1,0 +1,54 @@
+---
+// §4.1: GET shows the form (with the expiry/logout notice, if any); POST checks password + TOTP. A failure (401/429) paints the page
+// again with the email kept, never a redirect; success is a 303 to / with the session cookie.
+import Auth from '../layouts/Auth.astro';
+import Alert from '../components/Alert.astro';
+import Field from '../components/Field.astro';
+import Icon from '../components/Icon.astro';
+import { panel, clientIp } from '../panel';
+import { toResponse } from '../../lib/panel.mjs';
+
+let email = '';
+let flash = Astro.locals.flash;
+if (Astro.request.method === 'POST') {
+  const r = await panel.login({ body: Astro.request.body, ip: clientIp(Astro) });
+  if (r.view !== 'login') return toResponse(r);
+  Astro.response.status = r.status;
+  email = r.data.email; flash = r.data.flash;
+}
+const key = flash?.key;
+const focus = key === 'login_401' ? 'password' : key === 'login_429' ? 'alert' : 'email';
+const benefits = [
+  ['shield-check', 'Verificación en dos pasos', 'Contraseña y código de tu teléfono en cada acceso.'],
+  ['rotate-ccw', 'Siempre reversible', 'Cada archivo que reemplazas queda guardado.'],
+  ['clock', 'Historial', 'Cada cambio queda anotado con fecha y autor.'],
+];
+---
+<Auth title="Iniciar sesión" flash={flash}>
+  <div class="login">
+    <div class="login__brand stack">
+      <span class="eyebrow">Panel de contenido</span>
+      <p class="h-xl">Tu sitio, <span class="accent">siempre al día</span>.</p>
+      <p class="lead">Cambia fotos, videos y documentos de expertsddt.com y publica las librerías Exocad, sin tocar código.</p>
+      <ul class="glass benefits">
+        {benefits.map(([icon, t, x]) => <li><span class="tile tile--sm"><Icon name={icon} size={18} /></span><span><b>{t}</b><span>{x}</span></span></li>)}
+      </ul>
+    </div>
+    <div class="auth-card">
+      <h1>Iniciar sesión</h1>
+      <p class="auth-card__sub">Solo para el equipo de Experts DDT.</p>
+      {flash && <Alert tone={flash.type} title={flash.title} text={flash.text} id="login-alert" focus={focus === 'alert'} icon={key === 'login_429' ? 'lock' : undefined} />}
+      <form class="auth-form" method="post" action="/login" data-login>
+        <Field label="Correo electrónico" name="email" id="email" type="email" value={email} autocomplete="username" required autofocus={focus === 'email'} />
+        <Field label="Contraseña" name="password" id="password" type="password" variant="password" autocomplete="current-password" required
+          autofocus={focus === 'password'} aria-describedby={key === 'login_401' ? 'login-alert' : undefined} />
+        <Field label="Código de verificación" name="code" id="code" type="text" variant="code" inputmode="numeric" autocomplete="one-time-code"
+          pattern="[0-9 ]{6,7}" required data-otp
+          hint="Los 6 números de «ExpertsDDT Panel» en tu app de autenticación (Google Authenticator, Microsoft Authenticator o Authy). Cambian cada 30 segundos." />
+        <button class="btn btn--primary btn--block btn--lg" type="submit" data-submit><span data-submit-text>Entrar al panel</span><Icon name="arrow-right" size={18} /></button>
+      </form>
+      <p class="hint">¿No tienes cuenta o cambiaste de teléfono? Las cuentas las crea el equipo técnico: escríbele a Diego o a David.</p>
+    </div>
+    <p class="login__mini">Dos pasos · Reversible · Historial</p>
+  </div>
+</Auth>

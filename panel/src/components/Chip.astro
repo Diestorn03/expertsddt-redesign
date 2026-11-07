@@ -1,0 +1,7 @@
+---
+// §5.8: a status word with its icon, never colour alone.
+import Icon from './Icon.astro';
+interface Props { tone?: 'ok' | 'warn' | 'neutral' | 'solid-ok' | 'solid-warn' | 'navy' | 'navy-warn'; icon?: string; class?: string }
+const { tone = 'neutral', icon, class: cls } = Astro.props;
+---
+<span class:list={['chip', `chip--${tone}`, cls]}>{tone === 'navy' ? <span class="chip__dot" aria-hidden="true" /> : icon && <Icon name={icon} size={12} />}<slot /></span>
