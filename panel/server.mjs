@@ -40,7 +40,7 @@ export async function createApp(cfg) {
 
   function headers(res) {
     res.setHeader('Content-Security-Policy', `default-src 'none'; img-src 'self' ${siteUrl} data:; media-src ${siteUrl}; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`);
-    res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Referrer-Policy', 'same-origin'); // 'no-referrer' makes browsers send Origin: null on form posts, which the origin check would reject
     res.setHeader('Cache-Control', 'no-store'); res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     if (cfg.cookieSecure !== false) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   }

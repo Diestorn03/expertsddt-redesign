@@ -139,6 +139,14 @@ test('uploads without the CSRF token are refused and change nothing', async () =
   assert.deepEqual(await readFile(join(dirs.site, 'img', 'portal-laptop.webp')), before);
 });
 
+test('browsers send their own origin on form posts: it must be accepted, while null and foreign origins are not', async () => {
+  const f = (origin) => call('/login', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'email=a@b.c&password=x&code=000000' });
+  assert.notEqual((await f(base)).status, 403); // reaches the credential check (401), not the origin check
+  assert.equal((await f('null')).status, 403);
+  assert.equal((await f('https://evil.example')).status, 403);
+  assert.equal((await call('/login')).headers.get('referrer-policy'), 'same-origin');
+});
+
 test('a foreign Origin is rejected', async () => {
   const r = await call('/logout', { method: 'POST', headers: { Origin: 'https://evil.example', 'Content-Type': 'application/x-www-form-urlencoded' }, body: '_csrf=x' });
   assert.equal(r.status, 403);
