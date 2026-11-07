@@ -278,7 +278,7 @@ function initLit() {
   gsap.utils.toArray('[data-lit]').forEach((el) => {
     const split = new SplitText(el, { type: 'words', aria: 'none', wordsClass: 'lit-word' });
     el.style.visibility = 'visible';
-    gsap.fromTo(split.words, { opacity: .6 }, { opacity: 1, stagger: .02, ease: 'none', scrollTrigger: { trigger: el, start: 'top 78%', end: 'bottom 45%', scrub: .6 } });
+    gsap.fromTo(split.words, { opacity: .66 }, { opacity: 1, stagger: .02, ease: 'none', scrollTrigger: { trigger: el, start: 'top 78%', end: 'bottom 45%', scrub: .6 } });
   });
 }
 
