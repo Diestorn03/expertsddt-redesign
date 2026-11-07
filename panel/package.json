@@ -1,0 +1,20 @@
+{
+  "name": "expertsddt-panel",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Content panel: replace site images/videos/PDF and publish the free implant libraries.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.35.5"
+  }
+}

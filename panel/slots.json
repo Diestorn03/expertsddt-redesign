@@ -1,0 +1,31 @@
+{
+  "images": [
+    { "id": "hero-laptop", "path": "img/portal-laptop.webp", "label": "Inicio · Laptop del Doctor Portal", "minWidth": 800, "maxWidth": 1800 },
+    { "id": "design-services", "path": "img/design-services.webp", "label": "Inicio · Servicios de diseño", "minWidth": 800, "maxWidth": 1800 },
+    { "id": "facial-scan", "path": "img/facial-scan.webp", "label": "Inicio · Escáner facial", "minWidth": 800, "maxWidth": 1800 },
+    { "id": "fernando", "path": "img/fernando.webp", "label": "Inicio · Foto de Fernando (About us)", "minWidth": 700, "maxWidth": 1600 },
+    { "id": "scanner-front", "path": "img/scanner-front.webp", "label": "Inicio · Escáner Experts DDT (frente)", "minWidth": 400, "maxWidth": 1200 },
+    { "id": "training-main", "path": "img/training-main.webp", "label": "Inicio · Capacitación", "minWidth": 800, "maxWidth": 1800 },
+    { "id": "team", "path": "img/team.webp", "label": "Inicio y Servicios · Foto del equipo", "minWidth": 800, "maxWidth": 1800 },
+    { "id": "lib-occlusion", "path": "img/lib-occlusion.webp", "label": "Inicio y Tienda · Librería en oclusión", "minWidth": 600, "maxWidth": 1600 },
+    { "id": "lib-gingiva", "path": "img/lib-gingiva.webp", "label": "Inicio · Librería con encía virtual", "minWidth": 600, "maxWidth": 1600 },
+    { "id": "lib-natural", "path": "img/lib-natural.webp", "label": "Tienda · Librería natural", "minWidth": 600, "maxWidth": 1600 },
+    { "id": "smile-a-before", "path": "img/smile-a-before.webp", "label": "Antes/después A · Antes", "minWidth": 600, "maxWidth": 1600 },
+    { "id": "smile-a-after", "path": "img/smile-a-after.webp", "label": "Antes/después A · Después", "minWidth": 600, "maxWidth": 1600 },
+    { "id": "smile-b-before", "path": "img/smile-b-before.webp", "label": "Antes/después B · Antes", "minWidth": 600, "maxWidth": 1600 },
+    { "id": "smile-b-after", "path": "img/smile-b-after.webp", "label": "Antes/después B · Después", "minWidth": 600, "maxWidth": 1600 },
+    { "id": "og", "path": "og.jpg", "label": "Imagen al compartir en redes (1200×630)", "minWidth": 1200, "maxWidth": 1200 }
+  ],
+  "videos": [
+    { "id": "v-smile-design", "path": "video/smile-design.mp4", "label": "Inicio · Video de diseño de sonrisa", "maxBytes": 12582912 },
+    { "id": "v-smile-preview", "path": "video/smile-preview.mp4", "poster": "video/smile-preview.webp", "label": "Inicio · Simulación de sonrisa", "maxBytes": 12582912 },
+    { "id": "v-scan-ui", "path": "video/scan-ui.mp4", "poster": "video/scan-ui.webp", "label": "Inicio y Servicios · Software del escáner facial", "maxBytes": 12582912 },
+    { "id": "v-clinic-scan", "path": "video/clinic-scan.mp4", "poster": "video/clinic-scan.webp", "label": "Servicios · Escaneo intraoral en clínica", "maxBytes": 12582912 },
+    { "id": "v-exocad-smile", "path": "video/exocad-smile.mp4", "poster": "video/exocad-smile.webp", "label": "Servicios · Diseño de sonrisa en Exocad", "maxBytes": 12582912 },
+    { "id": "v-exocad-denture", "path": "video/exocad-denture.mp4", "poster": "video/exocad-denture.webp", "label": "Cursos y Tienda · Prótesis en Exocad", "maxBytes": 12582912 }
+  ],
+  "documents": [
+    { "id": "guide-pdf", "path": "downloads/services-and-fees-experts-ddt.pdf", "label": "Servicios · Guía de servicios y tarifas (PDF)", "maxBytes": 10485760 }
+  ],
+  "posterSize": { "maxBytes": 1048576, "maxWidth": 1280 }
+}
