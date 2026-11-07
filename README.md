@@ -21,7 +21,7 @@ El workflow define `PAGES_BASE=/<repo>` y `SITE_URL=https://<usuario>.github.io`
 
 ### Hostinger / dominio final
 
-`npm run build` sin variables produce `/dist` con rutas desde la raíz y `site = https://expertsddt.com`. Basta subir la carpeta al hosting. `vercel.json` ya incluye redirecciones y cabeceras por si se usa Vercel.
+`npm run build` sin variables produce `/dist` con rutas desde la raíz y `site = https://expertsddt.com`. Basta subir la carpeta al hosting. `public/.htaccess` (se copia a `/dist`) ya trae HTTPS, redirecciones de las URLs antiguas de WordPress, caché y cabeceras de seguridad para Hostinger; `npm run test:redirects` las verifica.
 
 ## Integraciones (variables de entorno)
 

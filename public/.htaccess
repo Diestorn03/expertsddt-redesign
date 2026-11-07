@@ -1,0 +1,93 @@
+# Experts DDT — Hostinger (LiteSpeed / Apache). Replaces the WordPress .htaccess at cutover.
+# Single source of truth for redirects, caching and security headers. Test with: curl -I https://expertsddt.com/<old-url>
+
+Options -Indexes
+ErrorDocument 404 /404.html
+ErrorDocument 410 /404.html
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# ---- HTTPS + canonical host (no www) ---------------------------------------
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^ https://expertsddt.com%{REQUEST_URI} [L,R=301]
+RewriteCond %{HTTP_HOST} ^www\. [NC]
+RewriteRule ^ https://expertsddt.com%{REQUEST_URI} [L,R=301]
+
+# ---- Old WordPress files people may have bookmarked or shared ----------------
+RewriteRule ^wp-content/uploads/2026/09/services-and-fees-experts-ddt\.pdf$ /downloads/services-and-fees-experts-ddt.pdf [L,R=301]
+RewriteRule ^wp-content/uploads/.*exocad-implant-libraries.*\.zip$ /exocad-libraries/ [NC,L,R=301]
+
+# ---- Old WordPress / WooCommerce URLs -> new site ---------------------------
+RewriteRule ^libraries/?$ /exocad-libraries/ [L,R=301]
+RewriteRule ^(shop|carrito|finalizar-compra|categoria-producto(/.*)?)/?$ /store/ [L,R=301]
+# TODO(shopify): when the Shopify store is live, point each product to its handle, e.g.
+#   RewriteRule ^producto/templates-package/?$ https://<shop-domain>/products/<handle> [L,R=301]
+RewriteRule ^producto(/.*)?$ /store/ [L,R=301]
+RewriteRule ^pricing-2/?$ /courses/ [L,R=301]
+RewriteRule ^register/?$ https://portal.expertsddt.com/signup [L,R=301]
+RewriteRule ^(login|mi-cuenta|account|password-reset)/?$ https://portal.expertsddt.com/login [L,R=301]
+RewriteRule ^(pagina-ejemplo/?|category/.*)$ / [L,R=301]
+
+# Service posts published in Nov 2025 -> matching section of /services/
+RewriteRule ^2025/11/27/design/?$ /services/#design [NE,L,R=301]
+RewriteRule ^2025/11/18/hola-mundo/?$ /services/#manufacturing [NE,L,R=301]
+RewriteRule ^2025/11/27/final-product-manufacturing/?$ /services/#manufacturing [NE,L,R=301]
+RewriteRule ^2025/11/27/cutting-edge-technology/?$ /services/#scanning [NE,L,R=301]
+RewriteRule ^2025/11/27/training/?$ /services/#training [NE,L,R=301]
+RewriteRule ^2025/11/27/(support|implementation)/?$ /services/#support [NE,L,R=301]
+RewriteRule ^2025/11/27/(components|customized-workflows)/?$ /services/ [L,R=301]
+
+# Old sitemaps
+RewriteRule ^(sitemap_index|page-sitemap|post-sitemap|product-sitemap|category-sitemap|product_cat-sitemap|product_tag-sitemap|author-sitemap)\.xml$ /sitemap-index.xml [L,R=301]
+
+# WordPress internals no longer exist
+RewriteRule ^(wp-admin|wp-login\.php|xmlrpc\.php|wp-json|wp-includes|wp-content|feed|comments)(/.*)?$ - [G,L]
+
+# Flag hashed build assets for the long-cache header below
+RewriteRule ^_astro/ - [E=IS_ASTRO:1]
+
+# Never serve dotfiles or source/maps
+RewriteRule (^|/)\.(?!well-known) - [F,L]
+</IfModule>
+
+# ---- Compression & caching ---------------------------------------------------
+<IfModule mod_deflate.c>
+AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml text/plain application/xml
+</IfModule>
+
+<IfModule mod_expires.c>
+ExpiresActive On
+ExpiresDefault "access plus 1 hour"
+ExpiresByType text/html "access plus 0 seconds"
+ExpiresByType application/xml "access plus 1 hour"
+</IfModule>
+
+<IfModule mod_headers.c>
+# Images, video, fonts, JS and CSS: one day (the content panel may replace a file under the same name)
+<FilesMatch "\.(js|css|woff2?|webp|png|jpg|jpeg|svg|mp4|ico)$">
+Header set Cache-Control "public, max-age=86400"
+</FilesMatch>
+# Only /_astro/ files carry a content hash in their name, so those can be cached for a year
+Header set Cache-Control "public, max-age=31536000, immutable" env=IS_ASTRO
+<FilesMatch "\.(html|xml|txt)$">
+Header set Cache-Control "no-cache"
+</FilesMatch>
+# Downloads may be replaced under the same name (guide PDF): revalidate
+<FilesMatch "\.(pdf|zip)$">
+Header set Cache-Control "no-cache"
+</FilesMatch>
+
+# ---- Security headers --------------------------------------------------------
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+Header always set Strict-Transport-Security "max-age=31536000"
+Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+# Inline scripts/styles are used by the theme bootstrap and analytics, so 'unsafe-inline' stays until they are hashed.
+# Everything else is an allow-list: tighten connect-src with the real n8n / Apps Script hosts before launch.
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://www.google-analytics.com https://*.googletagmanager.com; media-src 'self'; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://n8n.wigoqd.easypanel.host https://script.google.com https://script.googleusercontent.com; frame-src https://calendar.google.com https://www.youtube-nocookie.com; object-src 'none'; base-uri 'self'; form-action 'self' https://script.google.com; frame-ancestors 'self'; upgrade-insecure-requests"
+</IfModule>
