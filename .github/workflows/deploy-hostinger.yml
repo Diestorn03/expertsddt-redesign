@@ -42,6 +42,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: English and Spanish dictionaries have the same keys
+        run: npm run test:i18n
       - name: Redirect rules still send old WordPress URLs to the right place
         run: npm run test:redirects
       - name: Build
