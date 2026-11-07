@@ -135,7 +135,7 @@ export default {
       lead: 'From the first scan to the final Zirconia. Design, manufacturing, technology, training and support, delivered by Fernando Polanco DDT experts.',
       jumpLabel: 'Services on this page', ctaTitle: 'Let’s design your <span class="cta__accent">next case</span> together.',
       panel: { tags: ['PMMA', 'Zirconia', '3D print'], big: 'Full arch' },
-      guide: { eyebrow: '2026 Digital Services & Fee Schedule', title: 'Know the cost before you start.', text: 'Access our comprehensive catalog of all our dental services for private practices, dental labs, DSOs, and corporations.', cta: 'Download service guide', meta: 'PDF · updated September 2026' },
+      guide: { eyebrow: '2026 Digital Services & Fee Schedule', title: 'Know the cost before you start.', text: 'Access our comprehensive catalog of all our dental services for private practices, dental labs, DSOs, and corporations.', cta: 'Download service guide', meta: 'PDF · English' },
       rows: [
         { id: 'design', n: '01', t: 'Premium design services', p: 'High-level designs for complex cases such as All-on-X from start to finish, plus dentures, overdentures, bars, bridges and FMR crowns, veneers and surgical guides.', cta: 'Book your session now', tags: ['All-on-X', 'Dentures', 'Bars & bridges', 'Veneers', 'Surgical guides'] },
         { id: 'manufacturing', n: '02', t: '3D printing and final manufacturing', p: 'Full arch production via 3D printing, PMMA, and final Zirconia. Creation of models or full-arch prostheses using 3D printing technology.', cta: 'Schedule a consultation', tags: ['3D printing', 'PMMA', 'Zirconia', 'Models'] },
