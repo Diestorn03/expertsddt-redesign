@@ -1,11 +1,11 @@
 /**
  * Connected shells of an indexed mesh (spec 4.1.2). Connectivity is by shared vertex index:
  * weld first when coincident vertices may be duplicated.
- * Errors: INVALID_ARGUMENT reason 'labels', plus checkMesh's 'shape' | 'index'.
+ * Errors: INVALID_ARGUMENT reason 'labels', plus core checkMesh's reasons.
  */
 import { XchangeError } from '../core/errors';
+import { checkMesh } from '../core/mesh';
 import type { TriMesh } from '../core/types';
-import { checkMesh } from './check';
 
 export interface ComponentLabels {
   count: number;

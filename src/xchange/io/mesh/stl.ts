@@ -7,11 +7,13 @@
  * Error details: TOO_MANY_TRIANGLES {limit, count?}; MESH_TRUNCATED {bytes, expectedBytes} (binary) or
  * {line} (ASCII); MESH_MALFORMED {format: 'stl', reason, line}, reason one of expectedSolid,
  * expectedFacet, expectedNormal, expectedOuter, expectedLoop, expectedVertex, expectedEndloop,
- * expectedEndfacet; NUMBER_INVALID / COORDINATE_OUT_OF_RANGE {triangle} (binary) or {line} (ASCII).
+ * expectedEndfacet; NUMBER_INVALID / COORDINATE_OUT_OF_RANGE {triangle} (binary) or {line} (ASCII);
+ * TEXT_ENCODING {reason: 'nul'} (NUL in ASCII text, or a UTF-16 BOM).
  */
 import { XchangeError, type XchangeWarning } from '../../core/errors';
 import { MAX_ABS_COORDINATE_MM } from '../../core/limits';
-import { ascii, checkSize, coordinateError, Cursor, finish } from './common';
+import { hash3, hashSeed } from '../../core/sampling';
+import { ascii, checkSize, coordinateError, Cursor, finish, nulError } from './common';
 import type { MeshParseLimits, ParsedMesh } from './index';
 
 const SOLID = ascii('solid');
@@ -57,6 +59,8 @@ export function parseSTL(bytes: Uint8Array, limits: MeshParseLimits): ParsedMesh
     const cur = new Cursor(head);
     if (cur.next() && cur.is(SOLID)) return parseAscii(bytes, limits);
   }
+  // UTF-16 text (BOM; e.g. Windows PowerShell 5 redirection) is an encoding problem, not a binary size one.
+  if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) throw nulError();
   const count = bytes.length >= 84 ? declaredCount(bytes) : 0;
   if (count > limits.maxTriangles) throw new XchangeError('TOO_MANY_TRIANGLES', { limit: limits.maxTriangles, count });
   throw new XchangeError('MESH_TRUNCATED', { bytes: bytes.length, expectedBytes: 84 + 50 * count });
@@ -110,7 +114,8 @@ function parseAscii(bytes: Uint8Array, limits: MeshParseLimits): ParsedMesh {
           if (!cur.next()) throw truncated();
           const v = cur.number();
           if (!(Math.abs(v) <= MAX_ABS_COORDINATE_MM)) throw coordinateError(v, { line: cur.line });
-          soup[k + j] = v === 0 ? 0 : v; // -0 -> +0
+          const f = Math.fround(v); // round first: -1e-46 becomes float32 -0 only here
+          soup[k + j] = f === 0 ? 0 : f; // -0 -> +0
         }
       }
       expect(ENDLOOP, 'expectedEndloop');
@@ -138,6 +143,7 @@ function indexSoup(soup: Uint32Array, count: number, warnings: XchangeWarning[])
   const mask = size - 1;
   const table = new Int32Array(size); // vertex + 1, 0 = empty
   const indices = new Uint32Array(corners);
+  const seed = hashSeed(); // secret per parse: crafted corners cannot pile into one probe run (HashDoS)
   let vertices = 0, kept = 0, dropped = 0;
   for (let t = 0; t < count; t++) {
     const s = 9 * t;
@@ -151,8 +157,7 @@ function indexSoup(soup: Uint32Array, count: number, warnings: XchangeWarning[])
     for (let k = 0; k < 3; k++) {
       const p = s + 3 * k;
       const x = soup[p]!, y = soup[p + 1]!, z = soup[p + 2]!;
-      let h = (Math.imul(x, 0x9e3779b1) ^ Math.imul(y, 0x85ebca77) ^ Math.imul(z, 0xc2b2ae3d)) >>> 0;
-      h = (h ^ (h >>> 15)) & mask;
+      let h = hash3(x, y, z, seed) & mask;
       let id: number;
       for (;;) {
         const e = table[h]!;

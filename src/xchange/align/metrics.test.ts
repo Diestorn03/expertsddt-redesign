@@ -70,6 +70,7 @@ describe('measureManualPose and status', () => {
     expect(statusOf(m(0.2, 0.9), [], q)).toBe('weak');
     expect(statusOf(m(0.08, 0.9), [], resolveQuality({ goodRmsMm: 0.1, goodCoverage: 0.85 }))).toBe('good');
     expect(() => resolveQuality({ ambiguityRatio: 0.5 })).toThrow(expect.objectContaining({ details: { reason: 'quality' } }));
+    expect(() => resolveQuality({ ambiguitySlackMm: -0.001 })).toThrow(expect.objectContaining({ details: { reason: 'quality' } }));
   });
 
   it('flags rotationally symmetric sources from the exact surface PCA', () => {

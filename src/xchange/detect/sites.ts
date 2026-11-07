@@ -25,12 +25,11 @@ import {
   transformPoint,
   validateRigid,
 } from '../core/mat4';
-import { computeBounds, surfaceArea } from '../core/mesh';
+import { checkMesh, computeBounds, surfaceArea } from '../core/mesh';
 import { sampleSurface } from '../core/sampling';
 import type { Bounds, ImplantSite, Mat4, MeshFormat, ReferenceBody, TriMesh, Vec3 } from '../core/types';
-import { cross, distance, dot, normalize, scale, sub } from '../core/vec3';
+import { add, cross, distance, dot, normalize, scale, sub } from '../core/vec3';
 import { buildBvh } from '../geometry/bvh';
-import { checkMesh } from '../geometry/check';
 import { connectedComponents, extractComponents } from '../geometry/components';
 import { pcaOfSurface, type Pca } from '../geometry/pca';
 import { weld } from '../geometry/weld';
@@ -163,6 +162,8 @@ interface Reference {
   area: number;
   diagonal: number;
   pca: Pca;
+  /** Highest z of the reference (implant frame): its top, which a scan always captures. */
+  top: number;
   /** Surface samples in the implant frame. */
   samples: Float64Array;
 }
@@ -190,11 +191,13 @@ export function recoverSitesFromMesh(captureMesh: TriMesh, reference: ReferenceB
   if (!(area > 0) || !Number.isFinite(area)) throw new XchangeError('REFERENCE_NO_MATCH', { reason: 'zeroArea' });
   const components = splitComponents(captureMesh);
   const pca = pcaOfSurface(reference.mesh);
+  const bounds = computeBounds(reference.mesh);
   const ref: Reference = {
     target: surfaceTarget(reference.mesh),
     area,
-    diagonal: diagonal(computeBounds(reference.mesh)),
+    diagonal: diagonal(bounds),
     pca,
+    top: bounds.max[2],
     samples: sampleSurface(reference.mesh, REFERENCE_SAMPLES, settings.seed).points,
   };
 
@@ -368,10 +371,13 @@ const AXIS_MATCHINGS: Mat4[] = (() => {
 })();
 
 /**
- * Starting poses (capture -> implant frame), reference centroid on the shell centroid:
- * (a) implant +Z along each signed principal axis of the shell, clocked every 30° (cylinder-like
- * bodies, where two principal axes are arbitrary), (b) the reference's principal frame onto the
- * shell's in all 24 proper axis matchings (bodies with three distinct principal axes).
+ * Starting poses (capture -> implant frame) for these rotations: (a) implant +Z along each signed
+ * principal axis of the shell, clocked every 30° (cylinder-like bodies, where two principal axes are
+ * arbitrary), (b) the reference's principal frame onto the shell's in all 24 proper axis matchings
+ * (bodies with three distinct principal axes). Each rotation is placed twice: reference centroid on
+ * the shell centroid, and tops aligned along the candidate +Z. A scan loses the bottom of a body (under
+ * the gum), never its top: then the centroids sit millimetres apart along the axis, out of ICP's reach
+ * on a cylinder wall that slides freely, while the tops still match.
  */
 function startPoses(component: MeshComponent, ref: Reference): Mat4[] {
   const shellPca = pcaOfSurface(component.mesh);
@@ -390,7 +396,15 @@ function startPoses(component: MeshComponent, ref: Reference): Mat4[] {
   const shellFrame = fromAxes(...shellPca.axes, [0, 0, 0]);
   const refFrameInverse = inverseRigid(fromAxes(...ref.pca.axes, [0, 0, 0]));
   for (const s of AXIS_MATCHINGS) rotations.push(multiply(shellFrame, multiply(s, refFrameInverse)));
-  return rotations.map((r) => inverseRigid(compose(sub(component.centroid, transformDirection(r, ref.pca.centroid)), r)));
+  const v = component.mesh.positions;
+  return rotations.flatMap((r) => {
+    const t = sub(component.centroid, transformDirection(r, ref.pca.centroid));
+    const z = getColumn(r, 2);
+    let shellTop = -Infinity;
+    for (let i = 0; i < v.length; i += 3) shellTop = Math.max(shellTop, v[i]! * z[0] + v[i + 1]! * z[1] + v[i + 2]! * z[2]);
+    const shift = shellTop - (dot(t, z) + ref.top); // the reference top lands at dot(t, z) + ref.top along z
+    return [inverseRigid(compose(t, r)), inverseRigid(compose(add(t, scale(z, shift)), r))];
+  });
 }
 
 function perpendicular(v: Readonly<Vec3>): Vec3 {

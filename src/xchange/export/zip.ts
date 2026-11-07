@@ -5,8 +5,8 @@
  *
  * Throws:
  * - EXPORT_NAME_INVALID {index}: empty, > 255 UTF-8 bytes, `/ \ : * ? " < > |`, control character or
- *   lone surrogate, `..`, trailing dot or space, Windows device name (CON, COM1.txt...), or a
- *   duplicate ignoring case and Unicode normalisation. Every accepted name extracts as a plain file
+ *   lone surrogate, `..`, trailing dot or space, Windows device name (CON, COM1.txt, COM¹, CONIN$...),
+ *   or a duplicate ignoring case (full case folding) and Unicode normalisation. Every accepted name extracts as a plain file
  *   on Windows, macOS and Linux.
  * - EXPORT_TOO_LARGE {limitBytes, bytes} above LIMITS.bundle.maxBytes, or {reason: 'entries', limit, count}.
  * - INVALID_ARGUMENT {reason: 'fallback'} from safeFilename when neither label nor fallback leaves a name.
@@ -31,7 +31,7 @@ const FLAG_UTF8 = 0x0800;
 const DOS_DATE_1980_01_01 = (1 << 5) | 1; // year 0 (1980), month 1, day 1; the time field stays 0
 
 const FORBIDDEN_CHARACTER = /[\/\\:*?"<>|\p{Cc}\p{Cs}]/u;
-const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i;
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])(\.|$)/i;
 const utf8 = new TextEncoder();
 
 const CRC_TABLE = (() => {
@@ -64,7 +64,8 @@ export function zipStoreSize(entries: readonly { name: string; size: number }[])
   let total = END_RECORD;
   entries.forEach(({ name, size }, index) => {
     const nameBytes = utf8.encode(name).length;
-    const key = name.normalize('NFC').toLowerCase();
+    // Upper then lower case folds pairs plain lowercasing keeps apart (ς / σ), as NTFS and APFS do.
+    const key = name.normalize('NFC').toUpperCase().toLowerCase();
     if (
       nameBytes === 0 ||
       nameBytes > MAX_NAME_BYTES ||

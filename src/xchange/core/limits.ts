@@ -28,8 +28,16 @@ export const MESH_FORMATS_BY_PURPOSE: Readonly<Record<MeshPurpose, readonly Mesh
 /** Hard sanity bound on any coordinate (mm). Float32 still resolves ~8 µm at this magnitude. */
 export const MAX_ABS_COORDINATE_MM = 1e5;
 
-/** Bounding-box diagonal outside this range suggests wrong units: warn (MESH_UNITS_SUSPECT), never convert. */
-export const PLAUSIBLE_EXTENT_MM = { min: 2, max: 250 } as const;
+/**
+ * Bounding-box diagonal outside this range suggests wrong units: warn (MESH_UNITS_SUSPECT), never convert.
+ * A jaw scan is never under 15 mm across (in cm or inches it is). A capture or geometry may be a single
+ * ~7 mm body, so a 4-implant capture in cm (~4 "mm") is not caught here; detect's size gate catches it.
+ */
+export const PLAUSIBLE_EXTENT_MM: Readonly<Record<MeshPurpose, { readonly min: number; readonly max: number }>> = {
+  jaw: { min: 15, max: 250 },
+  capture: { min: 2, max: 250 },
+  geometry: { min: 2, max: 250 },
+};
 
 /** Default validateRigid tolerance: scanner files round axes to 6 decimals. */
 export const RIGID_TOLERANCE = 1e-4;

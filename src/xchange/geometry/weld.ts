@@ -1,10 +1,11 @@
 /**
  * Tolerance weld: shells are found on welded vertices (spec 4.1.2).
- * Errors: INVALID_ARGUMENT reason 'tolerance', plus checkMesh's 'shape' | 'index'.
+ * Errors: INVALID_ARGUMENT reason 'tolerance', plus core checkMesh's reasons.
  */
 import { XchangeError } from '../core/errors';
+import { checkMesh } from '../core/mesh';
+import { hash3, hashSeed } from '../core/sampling';
 import type { TriMesh } from '../core/types';
-import { checkMesh } from './check';
 
 /**
  * Merges every vertex into the closest earlier kept vertex within toleranceMm (grid hash with
@@ -25,6 +26,7 @@ export function weld(mesh: TriMesh, toleranceMm = 1e-5): TriMesh {
   const next = new Int32Array(vertexCount);
   const keptVertex = new Uint32Array(vertexCount);
   const remap = new Uint32Array(vertexCount);
+  const seed = hashSeed(); // crafted cell coordinates cannot share one chain; results never depend on it
   let kept = 0;
 
   for (let v = 0; v < vertexCount; v++) {
@@ -35,7 +37,7 @@ export function weld(mesh: TriMesh, toleranceMm = 1e-5): TriMesh {
     const sx = fx - cx < 0.5 ? -1 : 1, sy = fy - cy < 0.5 ? -1 : 1, sz = fz - cz < 0.5 ? -1 : 1;
     let best = -1, bestD2 = tolerance2;
     for (let corner = 0; corner < 8; corner++) {
-      const h = cellHash(cx + (corner & 1 ? sx : 0), cy + (corner & 2 ? sy : 0), cz + (corner & 4 ? sz : 0)) & mask;
+      const h = hash3(cx + (corner & 1 ? sx : 0), cy + (corner & 2 ? sy : 0), cz + (corner & 4 ? sz : 0), seed) & mask;
       for (let r = heads[h]!; r >= 0; r = next[r]!) {
         const q = 3 * keptVertex[r]!;
         const dx = p[q]! - x, dy = p[q + 1]! - y, dz = p[q + 2]! - z;
@@ -50,7 +52,7 @@ export function weld(mesh: TriMesh, toleranceMm = 1e-5): TriMesh {
       remap[v] = best;
       continue;
     }
-    const h = cellHash(cx, cy, cz) & mask;
+    const h = hash3(cx, cy, cz, seed) & mask;
     keptVertex[kept] = v;
     remap[v] = kept;
     next[kept] = heads[h]!;
@@ -83,9 +85,4 @@ export function weld(mesh: TriMesh, toleranceMm = 1e-5): TriMesh {
   }
   const indices = n === out.length ? out : out.slice(0, n);
   return colors ? { positions, indices, colors } : { positions, indices };
-}
-
-/** Integer cell -> hash. `| 0` is exact modulo 2^32 for any cell index below 2^53. */
-function cellHash(x: number, y: number, z: number): number {
-  return Math.imul(x | 0, 0x8da6b343) ^ Math.imul(y | 0, 0xd8163841) ^ Math.imul(z | 0, 0xcb1ab31f);
 }

@@ -225,6 +225,7 @@ function readBinary(bytes: Uint8Array, h: Header, body: Body): void {
   let o = h.bodyStart;
   for (const el of h.elements) {
     const props = el.props;
+    if (props.length === 0) continue; // occupies no bytes, whatever count it declares
     for (let r = 0; r < el.count; r++) {
       for (let k = 0; k < props.length; k++) {
         const p = props[k]!;
@@ -269,6 +270,7 @@ function readAscii(bytes: Uint8Array, h: Header, body: Body): void {
   };
   for (const el of h.elements) {
     const props = el.props;
+    if (props.length === 0) continue; // occupies no text, whatever count it declares
     for (let r = 0; r < el.count; r++) {
       for (let k = 0; k < props.length; k++) {
         const p = props[k]!;

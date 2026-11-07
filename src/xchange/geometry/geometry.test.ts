@@ -91,6 +91,19 @@ describe('weld', () => {
     expect(out.indices.length).toBe(0);
   });
 
+  it('stays linear on vertices crafted to share one bucket of an unseeded grid hash (HashDoS)', () => {
+    // Cells k·2^16 apart on every axis: any hash imul(x, a) ^ imul(y, b) ^ imul(z, c) sends all 32 768 of them
+    // to bucket 0 of the 2^16 table, and every lookup walked one long chain (quadratic: ~3 s). Seeded: ~15 ms.
+    const tol = 1e-5, n = 32, step = 2 ** 16;
+    const positions = new Float32Array(3 * n ** 3);
+    let v = 0;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) for (let k = 0; k < n; k++) positions.set([i, j, k].map((c) => (c * step + 0.5) * 2 * tol), 3 * v++);
+    const start = performance.now();
+    const out = weld({ positions, indices: new Uint32Array(0) }, tol);
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(out.positions.length).toBe(positions.length); // nothing within tolerance: every vertex kept
+  });
+
   it('rejects a bad tolerance and broken meshes', () => {
     const mesh = makeScanBody({ segments: 8 });
     for (const tol of [0, -1, Number.NaN, Infinity]) expect(() => weld(mesh, tol)).toThrow(/INVALID_ARGUMENT/);

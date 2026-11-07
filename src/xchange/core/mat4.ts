@@ -83,15 +83,20 @@ export function compose(translation: V, rotation: Mat4): Mat4 {
   return m;
 }
 
-/** a·b: applies b first, then a. */
+/**
+ * a·b: applies b first, then a. Rigid composition: like transformPoint and inverseRigid it reads only the
+ * top three rows and writes the bottom row as 0 0 0 1, so a bottom row validateRigid tolerated never
+ * leaks into the rotation.
+ */
 export function multiply(a: Mat4, b: Mat4): Mat4 {
   const out = new Float64Array(16);
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 4; c++) {
       out[r * 4 + c] =
-        a[r * 4]! * b[c]! + a[r * 4 + 1]! * b[4 + c]! + a[r * 4 + 2]! * b[8 + c]! + a[r * 4 + 3]! * b[12 + c]!;
+        a[r * 4]! * b[c]! + a[r * 4 + 1]! * b[4 + c]! + a[r * 4 + 2]! * b[8 + c]! + (c === 3 ? a[r * 4 + 3]! : 0);
     }
   }
+  out[15] = 1;
   return out;
 }
 
@@ -106,8 +111,11 @@ export function inverseRigid(m: Mat4): Mat4 {
 }
 
 /**
- * Accepts only rigid transforms; never repairs or normalises. Throws MATRIX_INVALID (not 16 finite
- * numbers) or MATRIX_NOT_RIGID with reason 'translationRange' | 'lastRow' | 'notOrthonormal' | 'reflection'.
+ * Accepts only rigid transforms; never repairs or normalises the rotation. Throws MATRIX_INVALID (not 16
+ * finite numbers) or MATRIX_NOT_RIGID with reason 'translationRange' | 'lastRow' | 'notOrthonormal' | 'reflection'.
+ * Returns `m` itself when it is a Float64Array whose bottom row is exactly 0 0 0 1; otherwise a copy whose
+ * bottom row (already checked within `tolerance`) is made exact, so no 4x4 consumer (three.js divides by
+ * w = row 3 · p) ever sees the file's noise there.
  */
 export function validateRigid(m: ArrayLike<number>, tolerance: number = RIGID_TOLERANCE): Mat4 {
   checkSixteen(m);
@@ -132,7 +140,11 @@ export function validateRigid(m: ArrayLike<number>, tolerance: number = RIGID_TO
   if (Math.abs(det - 1) > 3 * tolerance) {
     throw new XchangeError('MATRIX_NOT_RIGID', { reason: det < 0 ? 'reflection' : 'notOrthonormal' });
   }
-  return m instanceof Float64Array ? m : Float64Array.from(m);
+  if (m instanceof Float64Array && e(12) === 0 && e(13) === 0 && e(14) === 0 && e(15) === 1) return m;
+  const out = Float64Array.from(m);
+  out[12] = out[13] = out[14] = 0;
+  out[15] = 1;
+  return out;
 }
 
 /** Rotation by angleRad (right-hand rule) about `axis` through `pivot` (default origin). */

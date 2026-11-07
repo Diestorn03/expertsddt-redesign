@@ -8,7 +8,7 @@
  * 'alignmentSite' (+ perSite index) | 'files' (placed/files do not match the request).
  */
 import { XchangeError } from '../core/errors';
-import { identity, maxAbsDiff, toRowMajorArray } from '../core/mat4';
+import { identity, maxAbsDiff, toRowMajorArray, validateRigid } from '../core/mat4';
 import { countTriangles } from '../core/mesh';
 import type { AlignmentFlag, AlignmentMethod, AlignmentStatus, Arch, CaptureFormat, ExportRequest } from '../core/types';
 import type { PlacedReplacement } from './placement';
@@ -186,7 +186,7 @@ export function buildReport(
       source: site.source,
       indexAmbiguous: site.flags.indexAmbiguous === true,
       provisional: site.flags.provisional === true,
-      implantToCapture: toRowMajorArray(site.matrix),
+      implantToCapture: toRowMajorArray(validateRigid(site.matrix)), // placement validated it: exact bottom row
       implantToOutput: toRowMajorArray(placed[i]!.matrix),
       geometry: { id: placed[i]!.geometryId, name: placed[i]!.geometryName },
       file: files[2 + i]!.name,

@@ -17,6 +17,23 @@ export function createRng(seed: number): Rng {
   };
 }
 
+/**
+ * Secret per-call seed for hash tables keyed by file content, so crafted coordinates cannot pile into
+ * one bucket (HashDoS). It never changes a result (callers number entries by first use, not by hash),
+ * so outputs stay deterministic; this is the one place randomness does not go through createRng.
+ */
+export function hashSeed(): number {
+  return crypto.getRandomValues(new Uint32Array(1))[0]!;
+}
+
+/** Seeded hash of three 32-bit words (murmur3-style mixing: every input bit reaches the low bits). */
+export function hash3(x: number, y: number, z: number, seed: number): number {
+  let h = Math.imul(x ^ seed, 0xcc9e2d51);
+  h = Math.imul(h ^ (h >>> 15) ^ y, 0x1b873593);
+  h = Math.imul(h ^ (h >>> 13) ^ z, 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
 /** Standard normal deviate (Box-Muller). */
 export function gaussian(rng: Rng): number {
   let u = 0;

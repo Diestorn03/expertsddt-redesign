@@ -63,7 +63,8 @@ export function parseMesh(bytes: Uint8Array, purpose: MeshPurpose, hint?: MeshFo
   if (purpose === 'jaw' && triangles > LIMITS.jaw.warnTriangles) parsed.warnings.push({ code: 'MESH_LARGE', details: { triangles } });
   const { min, max } = computeBounds(parsed.mesh);
   const extent = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
-  if (!(extent >= PLAUSIBLE_EXTENT_MM.min && extent <= PLAUSIBLE_EXTENT_MM.max)) {
+  const plausible = PLAUSIBLE_EXTENT_MM[purpose];
+  if (!(extent >= plausible.min && extent <= plausible.max)) {
     parsed.warnings.push({ code: 'MESH_UNITS_SUSPECT', details: { extentMm: Math.round(extent * 1000) / 1000 } });
   }
   return parsed;

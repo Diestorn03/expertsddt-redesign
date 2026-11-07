@@ -1,8 +1,8 @@
 /**
  * Rigid fit of surface samples onto a reference surface (exact closest points through a BVH).
- * ponytail: second ICP next to align/icp (k-d tree); unify at integration (CONTRACTS.md "Known duplication").
+ * ponytail: second ICP next to align/icp (k-d tree), kept at integration: unify once real cases can compare
+ * the two on the same captures (README "Estado", CONTRACTS.md "Known duplication").
  */
-import { isXchangeError } from '../core/errors';
 import { multiply, rotationAngleBetween } from '../core/mat4';
 import { computeFaceNormals } from '../core/mesh';
 import { kabsch, solvePointToPlane } from '../core/rigid';
@@ -127,7 +127,7 @@ export function icp(samples: Float64Array, count: number, target: SurfaceTarget,
       const dz = step[8]! * px + step[9]! * py + step[10]! * pz + step[11]! - pz;
       return [Math.hypot(dx, dy, dz), Math.atan2(Math.hypot(step[9]! - step[6]!, step[2]! - step[8]!, step[4]! - step[1]!), step[0]! + step[5]! + step[10]! - 1)];
     };
-    let step = pointToPlaneStep(a, b, nrm.subarray(0, 3 * n));
+    let step = solvePointToPlane(a, b, nrm.subarray(0, 3 * n));
     if (step) {
       const [moveMm, angle] = size(step);
       if (moveMm > s.maxStepMm || angle > s.maxStepRad) step = null;
@@ -146,20 +146,6 @@ export function icp(samples: Float64Array, count: number, target: SurfaceTarget,
     threshold = Math.max(s.floorMm, 3 * Math.sqrt(ms));
   }
   return { transform: m, converged: false };
-}
-
-/**
- * core/rigid.solvePointToPlane throws DEGENERATE_GEOMETRY when the solved rotation lies between
- * 1e-15 and 1e-12 rad (fromAxisAngle refuses to normalise that tiny axis). Near convergence that
- * happens; treat it like a singular system (kabsch takes the step). Reported for a core fix.
- */
-function pointToPlaneStep(src: Float64Array, dst: Float64Array, normals: Float64Array): Mat4 | null {
-  try {
-    return solvePointToPlane(src, dst, normals);
-  } catch (error) {
-    if (isXchangeError(error) && error.code === 'DEGENERATE_GEOMETRY') return null;
-    throw error;
-  }
 }
 
 /** Pose distance used to tell candidate fits apart: rotation (rad) and motion of a point (mm). */

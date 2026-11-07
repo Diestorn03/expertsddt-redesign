@@ -5,9 +5,9 @@
  */
 import { XchangeError } from '../core/errors';
 import { eigenSymmetric } from '../core/linalg';
+import { checkMesh } from '../core/mesh';
 import type { TriMesh, Vec3 } from '../core/types';
 import { cross } from '../core/vec3';
-import { checkMesh } from './check';
 
 export interface Pca {
   centroid: Vec3;

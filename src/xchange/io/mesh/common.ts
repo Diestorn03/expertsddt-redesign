@@ -36,17 +36,21 @@ function latin1(b: Uint8Array, s: number, e: number): string {
   return out;
 }
 
+/** No exporter writes a longer coordinate (a full-precision double with exponent is about 24 chars). */
+const MAX_NUMBER_CHARS = 128;
+
 const POW10 = [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22];
 
 /**
  * Strict decimal `[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?` in b[s, e); NaN when malformed (also for
- * "nan", "inf", "1,5", hex). Up to 15 significant digits and |exponent| <= 22 the value equals
+ * "nan", "inf", "1,5", hex) or longer than MAX_NUMBER_CHARS. Up to 15 significant digits and |exponent| <= 22 the value equals
  * Number(): one correctly rounded operation on exact doubles (Clinger's fast path).
  * ponytail: 16-40 digits (full-precision exporters) accumulate in a double, a few ulps off, so the
  * float32 the meshes store is exact except within ~1e-15 of a float32 rounding midpoint (then 1 ulp,
  * nanometres); a correctly rounded parser (Eisel-Lemire) only if float64 output is ever needed.
  */
 export function parseDecimal(b: Uint8Array, s: number, e: number): number {
+  if (e - s > MAX_NUMBER_CHARS) return NaN; // O(1) refusal: never scan or build a huge token
   let i = s;
   let neg = false;
   if (i < e && (b[i] === 0x2d || b[i] === 0x2b)) neg = b[i++] === 0x2d;

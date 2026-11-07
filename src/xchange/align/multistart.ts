@@ -35,7 +35,7 @@ const DISTINCT_POSE = { angleRad: (5 * Math.PI) / 180, distanceMm: 0.25 };
 /** Coarse ICP: every start runs `screenIterations`, the best `kept` continue for `iterations` more. */
 const COARSE = { samples: 300, screenIterations: 4, kept: 12, iterations: 8, minNormalDot: 0.2, diagonalFraction: 0.3 };
 const MAX_FINALISTS = 5;
-/** Only coarse fits scoring within ratio × best + slack are refined (a rival must end within ambiguityRatio anyway). */
+/** Only coarse fits scoring within ratio × best + slack are refined (a rival must end within the ambiguity bound anyway). */
 const FINALIST_SCORE = { ratio: 3, slackMm: 0.05 };
 /** Translation vote: source/target samples used, normal agreement, cell size (mm), cells inspected. */
 const VOTE = { sourcePoints: 150, targetPoints: 3000, minNormalDot: 0.9, minCellMm: 1.5, cellFraction: 0.05, topCells: 8 };
@@ -252,7 +252,8 @@ export function multiStartAlign(parts: readonly AssemblyPart[], target: IcpTarge
 
   const flags: AlignmentFlag[] = symmetric ? ['symmetricSource'] : [];
   const at = best.fit.transform;
-  const rival = finalists.some((f) => f !== first && f.score <= quality.ambiguityRatio * best.score && distinct(f.fit.transform, at, pca.centroid));
+  const rivalScore = Math.max(quality.ambiguityRatio * best.score, best.score + quality.ambiguitySlackMm);
+  const rival = finalists.some((f) => f !== first && f.score <= rivalScore && distinct(f.fit.transform, at, pca.centroid));
   if (rival) flags.push('ambiguousAlternative');
   flags.push(...icpFlags(best.fit, count, fine.trimFraction));
   progress?.('metrics', 0);

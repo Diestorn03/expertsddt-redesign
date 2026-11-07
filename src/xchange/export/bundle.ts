@@ -4,9 +4,10 @@
  * Shells are concatenated: no Boolean union, no cutting.
  *
  * Throws EXPORT_GEOMETRY_MISSING / MATRIX_* (placement.ts), EXPORT_NAME_INVALID / EXPORT_TOO_LARGE
- * (zip.ts; the size is checked before any large allocation), INVALID_ARGUMENT (report.ts).
+ * (zip.ts; the size is checked before any large allocation), INVALID_ARGUMENT (report.ts, or core
+ * checkMesh for a malformed jaw or geometry mesh: checked after the size, before anything is written).
  */
-import { countTriangles } from '../core/mesh';
+import { checkMesh, countTriangles } from '../core/mesh';
 import { writeBinarySTL } from '../core/stl-writer';
 import type { ExportRequest } from '../core/types';
 import { placeReplacements, siteGeometries } from './placement';
@@ -51,6 +52,7 @@ export function buildBundle(request: ExportRequest): ExportBundle {
     { name: 'README.txt', size: 0 },
   ]);
 
+  if (jaw) checkMesh(jaw.mesh); // re-serialised into combined.stl: same guard as the geometries in placement
   const placed = placeReplacements(sites, request.geometryBySite, request.assemblyTransform);
   const meshes = placed.map((p) => p.mesh);
   const replacements = writeBinarySTL(meshes);

@@ -77,7 +77,8 @@ describe('parseMesh', () => {
     expectError(() => parseMesh(encodeOBJ(body), 'jaw'), 'FORMAT_NOT_ALLOWED', { format: 'obj', purpose: 'jaw' });
     expectError(() => parseMesh(encode('hello\n'), 'jaw', 'obj'), 'FORMAT_NOT_ALLOWED', { format: 'obj', purpose: 'jaw' });
     for (const purpose of ['jaw', 'capture', 'geometry'] as const) {
-      expect(parseMesh(writeBinarySTL(body), purpose).warnings).toEqual([]);
+      // One ~10 mm scan body is a plausible capture or geometry, but not a jaw scan (>= 15 mm across).
+      expect(parseMesh(writeBinarySTL(body), purpose).warnings.map((w) => w.code)).toEqual(purpose === 'jaw' ? ['MESH_UNITS_SUSPECT'] : []);
       expect(parseMesh(encodePLY(body), purpose).mesh.indices).toEqual(body.indices);
     }
     expect(parseMesh(encodeOBJ(body), 'geometry').format).toBe('obj');

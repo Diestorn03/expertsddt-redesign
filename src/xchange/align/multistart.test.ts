@@ -29,6 +29,7 @@ describe('multiStartAlign: recovers random rigid transforms (spec 7.5)', () => {
       acceptableRmsMm: 0.1,
       acceptableCoverage: 0.8,
       ambiguityRatio: 1.1,
+      ambiguitySlackMm: 0.005,
       usableCoverage: 0.4,
       symmetryTolerance: 0.01,
     });

@@ -7,9 +7,8 @@
  */
 import { XchangeError } from '../core/errors';
 import { LIMITS } from '../core/limits';
-import { solveLinear } from '../core/linalg';
-import { fromTranslation, multiply, rotationAngleBetween, transformPoint } from '../core/mat4';
-import { countTriangles, surfaceArea } from '../core/mesh';
+import { multiply, rotationAngleBetween, transformPoint } from '../core/mat4';
+import { checkMesh, countTriangles, surfaceArea } from '../core/mesh';
 import { kabsch, solvePointToPlane } from '../core/rigid';
 import { createRng, sampleSurface, type SurfaceSamples } from '../core/sampling';
 import type { AssemblyPart, Mat4, TriMesh, Vec3 } from '../core/types';
@@ -83,22 +82,10 @@ export function icpSettings(o: IcpOptions = {}): IcpSettings {
   };
 }
 
-/** Shape, finiteness, index range and triangle limit of a mesh received from another module or thread. */
-export function checkMesh(mesh: TriMesh, maxTriangles: number): void {
-  const positions = mesh?.positions, indices = mesh?.indices;
-  if (!(positions instanceof Float32Array) || !(indices instanceof Uint32Array) || positions.length % 3 || indices.length % 3) {
-    throw new XchangeError('INVALID_ARGUMENT', { reason: 'shape' });
-  }
-  const triangles = indices.length / 3;
-  if (triangles > maxTriangles) throw new XchangeError('INVALID_ARGUMENT', { reason: 'tooManyTriangles', limit: maxTriangles });
-  if (triangles === 0) throw new XchangeError('INSUFFICIENT_DATA', { reason: 'noTriangles' });
-  for (let i = 0; i < positions.length; i++) {
-    if (!Number.isFinite(positions[i])) throw new XchangeError('INVALID_ARGUMENT', { reason: 'nonFinite' });
-  }
-  const vertices = positions.length / 3;
-  for (let i = 0; i < indices.length; i++) {
-    if (indices[i]! >= vertices) throw new XchangeError('INVALID_ARGUMENT', { reason: 'indexRange' });
-  }
+/** core checkMesh (shape, limit, finiteness, index range) plus at least one triangle. */
+export function checkUsableMesh(mesh: TriMesh, maxTriangles: number): void {
+  checkMesh(mesh, maxTriangles);
+  if (mesh.indices.length === 0) throw new XchangeError('INSUFFICIENT_DATA', { reason: 'noTriangles' });
 }
 
 export function checkParts(parts: readonly AssemblyPart[]): void {
@@ -109,7 +96,7 @@ export function checkParts(parts: readonly AssemblyPart[]): void {
   let total = 0;
   for (const part of parts) {
     if (typeof part?.siteId !== 'string' || !part.siteId) throw new XchangeError('INVALID_ARGUMENT', { reason: 'siteId' });
-    checkMesh(part.mesh, PART_MAX_TRIANGLES);
+    checkUsableMesh(part.mesh, PART_MAX_TRIANGLES);
     total += countTriangles(part.mesh);
   }
   if (total > PARTS_MAX_TRIANGLES) throw new XchangeError('INVALID_ARGUMENT', { reason: 'tooManyTriangles', limit: PARTS_MAX_TRIANGLES });
@@ -117,7 +104,7 @@ export function checkParts(parts: readonly AssemblyPart[]): void {
 
 /** Jaw samples (default one per 0.15 mm², 20 k-120 k), their k-d tree and the exact triangle tree. */
 export function buildIcpTarget(jaw: TriMesh, options: { samples?: number; seed?: number } = {}): IcpTarget {
-  checkMesh(jaw, LIMITS.jaw.maxTriangles);
+  checkUsableMesh(jaw, LIMITS.jaw.maxTriangles);
   const area = surfaceArea(jaw);
   const auto = Math.round(area / (TARGET_SPACING_MM * TARGET_SPACING_MM));
   const samples = options.samples ?? Math.min(TARGET_SAMPLES.max, Math.max(TARGET_SAMPLES.min, Number.isFinite(auto) ? auto : 0));
@@ -163,38 +150,6 @@ export function sampleParts(parts: readonly AssemblyPart[], total: number, seed:
 export function prefixSamples(s: SurfaceSamples, count: number): SurfaceSamples {
   const n = Math.min(count, s.triangles.length);
   return { points: s.points.subarray(0, 3 * n), normals: s.normals.subarray(0, 3 * n), triangles: s.triangles.subarray(0, n) };
-}
-
-/**
- * core solvePointToPlane, except that for a rotation of 1e-15..1e-12 rad core's fromAxisAngle ->
- * normalize throws DEGENERATE_GEOMETRY (core bug, reported): such a rotation is negligible, so the
- * step is solved for the translation alone, (Σ n nᵀ) t = Σ n (q - p)·n.
- */
-function planeStep(src: Float64Array, dst: Float64Array, nrm: Float64Array): Mat4 | null {
-  try {
-    return solvePointToPlane(src, dst, nrm);
-  } catch (error) {
-    if (!(error instanceof XchangeError && error.code === 'DEGENERATE_GEOMETRY')) throw error;
-  }
-  const a = new Float64Array(9), b = new Float64Array(3);
-  for (let i = 0; i + 2 < src.length; i += 3) {
-    const nx = nrm[i]!, ny = nrm[i + 1]!, nz = nrm[i + 2]!;
-    const r = (dst[i]! - src[i]!) * nx + (dst[i + 1]! - src[i + 1]!) * ny + (dst[i + 2]! - src[i + 2]!) * nz;
-    b[0] = b[0]! + nx * r;
-    b[1] = b[1]! + ny * r;
-    b[2] = b[2]! + nz * r;
-    a[0] = a[0]! + nx * nx;
-    a[1] = a[1]! + nx * ny;
-    a[2] = a[2]! + nx * nz;
-    a[4] = a[4]! + ny * ny;
-    a[5] = a[5]! + ny * nz;
-    a[8] = a[8]! + nz * nz;
-  }
-  a[3] = a[1]!;
-  a[6] = a[2]!;
-  a[7] = a[5]!;
-  const t = solveLinear(a, b, 3);
-  return t ? fromTranslation([t[0]!, t[1]!, t[2]!]) : null;
 }
 
 /**
@@ -317,7 +272,7 @@ export function icp(source: SurfaceSamples, target: IcpTarget, initial: Mat4, op
     const s3 = src.subarray(0, 3 * k), d3 = dst.subarray(0, 3 * k);
     let next: Mat4 | null = null;
     if (Math.sqrt(euclid2 / k) < 0.5 * maxD) {
-      const step = planeStep(s3, d3, nrm.subarray(0, 3 * k));
+      const step = solvePointToPlane(s3, d3, nrm.subarray(0, 3 * k));
       if (step) {
         next = multiply(step, t);
         // A large turn or shift is outside the linearisation: take a point-to-point step instead.

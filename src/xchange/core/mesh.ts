@@ -6,6 +6,34 @@ export function countTriangles(mesh: TriMesh): number {
   return Math.floor(mesh.indices.length / 3);
 }
 
+/**
+ * Trust-boundary check of a mesh that did not come straight from io/mesh (another module, a worker
+ * message, IndexedDB): typed arrays of whole records, at most maxTriangles, finite positions, every index
+ * addressing a vertex. Returns the vertex count. Throws INVALID_ARGUMENT reason 'shape' |
+ * 'tooManyTriangles' {limit} | 'nonFinite' | 'indexRange'.
+ */
+export function checkMesh(mesh: TriMesh, maxTriangles = Infinity): number {
+  const positions = mesh?.positions, indices = mesh?.indices, colors = mesh?.colors;
+  if (
+    !(positions instanceof Float32Array) ||
+    !(indices instanceof Uint32Array) ||
+    positions.length % 3 !== 0 ||
+    indices.length % 3 !== 0 ||
+    (colors !== undefined && colors.length !== positions.length)
+  ) {
+    throw new XchangeError('INVALID_ARGUMENT', { reason: 'shape' });
+  }
+  if (indices.length / 3 > maxTriangles) throw new XchangeError('INVALID_ARGUMENT', { reason: 'tooManyTriangles', limit: maxTriangles });
+  for (let i = 0; i < positions.length; i++) {
+    if (!Number.isFinite(positions[i])) throw new XchangeError('INVALID_ARGUMENT', { reason: 'nonFinite' });
+  }
+  const vertices = positions.length / 3;
+  for (let i = 0; i < indices.length; i++) {
+    if (indices[i]! >= vertices) throw new XchangeError('INVALID_ARGUMENT', { reason: 'indexRange' });
+  }
+  return vertices;
+}
+
 export function computeBounds(mesh: TriMesh): Bounds {
   const p = mesh.positions;
   if (p.length < 3) throw new XchangeError('DEGENERATE_GEOMETRY', { reason: 'empty' });

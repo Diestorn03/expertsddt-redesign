@@ -5,10 +5,11 @@
  *
  * Throws EXPORT_GEOMETRY_MISSING {site}; MATRIX_INVALID / MATRIX_NOT_RIGID {reason} for the assembly
  * transform and {reason, site} for a site matrix. `site` is always the index in `sites`.
+ * INVALID_ARGUMENT (core checkMesh reasons) for a malformed geometry mesh.
  */
 import { XchangeError, isXchangeError } from '../core/errors';
 import { multiply, validateRigid } from '../core/mat4';
-import { transformMesh } from '../core/mesh';
+import { checkMesh, transformMesh } from '../core/mesh';
 import type { ImplantSite, Mat4, ReplacementGeometry, TriMesh } from '../core/types';
 
 export interface PlacedReplacement {
@@ -41,7 +42,8 @@ export function placeReplacements(
 ): PlacedReplacement[] {
   const assembly = validateRigid(assemblyTransform);
   const geometries = siteGeometries(sites, geometryBySite);
-  // Every matrix is checked before the first mesh is allocated.
+  // Every matrix and every geometry mesh (library entries come back from IndexedDB) is checked before
+  // the first mesh is allocated: no NaN corner is ever written.
   const matrices = sites.map((site, index) => {
     try {
       return multiply(assembly, validateRigid(site.matrix));
@@ -49,6 +51,7 @@ export function placeReplacements(
       throw isXchangeError(error) ? new XchangeError(error.code, { ...error.details, site: index }) : error;
     }
   });
+  for (const geometry of new Set(geometries)) checkMesh(geometry.mesh);
   return sites.map((site, i) => {
     const geometry = geometries[i]!, matrix = matrices[i]!;
     return {

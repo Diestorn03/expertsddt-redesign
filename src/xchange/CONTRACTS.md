@@ -45,13 +45,13 @@ reference for semantics and formats only: never copy its code or embed its data 
 |---|---|
 | `core/types.ts` | `Vec3`, `Mat4`, `Bounds`, `TriMesh`, `Arch`, `MeshFormat`, `MeshPurpose`, `PositionFormat`, `CaptureFormat`, `SiteFlags`, `ImplantSite`, `Capture`, `ReferenceBody`, `ReplacementGeometry`, `JawScan`, `AssemblyPart`, `LandmarkPair`, `AlignmentStatus`, `AlignmentMethod`, `AlignmentFlag`, `SiteFit`, `AlignmentResult`, `ExportRequest` |
 | `core/errors.ts` | `ERROR_CODES`, `ErrorCode`, `WARNING_CODES`, `WarningCode`, `ErrorDetails`, `XchangeWarning`, `XchangeError`, `XchangeErrorPayload`, `isXchangeError`, `toErrorPayload`, `fromErrorPayload` |
-| `core/limits.ts` | `LIMITS` (jaw / capture / geometry / positions / bundle), `maxVertices(purpose)`, `MESH_FORMATS_BY_PURPOSE`, `MAX_ABS_COORDINATE_MM`, `PLAUSIBLE_EXTENT_MM`, `RIGID_TOLERANCE`, `PARSE_LIMITS` |
+| `core/limits.ts` | `LIMITS` (jaw / capture / geometry / positions / bundle), `maxVertices(purpose)`, `MESH_FORMATS_BY_PURPOSE`, `MAX_ABS_COORDINATE_MM`, `PLAUSIBLE_EXTENT_MM[purpose]`, `RIGID_TOLERANCE`, `PARSE_LIMITS` |
 | `core/vec3.ts` | `add`, `sub`, `scale`, `dot`, `cross`, `length`, `distance`, `normalize` |
-| `core/mat4.ts` | `Quat`, `identity`, `fromRowMajor`, `fromColumnMajor`, `toRowMajorArray`, `fromAxes`, `getColumn`, `fromTranslation`, `compose`, `multiply`, `inverseRigid`, `validateRigid`, `fromAxisAngle`, `fromQuaternion`, `toQuaternion`, `transformPoint`, `transformDirection`, `rotationAngleBetween`, `maxAbsDiff` |
+| `core/mat4.ts` | `Quat`, `identity`, `fromRowMajor`, `fromColumnMajor`, `toRowMajorArray`, `fromAxes`, `getColumn`, `fromTranslation`, `compose`, `multiply`, `inverseRigid`, `validateRigid`, `fromAxisAngle`, `fromQuaternion`, `toQuaternion`, `transformPoint`, `transformDirection`, `rotationAngleBetween`, `maxAbsDiff`. Every function treats the bottom row as 0 0 0 1 (`multiply` is a rigid composition); `validateRigid` returns the bottom row exact (a copy when the input's was only within tolerance) |
 | `core/linalg.ts` | `eigenSymmetric(a, n)` (Jacobi, descending, eigenvectors as columns), `solveLinear(a, b, n)` (null if singular) |
 | `core/rigid.ts` | `kabsch(src, dst, weights?)` (Horn quaternion, never a reflection, n >= 3), `solvePointToPlane(src, dst, dstNormals, weights?)` (one linearised step, `Mat4 \| null`, n >= 6) |
-| `core/mesh.ts` | `countTriangles`, `computeBounds`, `computeFaceNormals`, `computeVertexNormals`, `surfaceArea`, `transformMesh` (the spec's `applyToMesh`; copies all arrays), `mergeMeshes`, `closestPointOnTriangle(positions, indices, tri, px, py, pz, out?)` (exact, returns squared distance) |
-| `core/sampling.ts` | `Rng`, `createRng(seed)`, `gaussian(rng)`, `SurfaceSamples {points, normals, triangles}`, `sampleSurface(mesh, count, seed)` (area-weighted, stratified, shuffled: any prefix is a fair subsample) |
+| `core/mesh.ts` | `checkMesh(mesh, maxTriangles?)` (trust boundary: typed arrays, limit, finite positions, index range; INVALID_ARGUMENT), `countTriangles`, `computeBounds`, `computeFaceNormals`, `computeVertexNormals`, `surfaceArea`, `transformMesh` (the spec's `applyToMesh`; copies all arrays), `mergeMeshes`, `closestPointOnTriangle(positions, indices, tri, px, py, pz, out?)` (exact, returns squared distance) |
+| `core/sampling.ts` | `Rng`, `createRng(seed)`, `gaussian(rng)`, `SurfaceSamples {points, normals, triangles}`, `sampleSurface(mesh, count, seed)` (area-weighted, stratified, shuffled: any prefix is a fair subsample), `hashSeed()` + `hash3(x, y, z, seed)` (secret-seeded hash for tables keyed by file content: HashDoS; never changes a result) |
 | `core/stl-writer.ts` | `STL_HEADER`, `writeBinarySTL(mesh \| meshes, header?)` |
 | `core/text.ts` | `decodeText(bytes)` (strict UTF-8, BOM UTF-16; rejects NUL), `parseStrictNumber(token)` (`number \| null`) |
 | `test/fixtures/index.ts` | `makeScanBody(opts)`, `makeRevolutionBody(opts)`, `makeArch(arch, opts)`, `makeFrames(n, arch, seed?, opts?)`, `placeBodies(frames, body)`, `addNoise(mesh, sigmaMm, seed)`, `randomRigid(seed, maxAngleRad?, maxTranslationMm?)`, `makeSyntheticCase(opts)` -> `{arch, body, frames, sites, parts, captureMesh, archMesh, jaw, captureToJaw}` |
@@ -96,8 +96,8 @@ export function parseOBJ(bytes: Uint8Array, limits: MeshParseLimits): ParsedMesh
 - **parseMesh order:** `FILE_EMPTY` -> `FILE_TOO_LARGE {limitBytes, bytes}` -> detect (null: with `hint`, run that
   parser so the user gets its specific error; without, `FORMAT_UNKNOWN`) -> `FORMAT_NOT_ALLOWED {format, purpose}`
   per `MESH_FORMATS_BY_PURPOSE` -> parse with `LIMITS[purpose]` -> warnings `MESH_LARGE {triangles}` (jaw above
-  `LIMITS.jaw.warnTriangles`) and `MESH_UNITS_SUSPECT {extentMm}` (bounds diagonal outside `PLAUSIBLE_EXTENT_MM`;
-  never convert units). The hint never overrides content.
+  `LIMITS.jaw.warnTriangles`) and `MESH_UNITS_SUSPECT {extentMm}` (bounds diagonal outside `PLAUSIBLE_EXTENT_MM[purpose]`:
+  jaw 15-250 mm, capture and geometry 2-250 mm; never convert units). The hint never overrides content.
 - **Output:** always indexed. STL merges bit-identical vertices (+0 equals -0; no tolerance: that is
   `geometry/weld`). Triangles with a repeated vertex index are dropped and counted
   (`MESH_DEGENERATE_TRIANGLES_DROPPED {count}`); nothing left -> `MESH_EMPTY`. Colors only from PLY/OBJ.
@@ -341,8 +341,9 @@ export interface QualityThresholds {
   goodCoverage: number;       // 0.95
   acceptableRmsMm: number;    // 0.10
   acceptableCoverage: number; // 0.80
-  /** A distinct pose (> 5° or > 0.25 mm) scoring within this ratio of the best -> 'ambiguous'. */
+  /** A distinct pose (> 5° or > 0.25 mm) scoring within max(ratio · best, best + slack) -> 'ambiguous'. */
   ambiguityRatio: number;     // 1.1
+  ambiguitySlackMm: number;   // 0.005 (added at integration: near-zero residuals make any ratio too tight)
 }
 export const DEFAULT_QUALITY: QualityThresholds;
 export interface AlignOptions extends IcpOptions {
@@ -562,4 +563,5 @@ export function safeFilename(label: string, fallback: string): string;
   optional marketing e-mail (the only network call).
 
 Known duplication to unify at integration (`ponytail:` accepted for parallel building): ICP in `detect/` (BVH) and in
-`align/` (k-d tree); `geometry/bvh` vs the k-d tree candidates in `align/deviation`.
+`align/` (k-d tree); `geometry/bvh` vs the k-d tree candidates in `align/deviation`. Unified at integration: the mesh
+check (`core/mesh.checkMesh`; `geometry/check.ts` removed). The two ICPs and the two closest-point trees remain.

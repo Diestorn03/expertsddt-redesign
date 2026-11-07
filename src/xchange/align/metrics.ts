@@ -25,6 +25,8 @@ export interface QualityThresholds {
   acceptableCoverage: number;
   /** A distinct pose (> 5° or > 0.25 mm at the source centroid) scoring within this ratio of the best -> 'ambiguous'. */
   ambiguityRatio: number;
+  /** ... or within the best score plus this (mm): near-zero residuals make any ratio too tight (as the prototype, 0.05·tol). */
+  ambiguitySlackMm: number;
   /** Below this coverage nothing usable was found -> 'failed' (addition to the contract). */
   usableCoverage: number;
   /** Two adjacent source PCA variances closer than this fraction -> 'symmetricSource' (addition to the contract). */
@@ -37,6 +39,7 @@ export const DEFAULT_QUALITY: QualityThresholds = Object.freeze({
   acceptableRmsMm: 0.1,
   acceptableCoverage: 0.8,
   ambiguityRatio: 1.1,
+  ambiguitySlackMm: 0.005,
   usableCoverage: 0.4,
   symmetryTolerance: 0.01,
 });
@@ -70,7 +73,8 @@ export function resolveQuality(partial: Partial<QualityThresholds> = {}): Qualit
   const ok =
     q.goodRmsMm > 0 && q.acceptableRmsMm > 0 && Number.isFinite(q.goodRmsMm) && Number.isFinite(q.acceptableRmsMm) &&
     fraction(q.goodCoverage) && fraction(q.acceptableCoverage) && fraction(q.usableCoverage) &&
-    q.ambiguityRatio >= 1 && Number.isFinite(q.ambiguityRatio) && q.symmetryTolerance >= 0 && q.symmetryTolerance < 1;
+    q.ambiguityRatio >= 1 && Number.isFinite(q.ambiguityRatio) && q.ambiguitySlackMm >= 0 && Number.isFinite(q.ambiguitySlackMm) &&
+    q.symmetryTolerance >= 0 && q.symmetryTolerance < 1;
   if (!ok) throw new XchangeError('INVALID_ARGUMENT', { reason: 'quality' });
   return q;
 }

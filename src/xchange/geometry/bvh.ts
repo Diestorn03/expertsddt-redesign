@@ -4,9 +4,8 @@
  * Errors: MESH_EMPTY (no triangles), INVALID_ARGUMENT reason 'ray', plus checkMesh's.
  */
 import { XchangeError } from '../core/errors';
-import { closestPointOnTriangle } from '../core/mesh';
+import { checkMesh, closestPointOnTriangle } from '../core/mesh';
 import type { TriMesh, Vec3 } from '../core/types';
-import { checkMesh } from './check';
 
 const LEAF_SIZE = 8;
 

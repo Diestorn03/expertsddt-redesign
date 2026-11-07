@@ -7,7 +7,7 @@ import { XchangeError } from '../core/errors';
 import { LIMITS } from '../core/limits';
 import { identity, validateRigid } from '../core/mat4';
 import type { Mat4, TriMesh } from '../core/types';
-import { checkMesh } from './icp';
+import { checkUsableMesh } from './icp';
 import { buildTriangleTree, closestOnSurface, type TriangleTree } from './kdtree';
 
 /** Values are exact up to this and clamped to it (the colour ramp itself saturates at 100 µm in the viewer). */
@@ -34,7 +34,7 @@ export function deviationToSurface(mesh: TriMesh, surface: TriangleTree, transfo
  * Exact (closest point on the triangles) up to options.maxUm (default 1000 µm), clamped there.
  */
 export function deviationMap(meshA: TriMesh, meshB: TriMesh, transformA?: Mat4, options: { maxUm?: number } = {}): Float32Array<ArrayBuffer> {
-  checkMesh(meshA, LIMITS.jaw.maxTriangles);
-  checkMesh(meshB, LIMITS.jaw.maxTriangles);
+  checkUsableMesh(meshA, LIMITS.jaw.maxTriangles);
+  checkUsableMesh(meshB, LIMITS.jaw.maxTriangles);
   return deviationToSurface(meshA, buildTriangleTree(meshB), transformA, options.maxUm);
 }

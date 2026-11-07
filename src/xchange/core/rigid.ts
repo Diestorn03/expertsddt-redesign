@@ -1,7 +1,7 @@
 /** Rigid least-squares fits. Point sets are flat xyz arrays (length 3n). */
 import { XchangeError } from './errors';
 import { eigenSymmetric, solveLinear } from './linalg';
-import { fromAxisAngle, fromQuaternion } from './mat4';
+import { fromAxisAngle, fromQuaternion, identity } from './mat4';
 import type { Mat4 } from './types';
 
 type Points = ArrayLike<number>;
@@ -105,7 +105,8 @@ export function solvePointToPlane(src: Points, dst: Points, dstNormals: Points, 
   const x = solveLinear(ata, atb, 6);
   if (!x) return null;
   const angle = Math.hypot(x[0]!, x[1]!, x[2]!);
-  const m = angle > 1e-15 ? fromAxisAngle([x[0]!, x[1]!, x[2]!], angle, [cx, cy, cz]) : fromAxisAngle([0, 0, 1], 0);
+  // At or below 1e-12 rad (normalize's floor) the turn moves a point < 1e-10 mm at 100 mm: a converged step.
+  const m = angle > 1e-12 ? fromAxisAngle([x[0]!, x[1]!, x[2]!], angle, [cx, cy, cz]) : identity();
   m[3] = m[3]! + x[3]!;
   m[7] = m[7]! + x[4]!;
   m[11] = m[11]! + x[5]!;
