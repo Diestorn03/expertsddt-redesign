@@ -9,6 +9,8 @@ Nada sale a `expertsddt.com` sin que alguien lance el workflow **Deploy to Hosti
 3. **Secretos por entorno** (cada Environment): `FTP_HOST`, `FTP_USERNAME`, `FTP_PASSWORD` y, si no es 21, `FTP_PORT`.
 4. **Variables por entorno:** `FTP_SERVER_DIR` (termina en `/`, p. ej. `/public_html/`).
 5. **Variables del repositorio:** `STAGING_URL` (si hay subdominio de ensayo), `PUBLIC_SHOP_URL`, `PUBLIC_N8N_FORM_WEBHOOK`, `PUBLIC_N8N_CHAT_WEBHOOK`, `PUBLIC_GCAL_EMBED`, `PUBLIC_WHATSAPP`, y `PUBLIC_GA_ID` solo cuando se active la analítica.
+   - `PUBLIC_N8N_CHAT_WEBHOOK` del chat Apex: la web actual ya usa `https://n8n.wigoqd.easypanel.host/webhook/1430a6f1-58e6-45ba-9e13-a4a68c63f383/chat`; el mismo flujo sirve al sitio nuevo (mismo dominio).
+   - `PUBLIC_SHOW_REVIEWS=1` solo cuando las reseñas del inicio sean testimonios reales y verificados; por defecto la sección no se publica.
 6. Producción exige `PUBLIC_SHOP_URL`, `PUBLIC_N8N_FORM_WEBHOOK` y `PUBLIC_GCAL_EMBED`; el workflow se detiene si faltan.
 
 El webhook de n8n recibe JSON con `source`: `contact` (formulario de contacto) o `exocad-libraries` (descarga de librerías, con `name`, `email`, `version`). Un nodo *Switch* por `source` decide si manda correo o agrega una fila a Google Sheets. En el webhook hay que permitir el origen `https://expertsddt.com` (Options → Allowed Origins).

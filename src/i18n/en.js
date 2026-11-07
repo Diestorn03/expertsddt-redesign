@@ -97,7 +97,6 @@ export default {
     eyebrow: 'Your reviews', title: 'Let us know', titleLine2: 'how you', titleAccent: 'feel',
     lead: 'Specialists, prosthodontists and lab owners on what changes when Experts DDT joins the workflow.',
     trust: 'Trusted by clinics and labs across the US',
-    sample: 'Sample testimonials. To be replaced with verified client reviews before launch.',
     items: [
       { n: 'Dr. Michael R.', r: 'Implant Specialist', q: 'The hands-on training with Fernando was a complete game-changer for my clinic. I had struggled with Exocad for months, but his method of breaking down complex workflows made it incredibly intuitive. I left the course with the confidence to handle full-arch cases the very next day. Truly the “Wizard” of digital dentistry.' },
       { n: 'Sarah L.', r: 'Dental Lab Owner', q: 'Precision is everything in implantology, and Experts DDT delivers exactly that. The fit of their Zirconia bars and the accuracy of the surgical guides are unmatched. We’ve significantly reduced our chairside adjustment time since we started working with them. A partner you can trust.' },

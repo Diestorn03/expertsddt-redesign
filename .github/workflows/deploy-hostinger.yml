@@ -55,6 +55,7 @@ jobs:
           PUBLIC_N8N_CHAT_WEBHOOK: ${{ vars.PUBLIC_N8N_CHAT_WEBHOOK }}
           PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
           PUBLIC_GA_ID: ${{ vars.PUBLIC_GA_ID }}
+          PUBLIC_SHOW_REVIEWS: ${{ vars.PUBLIC_SHOW_REVIEWS }}
           PUBLIC_WHATSAPP: ${{ vars.PUBLIC_WHATSAPP || '15106760418' }}
           PUBLIC_NOINDEX: ${{ inputs.target == 'staging' && '1' || '' }}
       - name: Audit the built site (links, SEO basics, hreflang, sitemap)

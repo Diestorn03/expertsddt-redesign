@@ -4,6 +4,8 @@ import Cta from '../components/Cta.astro';
 import { useI18n } from '../i18n/index.js';
 const { t, href, asset } = useI18n(Astro);
 const shop = import.meta.env.PUBLIC_SHOP_URL;
+// Testimonials stay hidden until Fernando provides verified ones (fake reviews are illegal in the US). Set PUBLIC_SHOW_REVIEWS=1 to show them.
+const showReviews = import.meta.env.PUBLIC_SHOW_REVIEWS === '1';
 
 const icons = [
   'M4 6h16v10H4zM2 20h20M9 16v4M15 16v4',
@@ -209,6 +211,7 @@ const pillarMedia = [
   </section>
 
   <!-- ================= REVIEWS (card stack) ================= -->
+  {showReviews && (
   <section id="reviews" class="section section--mist reviews" data-scene>
     <div class="wrap reviews__grid">
       <div class="reviews__head" data-reveal-scope>
@@ -216,7 +219,6 @@ const pillarMedia = [
         <h2 class="h-display" data-split="lines">{t.reviews.title}<br />{t.reviews.titleLine2} <span class="underline-accent">{t.reviews.titleAccent}</span></h2>
         <p class="lead" data-reveal="up" data-delay=".2">{t.reviews.lead}</p>
         <div class="reviews__rating" data-reveal="up" data-delay=".35"><span class="stars" aria-hidden="true">★★★★★</span> {t.reviews.trust}</div>
-        <p class="note" data-reveal="up" data-delay=".45">{t.reviews.sample}</p>
       </div>
       <div class="reviews__stack">
         {t.reviews.items.map((r, i) => (
@@ -229,6 +231,7 @@ const pillarMedia = [
       </div>
     </div>
   </section>
+  )}
 
   <!-- ================= RESOURCES ================= -->
   <section id="resources" class="section resources" data-scene>

@@ -96,7 +96,6 @@ export default {
     eyebrow: 'Tus reseñas', title: 'Cuéntanos', titleLine2: 'cómo te', titleAccent: 'sientes',
     lead: 'Especialistas, prostodoncistas y dueños de laboratorio sobre lo que cambia cuando Experts DDT se suma al flujo de trabajo.',
     trust: 'Con la confianza de clínicas y laboratorios de todo EE. UU.',
-    sample: 'Testimonios de muestra. Se reemplazarán por reseñas verificadas de clientes antes del lanzamiento.',
     items: [
       { n: 'Dr. Michael R.', r: 'Especialista en implantes', q: 'La capacitación práctica con Fernando cambió por completo mi clínica. Llevaba meses luchando con Exocad, pero su forma de desglosar flujos de trabajo complejos lo hizo increíblemente intuitivo. Salí del curso con la confianza para manejar casos de arcada completa al día siguiente. Verdaderamente el “Mago” de la odontología digital.' },
       { n: 'Sarah L.', r: 'Dueña de laboratorio dental', q: 'En implantología la precisión lo es todo, y Experts DDT entrega exactamente eso. El ajuste de sus barras de zirconia y la exactitud de las guías quirúrgicas no tienen comparación. Hemos reducido significativamente el tiempo de ajustes en sillón desde que empezamos a trabajar con ellos. Un socio en el que puedes confiar.' },
