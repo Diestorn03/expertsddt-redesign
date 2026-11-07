@@ -1,0 +1,116 @@
+name: Deploy to Hostinger
+
+# Manual on purpose: nothing reaches expertsddt.com without someone pressing the button.
+# Production runs wait for approval (GitHub Environment "production" with required reviewers).
+# Rollback = run this workflow again with an older tag/commit in "ref".
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to deploy
+        type: choice
+        options: [staging, production]
+        default: staging
+      ref:
+        description: Branch, tag or commit to deploy (use an older tag to roll back)
+        default: main
+      dry_run:
+        description: List what would be uploaded without changing the server
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostinger-${{ inputs.target }}
+  cancel-in-progress: false
+
+env:
+  # Pinned to commit SHAs (supply-chain safety): checkout v4, setup-node v4, upload/download-artifact v4, FTP-Deploy-Action v4.3.5
+  SITE_URL: ${{ inputs.target == 'production' && 'https://expertsddt.com' || vars.STAGING_URL }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Redirect rules still send old WordPress URLs to the right place
+        run: npm run test:redirects
+      - name: Build
+        run: npm run build
+        env:
+          # Public settings, set under Settings > Secrets and variables > Actions > Variables
+          PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
+          PUBLIC_N8N_FORM_WEBHOOK: ${{ vars.PUBLIC_N8N_FORM_WEBHOOK }}
+          PUBLIC_N8N_CHAT_WEBHOOK: ${{ vars.PUBLIC_N8N_CHAT_WEBHOOK }}
+          PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
+          PUBLIC_GA_ID: ${{ vars.PUBLIC_GA_ID }}
+          PUBLIC_WHATSAPP: ${{ vars.PUBLIC_WHATSAPP || '15106760418' }}
+          PUBLIC_NOINDEX: ${{ inputs.target == 'staging' && '1' || '' }}
+      - name: Audit the built site (links, SEO basics, hreflang, sitemap)
+        run: npm run test:dist
+        env:
+          ALLOW_NOINDEX: ${{ inputs.target == 'staging' && '1' || '' }}
+      - name: Production must have its integrations configured
+        if: inputs.target == 'production'
+        run: |
+          missing=""
+          for v in PUBLIC_SHOP_URL PUBLIC_N8N_FORM_WEBHOOK PUBLIC_GCAL_EMBED; do
+            eval "val=\${$v}"; [ -z "$val" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then echo "::error::Set these repository variables before deploying to production:$missing"; exit 1; fi
+        env:
+          PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
+          PUBLIC_N8N_FORM_WEBHOOK: ${{ vars.PUBLIC_N8N_FORM_WEBHOOK }}
+          PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: site-${{ inputs.target }}
+          path: dist
+          include-hidden-files: true   # .htaccess
+          retention-days: 90
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}   # production: required reviewers + environment secrets (FTP_*)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: site-${{ inputs.target }}
+          path: dist
+      - name: Upload to Hostinger over FTPS
+        uses: SamKirkland/FTP-Deploy-Action@8e83cea8672e3fbcbb9fdafff34debf6ae4c5f65
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT || 21 }}
+          protocol: ftps
+          local-dir: ./dist/
+          server-dir: ${{ vars.FTP_SERVER_DIR }}
+          dry-run: ${{ inputs.dry_run }}
+          # Never touch what the content panel manages on the server (libraries zip + manifest, uploaded media)
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            downloads/libraries/**
+            uploads/**
+      - name: Smoke test the live URL
+        if: ${{ !inputs.dry_run }}
+        run: node scripts/smoke.mjs
+        env:
+          SITE_URL: ${{ env.SITE_URL }}
+          EXPECT_NOINDEX: ${{ inputs.target == 'staging' && '1' || '' }}

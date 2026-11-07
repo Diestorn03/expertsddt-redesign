@@ -16,6 +16,7 @@ export function useI18n(Astro) {
   const pathname = Astro.url.pathname;
   const rel = base && pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
   const path = rel.replace(/^\/es(?=\/|$)/, '') || '/'; // same page, language-neutral
-  const alt = { lang: lang === 'en' ? 'es' : 'en', href: lang === 'en' ? `${base}/es${path}` : `${base}${path}` };
+  const altPath = path.startsWith('/404') ? '/' : path; // there is a single 404 page: switch language on the home page
+  const alt = { lang: lang === 'en' ? 'es' : 'en', href: lang === 'en' ? `${base}/es${altPath}` : `${base}${altPath}` };
   return { t, lang, href, asset, alt, path, base };
 }

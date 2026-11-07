@@ -8,9 +8,11 @@ import { useI18n } from '../i18n/index.js';
 import Analytics from '../components/Analytics.astro';
 import Apex from '../components/Apex.astro';
 
-interface Props { title: string; description?: string }
+interface Props { title: string; description?: string; noindex?: boolean }
 const { t, lang, href, asset, alt, path, base } = useI18n(Astro);
 const { title, description = t.meta.description } = Astro.props;
+// staging builds (PUBLIC_NOINDEX=1) must never be indexed
+const noindex = Astro.props.noindex || !!import.meta.env.PUBLIC_NOINDEX;
 const shop = import.meta.env.PUBLIC_SHOP_URL;
 const site = (Astro.site?.origin ?? '') + base;
 const links = [
@@ -47,10 +49,14 @@ const schema = {
     <link rel="icon" href={asset('/favicon-32.png')} type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href={asset('/apple-touch-icon.png')} />
     <link rel="preload" as="image" href={asset('/img/brand/logo-light.webp')} />
-    <link rel="canonical" href={(Astro.site?.origin ?? '') + Astro.url.pathname} />
-    <link rel="alternate" hreflang="en" href={site + path} />
-    <link rel="alternate" hreflang="es" href={site + '/es' + path} />
-    <link rel="alternate" hreflang="x-default" href={site + path} />
+    {noindex ? <meta name="robots" content="noindex, follow" /> : (
+      <>
+        <link rel="canonical" href={(Astro.site?.origin ?? '') + Astro.url.pathname} />
+        <link rel="alternate" hreflang="en" href={site + path} />
+        <link rel="alternate" hreflang="es" href={site + '/es' + path} />
+        <link rel="alternate" hreflang="x-default" href={site + path} />
+      </>
+    )}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

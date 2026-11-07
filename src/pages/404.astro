@@ -4,7 +4,7 @@ import { useI18n } from '../i18n/index.js';
 const { t, href } = useI18n(Astro);
 const n = t.pages.notFound;
 ---
-<Base title={n.title} description={n.text}>
+<Base title={n.title} description={n.text} noindex>
   <section class="page-hero" data-nav-solid-from data-scene style="min-height:70vh;display:grid;align-items:center">
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="wrap stack">
