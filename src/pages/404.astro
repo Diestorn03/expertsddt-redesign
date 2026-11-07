@@ -1,0 +1,21 @@
+---
+import Base from '../layouts/Base.astro';
+import { useI18n } from '../i18n/index.js';
+const { t, href } = useI18n(Astro);
+const n = t.pages.notFound;
+---
+<Base title={n.title} description={n.text}>
+  <section class="page-hero" data-nav-solid-from data-scene style="min-height:70vh;display:grid;align-items:center">
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="wrap stack">
+      <span class="eyebrow">404</span>
+      <h1 class="h-display">{n.title}</h1>
+      <p class="lead">{n.text}</p>
+      <div class="cta-row">
+        <a class="btn btn--white" href={href('/')}>{n.home} <span class="arrow">→</span></a>
+        <a class="btn btn--ghost" href={href('/services/')}>{t.nav.services}</a>
+        <a class="btn btn--ghost" href={href('/contact/')}>{t.nav.contact}</a>
+      </div>
+    </div>
+  </section>
+</Base>

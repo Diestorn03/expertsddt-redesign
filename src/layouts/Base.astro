@@ -20,6 +20,21 @@ const links = [
 const current = (h) => h === Astro.url.pathname ? 'page' : undefined;
 // official brand mark inlined in the loader so it is there on the very first paint (6 KB)
 const markData = `data:image/webp;base64,${readFileSync(join(process.cwd(), 'public/img/brand/mark.webp')).toString('base64')}`;
+// structured data: organization + website (what Yoast emitted on WordPress, without the search action)
+const origin = Astro.site?.origin ?? '';
+const schema = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization', '@id': `${origin}/#org`, name: 'Fernando Polanco DDT LLC', alternateName: 'Experts DDT',
+      url: `${origin}/`, logo: `${origin}${base}/img/brand/logo.webp`, email: 'Polanco@expertsddt.com', telephone: '+1-510-676-0418',
+      foundingDate: '2019', address: { '@type': 'PostalAddress', addressRegion: 'FL', addressCountry: 'US' },
+      sameAs: ['https://www.facebook.com/FernandoPolancoDDTRDA', 'https://www.instagram.com/expertsddt', 'https://www.instagram.com/fernandopolancoddt'],
+      founder: { '@type': 'Person', name: 'Fernando Polanco', jobTitle: 'The Wizard of Digital Dentistry' },
+    },
+    { '@type': 'WebSite', '@id': `${origin}/#website`, url: `${origin}/`, name: t.siteName, inLanguage: ['en', 'es'], publisher: { '@id': `${origin}/#org` } },
+  ],
+};
 ---
 <!doctype html>
 <html lang={lang}>
@@ -48,6 +63,7 @@ const markData = `data:image/webp;base64,${readFileSync(join(process.cwd(), 'pub
     <meta property="og:image:height" content="630" />
     <meta property="og:locale" content={lang === 'es' ? 'es_ES' : 'en_US'} />
     <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json" set:html={JSON.stringify(schema)}></script>
     <script is:inline>
       // Theme before first paint; re-applied after view transitions. `js` class lets CSS pre-position animated elements.
       (function () {
@@ -172,7 +188,11 @@ const markData = `data:image/webp;base64,${readFileSync(join(process.cwd(), 'pub
         </div>
         <div class="footer__bottom">
           <span>© {new Date().getFullYear()} Fernando Polanco DDT LLC · Experts DDT. {t.footer.rights}</span>
-          <span>{t.footer.built}</span>
+          <span class="footer__legal">
+            <a href={href('/terms-and-conditions/')}>{t.footer.legal.terms}</a>
+            <a href={href('/refund-policy/')}>{t.footer.legal.refund}</a>
+            <a href={href('/privacy-policy/')}>{t.footer.legal.privacy}</a>
+          </span>
         </div>
       </div>
     </footer>
@@ -191,5 +211,6 @@ const markData = `data:image/webp;base64,${readFileSync(join(process.cwd(), 'pub
   :root:not([data-theme="dark"]) .nav.is-solid:not(.is-menu) .logo__img--brand { opacity: 1; }
   :root:not([data-theme="dark"]) .nav.is-solid:not(.is-menu) .logo__img--light { opacity: 0; }
   .logo--footer .logo__img { height: 30px; }
+  .footer__legal { display: inline-flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
   @media (max-width: 560px) { .logo__img { height: 22px; } }
 </style>

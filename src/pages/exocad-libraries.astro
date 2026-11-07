@@ -5,7 +5,7 @@ import { useI18n } from '../i18n/index.js';
 const { t, href } = useI18n(Astro);
 const l = t.pages.libraries;
 ---
-<Base title={t.meta.libraries}>
+<Base title={t.meta.libraries} description={t.meta.librariesDesc}>
   <section class="page-hero" data-nav-solid-from data-scene>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="wrap grid-2">

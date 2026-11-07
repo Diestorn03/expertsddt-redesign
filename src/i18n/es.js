@@ -10,6 +10,14 @@ export default {
     store: 'Tienda',
     libraries: 'Librerías de implantes',
     contact: 'Contacto y reservas',
+    servicesDesc: 'Diseño All-on-X premium, impresión 3D de arcada completa, PMMA y Zirconia, escaneo facial 3D, capacitación práctica y soporte experto de Fernando Polanco DDT.',
+    coursesDesc: 'Capacitación online de Exocad por Fernando Polanco: aprende las librerías de dientes y encía virtual y domina el flujo digital a tu ritmo.',
+    storeDesc: 'Plantillas, librerías de Exocad, cursos y pilares de cicatrización de Fernando Polanco. Pago seguro en nuestra tienda Shopify.',
+    librariesDesc: 'Librerías de implantes ExpertsDDT gratis para Exocad: componentes listos para fabricante, geometrías de scan body y STL de fotogrametría.',
+    contactDesc: 'Reserva una consulta de una hora con Experts DDT, escríbenos o chatea por WhatsApp. Online o presencial en Florida.',
+    termsDesc: 'Términos y condiciones de venta de equipos y productos físicos de Fernando Polanco DDT LLC.',
+    refundDesc: 'Política de devoluciones, reembolsos y cancelación de cursos de Experts DDT.',
+    privacyDesc: 'Cómo Fernando Polanco DDT LLC recopila, usa y protege la información personal en expertsddt.com.',
   },
   nav: {
     skip: 'Ir al contenido',
@@ -112,18 +120,22 @@ export default {
     navigate: 'Navegación', portal: 'Doctor Portal', contact: 'Conoce más sobre nosotros',
     signup: 'Regístrate como doctor', login: 'Iniciar sesión', libraries: 'Librerías gratis para Exocad', support: 'Soporte técnico',
     location: 'Florida, Estados Unidos', languages: 'Disponible en inglés y español',
-    rights: 'Todos los derechos reservados.', built: 'Propuesta de rediseño · hecho con Astro',
+    legal: { terms: 'Términos y condiciones', refund: 'Política de reembolso', privacy: 'Política de privacidad' },
+    rights: 'Todos los derechos reservados.',
   },
   consent: {
     text: 'Usamos cookies para medir el tráfico y mejorar el sitio.',
     accept: 'Aceptar', decline: 'Rechazar',
   },
   pages: {
+    legal: { eyebrow: 'Legal', enOnly: 'Los documentos legales se publican en inglés, el idioma del acuerdo. Escríbenos si necesitas ayuda para entenderlos.' },
+    notFound: { title: 'Esta página se movió o no existe.', text: 'Puede que el enlace sea antiguo o tenga un error. Usa los enlaces de abajo para volver.', home: 'Volver al inicio' },
     services: {
       eyebrow: 'Servicios', title: 'Servicios premium para el consultorio 100% digital.',
       lead: 'Desde el primer escaneo hasta la zirconia final. Diseño, manufactura, tecnología, capacitación y soporte, a cargo de los expertos de Fernando Polanco DDT.',
       jumpLabel: 'Servicios en esta página', ctaTitle: 'Diseñemos juntos tu <span class="cta__accent">próximo caso</span>.',
       panel: { tags: ['PMMA', 'Zirconia', 'Impresión 3D'], big: 'Arcada completa' },
+      guide: { eyebrow: 'Servicios digitales y tarifas 2026', title: 'Conoce el costo antes de empezar.', text: 'Accede a nuestro catálogo completo de servicios dentales para consultorios privados, laboratorios, DSO y corporaciones.', cta: 'Descargar guía de servicios', meta: 'PDF · actualizado en septiembre de 2026 · en inglés' },
       rows: [
         { id: 'design', n: '01', t: 'Servicios de diseño premium', p: 'Diseños de alto nivel para casos complejos como All-on-X de principio a fin, además de prótesis totales, sobredentaduras, barras, puentes y coronas de rehabilitación completa (FMR), carillas y guías quirúrgicas.', cta: 'Reserva tu sesión ahora', tags: ['All-on-X', 'Prótesis totales', 'Barras y puentes', 'Carillas', 'Guías quirúrgicas'] },
         { id: 'manufacturing', n: '02', t: 'Impresión 3D y manufactura final', p: 'Producción de arcada completa mediante impresión 3D, PMMA y zirconia final. Creación de modelos o prótesis de arcada completa con tecnología de impresión 3D.', cta: 'Agenda una consulta', tags: ['Impresión 3D', 'PMMA', 'Zirconia', 'Modelos'] },

@@ -11,6 +11,14 @@ export default {
     store: 'Store',
     libraries: 'Implant libraries',
     contact: 'Contact & booking',
+    servicesDesc: 'Premium All-on-X design, full-arch 3D printing, PMMA and Zirconia, 3D facial scanning, hands-on training and expert support from Fernando Polanco DDT.',
+    coursesDesc: 'Online Exocad training by Fernando Polanco: learn the teeth and virtual gingiva libraries and master the digital workflow at your own pace.',
+    storeDesc: 'Templates, Exocad libraries, courses and healing abutments by Fernando Polanco. Secure checkout in our Shopify store.',
+    librariesDesc: 'Free ExpertsDDT implant libraries for Exocad: manufacturer-ready components, scan-body geometries and photogrammetry STLs.',
+    contactDesc: 'Book a one-hour consultation with Experts DDT, send us a message or chat on WhatsApp. Online or on-site in Florida.',
+    termsDesc: 'Terms and conditions of sale of equipment and physical products by Fernando Polanco DDT LLC.',
+    refundDesc: 'Returns, refunds and course cancellation policy for Experts DDT products and services.',
+    privacyDesc: 'How Fernando Polanco DDT LLC collects, uses and protects personal information on expertsddt.com.',
   },
   nav: {
     skip: 'Skip to content',
@@ -113,18 +121,22 @@ export default {
     navigate: 'Navigate', portal: 'Doctor portal', contact: 'Get to know more about us',
     signup: 'Sign up as doctor', login: 'Log in', libraries: 'Free Exocad libraries', support: 'Technical support',
     location: 'Florida, United States', languages: 'Available in English and Spanish',
-    rights: 'All rights reserved.', built: 'Redesign proposal · built with Astro',
+    legal: { terms: 'Terms & conditions', refund: 'Refund policy', privacy: 'Privacy policy' },
+    rights: 'All rights reserved.',
   },
   consent: {
     text: 'We use cookies to measure traffic and improve the site.',
     accept: 'Accept', decline: 'Decline',
   },
   pages: {
+    legal: { eyebrow: 'Legal', enOnly: 'Legal documents are provided in English, the language of the agreement. Contact us if you need help understanding them.' },
+    notFound: { title: 'This page moved or does not exist.', text: 'The link may be old or mistyped. Use the links below to get back on track.', home: 'Back to home' },
     services: {
       eyebrow: 'Services', title: 'Premium services for the fully digital practice.',
       lead: 'From the first scan to the final Zirconia. Design, manufacturing, technology, training and support, delivered by Fernando Polanco DDT experts.',
       jumpLabel: 'Services on this page', ctaTitle: 'Let’s design your <span class="cta__accent">next case</span> together.',
       panel: { tags: ['PMMA', 'Zirconia', '3D print'], big: 'Full arch' },
+      guide: { eyebrow: '2026 Digital Services & Fee Schedule', title: 'Know the cost before you start.', text: 'Access our comprehensive catalog of all our dental services for private practices, dental labs, DSOs, and corporations.', cta: 'Download service guide', meta: 'PDF · updated September 2026' },
       rows: [
         { id: 'design', n: '01', t: 'Premium design services', p: 'High-level designs for complex cases such as All-on-X from start to finish, plus dentures, overdentures, bars, bridges and FMR crowns, veneers and surgical guides.', cta: 'Book your session now', tags: ['All-on-X', 'Dentures', 'Bars & bridges', 'Veneers', 'Surgical guides'] },
         { id: 'manufacturing', n: '02', t: '3D printing and final manufacturing', p: 'Full arch production via 3D printing, PMMA, and final Zirconia. Creation of models or full-arch prostheses using 3D printing technology.', cta: 'Schedule a consultation', tags: ['3D printing', 'PMMA', 'Zirconia', 'Models'] },

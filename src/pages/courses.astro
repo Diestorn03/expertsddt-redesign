@@ -6,7 +6,7 @@ const { t, asset } = useI18n(Astro);
 const c = t.pages.courses;
 const shop = import.meta.env.PUBLIC_SHOP_URL || 'https://expertsddt.com/courses/';
 ---
-<Base title={t.meta.courses}>
+<Base title={t.meta.courses} description={t.meta.coursesDesc}>
   <section class="page-hero courses-hero" data-nav-solid-from data-scene>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="wrap stack courses-hero__inner">

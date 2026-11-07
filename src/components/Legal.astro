@@ -1,0 +1,48 @@
+---
+// Legal documents (terms, refund, privacy). Text lives in src/legal/*.html (EN only); ES pages show the same text with a notice.
+import Base from '../layouts/Base.astro';
+import { useI18n } from '../i18n/index.js';
+import terms from '../legal/terms.html?raw';
+import refund from '../legal/refund.html?raw';
+import privacy from '../legal/privacy.html?raw';
+
+interface Props { kind: 'terms' | 'refund' | 'privacy' }
+const { kind } = Astro.props;
+const { t, lang, href } = useI18n(Astro);
+const docs = { terms, refund, privacy };
+const html = docs[kind].replace(/<!--[\s\S]*?-->/g, '');
+const l = t.pages.legal;
+---
+<Base title={t.footer.legal[kind]} description={t.meta[`${kind}Desc`]}>
+  <section class="page-hero" data-nav-solid-from data-scene>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="wrap stack">
+      <span class="eyebrow" data-reveal="up">{l.eyebrow}</span>
+      <h1 class="h-display" data-split="words">{t.footer.legal[kind]}</h1>
+    </div>
+  </section>
+
+  <section class="section" data-scene>
+    <div class="wrap legal">
+      {lang === 'es' && <p class="legal__note" role="note">{l.enOnly}</p>}
+      <article class="prose" lang="en" set:html={html}></article>
+      <p class="legal__links">
+        <a href={href('/terms-and-conditions/')}>{t.footer.legal.terms}</a> ·
+        <a href={href('/refund-policy/')}>{t.footer.legal.refund}</a> ·
+        <a href={href('/privacy-policy/')}>{t.footer.legal.privacy}</a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .legal { max-width: 78ch; }
+  .legal__note { background: rgba(4,107,210,.08); border-left: 3px solid var(--blue); padding: .9rem 1.1rem; border-radius: 8px; margin: 0 0 2rem; font-size: .95rem; }
+  .prose :global(h2) { font-size: clamp(1.15rem, 2vw, 1.5rem); margin: 2.4rem 0 .8rem; }
+  .prose :global(p), .prose :global(li) { color: var(--slate); line-height: 1.75; }
+  .prose :global(p) { margin: 0 0 1rem; }
+  .prose :global(ul), .prose :global(ol) { padding-left: 1.3rem; margin: 0 0 1.2rem; display: grid; gap: .4rem; }
+  .prose :global(a) { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+  .legal__links { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); font-size: .9rem; }
+  .legal__links a { color: var(--blue); }
+</style>

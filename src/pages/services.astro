@@ -13,7 +13,7 @@ const media = [
   { img: asset('/img/team.webp') },
 ];
 ---
-<Base title={t.meta.services}>
+<Base title={t.meta.services} description={t.meta.servicesDesc}>
   <section class="page-hero" data-nav-solid-from data-scene>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="wrap stack">
@@ -23,6 +23,20 @@ const media = [
       <nav class="jump" aria-label={s.jumpLabel} data-stagger=".06">
         {s.rows.map((r) => <a href={`#${r.id}`}><span>{r.n}</span>{r.t}</a>)}
       </nav>
+    </div>
+  </section>
+
+  <section class="guide" data-scene aria-labelledby="guide-title">
+    <div class="wrap guide__box" data-reveal="up">
+      <div class="stack">
+        <span class="eyebrow">{s.guide.eyebrow}</span>
+        <h2 class="h-lg" id="guide-title">{s.guide.title}</h2>
+        <p>{s.guide.text}</p>
+      </div>
+      <div class="guide__cta">
+        <a class="btn btn--primary" href={asset('/downloads/services-and-fees-experts-ddt.pdf')} download target="_blank" rel="noopener">{s.guide.cta} <span class="arrow">↓</span></a>
+        <small>{s.guide.meta}</small>
+      </div>
     </div>
   </section>
 
@@ -58,6 +72,11 @@ const media = [
   .jump a { display: inline-flex; align-items: center; gap: .6rem; padding: .6rem 1rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); font-size: .85rem; font-weight: 500; transition: background .3s, border-color .3s; min-height: 44px; }
   .jump a span { color: #6fb6ff; font-weight: 700; }
   .jump a:hover { background: rgba(255,255,255,.1); border-color: #fff; }
+  .guide { padding-block: 2.5rem 0; }
+  .guide__box { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem 2rem; padding: clamp(1.4rem, 4vw, 2.4rem); border-radius: 24px; background: var(--mist); border: 1px solid var(--line); }
+  .guide__box .stack { max-width: 60ch; }
+  .guide__cta { display: grid; gap: .5rem; justify-items: start; }
+  .guide__cta small { color: var(--slate); font-size: .8rem; }
   .row--flip .row__media { order: 2; }
   .row__media .img-frame { aspect-ratio: 4 / 3; }
   .row__media .img-frame--square { aspect-ratio: 1; }
