@@ -191,7 +191,7 @@ p { margin: 0; }
 /* ---------- footer ---------- */
 .footer { background: #0a1a3a; color: #9fb3d4; padding: 4.5rem 0 calc(2rem + 120px); font-size: .92rem; position: relative; overflow: hidden; }
 .footer__grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1.2fr; gap: 2.5rem; position: relative; z-index: 1; }
-.footer h4 { color: #fff; font-size: .8rem; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 1rem; }
+.footer h3 { color: #fff; font-size: .8rem; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 1rem; }
 .footer ul { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
 .footer a:hover { color: #fff; }
 .footer__bottom { margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,.08); display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font-size: .8rem; position: relative; z-index: 1; }

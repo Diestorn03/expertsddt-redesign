@@ -162,7 +162,7 @@ function initSplits() {
     // mobile: sober — chars become words, lines stay (cheap)
     const mode = coarse && el.dataset.split === 'chars' ? 'words' : el.dataset.split; // chars | words | lines
     el.style.visibility = 'visible';
-    const split = new SplitText(el, { type: mode === 'chars' ? 'chars,words' : mode, mask: mode === 'lines' ? 'lines' : undefined, linesClass: 'split-line', wordsClass: 'split-word', charsClass: 'split-char' });
+    const split = new SplitText(el, { type: mode === 'chars' ? 'chars,words' : mode, aria: 'none', mask: mode === 'lines' ? 'lines' : undefined, linesClass: 'split-line', wordsClass: 'split-word', charsClass: 'split-char' });
     const targets = mode === 'chars' ? split.chars : mode === 'words' ? split.words : split.lines;
     const trig = { trigger: el, start: el.dataset.start || 'top 85%', once: true, onEnter: () => el.closest('[data-reveal-scope]')?.classList.add('is-inview') || el.classList.add('is-inview') };
     if (mode === 'chars') {
@@ -276,9 +276,9 @@ function initPillars() {
 /* ---------------- Word-by-word lighting ---------------- */
 function initLit() {
   gsap.utils.toArray('[data-lit]').forEach((el) => {
-    const split = new SplitText(el, { type: 'words', wordsClass: 'lit-word' });
+    const split = new SplitText(el, { type: 'words', aria: 'none', wordsClass: 'lit-word' });
     el.style.visibility = 'visible';
-    gsap.fromTo(split.words, { opacity: .18 }, { opacity: 1, stagger: .02, ease: 'none', scrollTrigger: { trigger: el, start: 'top 78%', end: 'bottom 45%', scrub: .6 } });
+    gsap.fromTo(split.words, { opacity: .6 }, { opacity: 1, stagger: .02, ease: 'none', scrollTrigger: { trigger: el, start: 'top 78%', end: 'bottom 45%', scrub: .6 } });
   });
 }
 
