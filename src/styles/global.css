@@ -208,7 +208,7 @@ p { margin: 0; }
   transition: transform .35s var(--ease-out);
 }
 .wa:hover, .fab:hover { transform: translateY(-3px); }
-.wa { background: #25d366; box-shadow: 0 14px 34px -10px rgba(37,211,102,.7); }
+.wa { background: #0b7a43; box-shadow: 0 14px 34px -10px rgba(11,122,67,.7); } /* darker WhatsApp green: white text reaches 5.4:1 */
 .fab { background: var(--grad-blue); box-shadow: 0 14px 34px -10px rgba(4,107,210,.8); }
 .fab__dot { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.18); display: grid; place-items: center; position: relative; }
 .fab__dot::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); animation: pulse 2.2s ease-out infinite; }
