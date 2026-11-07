@@ -29,7 +29,7 @@ const wa = import.meta.env.PUBLIC_WHATSAPP || '15106760418';
             <iframe class="booking__cal" src={gcal} title={c.bookingTitle} loading="lazy" data-lenis-prevent></iframe>
           ) : (
             <>
-              <a class="btn btn--primary" href="https://expertsddt.com/contact/" target="_blank" rel="noopener">{c.bookingCta} <span class="arrow">→</span></a>
+              <a class="btn btn--primary" href={`https://wa.me/${wa}`} target="_blank" rel="noopener">{c.bookingCta} <span class="arrow">→</span></a>
               <p class="note">{c.calendarNote}</p>
             </>
           )}
@@ -77,7 +77,7 @@ const wa = import.meta.env.PUBLIC_WHATSAPP || '15106760418';
         }
         btn.disabled = true; btn.textContent = btn.dataset.sending;
         try {
-          const r = await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...d, lang: f.dataset.lang, page: location.href }) });
+          const r = await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'contact', ...d, lang: f.dataset.lang, page: location.href }) });
           if (!r.ok) throw new Error(String(r.status));
           note.textContent = note.dataset.ok; note.classList.add('is-ok'); f.reset();
         } catch {

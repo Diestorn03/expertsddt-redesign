@@ -1,0 +1,105 @@
+---
+// Lead-gated download of the free Exocad implant libraries.
+// The zip and its manifest (latest.json) live on the hosting under /downloads/libraries/ and are replaced from the content panel,
+// not from this repo, so the page always offers the newest version without a rebuild.
+import { useI18n } from '../i18n/index.js';
+const { t, lang, href, asset } = useI18n(Astro);
+const d = t.pages.libraries.dl;
+const hook = import.meta.env.PUBLIC_N8N_FORM_WEBHOOK || '';
+---
+<dialog id="lib-dialog" class="lib-dialog" data-hook={hook} data-manifest={asset('/downloads/libraries/latest.json')} data-lang={lang} data-tpl={d.version} aria-labelledby="lib-title" data-lenis-prevent>
+  <form class="lib-form" novalidate>
+    <button type="button" class="lib-close" data-lib-close aria-label={d.close}>×</button>
+    <h2 class="h-lg" id="lib-title">{d.title}</h2>
+    <p>{d.sub}</p>
+    <label>{d.name} <input name="name" required autocomplete="name" maxlength="120" /></label>
+    <label>{d.email} <input type="email" name="email" required autocomplete="email" inputmode="email" maxlength="160" /></label>
+    <input type="text" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
+    <button class="btn btn--primary" type="submit" data-label={d.submit} data-sending={d.sending}>{d.submit} <span class="arrow">↓</span></button>
+    <p class="lib-note" role="status" aria-live="polite" data-ok={d.ok} data-err={d.error} data-na={d.unavailable} data-again={d.again}>{d.note} <a href={href('/privacy-policy/')}>{d.privacy}</a></p>
+  </form>
+</dialog>
+
+<script>
+  document.addEventListener('astro:page-load', () => {
+    const dlg = document.getElementById('lib-dialog') as HTMLDialogElement | null;
+    if (!dlg || dlg.dataset.bound) return;
+    dlg.dataset.bound = '1';
+    const form = dlg.querySelector('form') as HTMLFormElement;
+    const note = dlg.querySelector('.lib-note') as HTMLElement;
+    const btn = form.querySelector('button[type=submit]') as HTMLButtonElement;
+    const idleNote = note.innerHTML;
+    const manifestUrl = new URL(dlg.dataset.manifest!, location.href);
+
+    // newest version: manifest { version, dataDate, file, bytes } sitting next to the zip
+    type Manifest = { version: string; dataDate: string; file: string; bytes: number };
+    const loading: Promise<Manifest | null> = fetch(manifestUrl, { cache: 'no-cache' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => (m && /^[\w.-]+\.zip$/.test(m.file) && /^[\w.-]+$/.test(m.version) ? m : null))
+      .catch(() => null);
+    loading.then((m) => {
+      if (!m) return;
+      const date = new Date(m.dataDate + 'T12:00:00').toLocaleDateString(dlg.dataset.lang, { year: 'numeric', month: 'long', day: 'numeric' });
+      const text = (dlg.dataset.tpl || '').replace('{v}', m.version).replace('{d}', date).replace('{s}', (m.bytes / 1048576).toFixed(0));
+      document.querySelectorAll('[data-lib-version]').forEach((el) => { el.textContent = text; });
+    });
+
+    const download = (m: Manifest) => {
+      const a = document.createElement('a');
+      a.href = new URL(m.file, manifestUrl).href; a.download = '';
+      document.body.appendChild(a); a.click(); a.remove();
+      return a.href;
+    };
+
+    document.querySelectorAll('[data-lib-open]').forEach((b) => b.addEventListener('click', () => {
+      note.innerHTML = idleNote; note.className = 'lib-note';
+      dlg.showModal(); (form.elements.namedItem('name') as HTMLInputElement).focus();
+    }));
+    dlg.querySelector('[data-lib-close]')!.addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // click on the backdrop
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      const data = Object.fromEntries(new FormData(form)) as Record<string, string>;
+      if (data.website) return; // honeypot
+      delete data.website;
+      const m = await loading;
+      if (!m) { note.textContent = note.dataset.na!; note.className = 'lib-note is-err'; return; }
+      btn.disabled = true; btn.firstChild!.textContent = btn.dataset.sending!;
+      try {
+        const hook = dlg.dataset.hook;
+        if (hook) {
+          const r = await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'exocad-libraries', ...data, version: m.version, lang: dlg.dataset.lang, page: location.href }) });
+          if (!r.ok) throw new Error(String(r.status));
+        } else console.warn('PUBLIC_N8N_FORM_WEBHOOK is not set: the lead was not recorded.');
+        const url = download(m);
+        note.className = 'lib-note is-ok';
+        note.textContent = note.dataset.ok + ' ';
+        const again = document.createElement('a'); again.href = url; again.download = ''; again.textContent = note.dataset.again!; note.appendChild(again);
+        form.reset();
+      } catch {
+        note.textContent = note.dataset.err!; note.className = 'lib-note is-err';
+      } finally {
+        btn.disabled = false; btn.firstChild!.textContent = btn.dataset.label!;
+      }
+    });
+  });
+</script>
+
+<style>
+  .lib-dialog { border: 0; padding: 0; border-radius: 24px; width: min(480px, 100% - 2rem); background: var(--surface); color: var(--ink); box-shadow: 0 40px 100px -30px rgba(0,0,0,.6); }
+  .lib-dialog::backdrop { background: rgba(10,26,58,.62); backdrop-filter: blur(4px); }
+  .lib-form { position: relative; display: grid; gap: 1rem; padding: clamp(1.4rem, 4vw, 2rem); }
+  .lib-form p { margin: 0; color: var(--slate); }
+  .lib-close { position: absolute; top: .8rem; right: .8rem; width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; color: var(--ink); font-size: 1.6rem; line-height: 1; cursor: pointer; }
+  .lib-close:hover { background: var(--mist); }
+  .lib-form label { display: grid; gap: .4rem; font-size: .85rem; font-weight: 600; color: var(--ink); }
+  .lib-form input:not(.hp) { font: inherit; padding: .85rem 1rem; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); min-height: 48px; }
+  .lib-form input:not(.hp):focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(4,107,210,.15); }
+  .lib-form .hp { position: absolute; left: -9999px; height: 0; min-height: 0; padding: 0; border: 0; }
+  .lib-note { font-size: .82rem; }
+  .lib-note a { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+  .lib-note.is-ok { color: #16a34a; font-weight: 600; }
+  .lib-note.is-err { color: #dc2626; font-weight: 600; }
+</style>

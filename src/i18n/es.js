@@ -175,7 +175,8 @@ export default {
     libraries: {
       pill: 'Descarga gratis', title: 'Librerías de implantes ExpertsDDT',
       lead: 'Componentes de implantes según especificaciones del fabricante, para restauraciones precisas en los principales sistemas. Librería digital gratuita para tu flujo de trabajo en Exocad, lista para importar.',
-      download: 'Descargar', premium: 'Ver librerías premium', disc: ['.exocad', 'LIBRERÍA', 'IMPLANTES'],
+      download: 'Descargar', premium: 'Ver librerías premium', disc: ['.exocad', 'IMPLANT', 'LIBRARY'],
+      dl: { title: 'Recibe tu descarga gratis', sub: 'Escribe tus datos y la descarga empieza al instante.', name: 'Nombre', email: 'Correo electrónico', submit: 'Descargar librerías', sending: 'Enviando…', close: 'Cerrar', ok: '¡Listo! Tu descarga debería empezar automáticamente.', again: 'Descargar de nuevo', error: 'No pudimos registrar tus datos. Inténtalo de nuevo o escríbenos.', unavailable: 'La descarga no está disponible por ahora. Contáctanos.', note: 'Usamos tus datos para enviarte los archivos y novedades ocasionales. Puedes darte de baja cuando quieras.', privacy: 'Política de privacidad', version: 'Versión {v} · actualizada el {d} · {s} MB' },
       steps: [
         { t: 'Descarga', d: 'Obtén el paquete gratuito de librerías y descomprímelo en tu estación de diseño.' },
         { t: 'Importa en Exocad', d: 'Copia las carpetas en el directorio de librerías de implantes de DentalCAD y reinicia Exocad.' },
@@ -189,8 +190,8 @@ export default {
       lead: 'Reserva una consulta, solicita soporte o simplemente saluda. Respondemos rápido.',
       bookingPill: 'Reservas', bookingTitle: 'Consulta', duration: '1 hora', mode: 'Online o presencial en Florida',
       bookingText: 'Elige un horario en nuestro calendario y te confirmamos el mismo día. La zona horaria se detecta automáticamente.',
-      bookingCta: 'Ver citas disponibles',
-      calendarNote: 'Muy pronto: reservas online con confirmación inmediata. Mientras tanto, llámanos o escríbenos por WhatsApp.',
+      bookingCta: 'Reserva por WhatsApp',
+      calendarNote: 'Dinos qué día y hora te convienen por WhatsApp, teléfono o el formulario y lo confirmamos en el día.',
       channels: { phone: 'Teléfono', email: 'Correo', portal: 'Doctor Portal', concierge: 'Concierge', conciergeText: 'Apex, nuestro concierge digital, te guía por servicios y flujos de trabajo 24/7.', whatsapp: 'WhatsApp' },
       form: { title: 'Envíanos un mensaje', name: 'Nombre', email: 'Correo electrónico', clinic: 'Clínica o laboratorio', message: '¿Cómo podemos ayudarte?', send: 'Enviar mensaje', sending: 'Enviando…', sent: '¡Gracias! Te responderemos en breve.', error: 'Algo salió mal. Por favor escríbenos directamente por correo.', note: 'Respondemos en un día hábil.' },
     },

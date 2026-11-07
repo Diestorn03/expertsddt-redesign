@@ -5,8 +5,8 @@ import { useI18n } from '../i18n/index.js';
 const { t, href, asset } = useI18n(Astro);
 const s = t.pages.store;
 const shop = import.meta.env.PUBLIC_SHOP_URL;
-const catHref = [shop || href('/courses/'), shop || 'https://expertsddt.com/store/', '#products'];
-const buy = shop || 'https://expertsddt.com/store/';
+const buy = shop || href('/contact/'); // until the Shopify URL is set, send buyers to contact
+const catHref = [shop || '#products', shop || '#products', '#products'];
 // real renders of the teeth-in-occlusion libraries and the Exocad course recording (client assets)
 const visuals = [asset('/img/lib-occlusion.webp'), asset('/img/lib-natural.webp'), asset('/video/exocad-denture.webp')];
 ---
@@ -52,7 +52,7 @@ const visuals = [asset('/img/lib-occlusion.webp'), asset('/img/lib-natural.webp'
               <p>{p.d}</p>
               <div class="cta-row">
                 <span class="price"><s>{p.was}</s>{p.now}</span>
-                <a class="btn btn--outline" href={buy} target="_blank" rel="noopener">{s.addToCart}</a>
+                <a class="btn btn--outline" href={buy} target={shop ? '_blank' : undefined} rel={shop ? 'noopener' : undefined}>{s.addToCart}</a>
               </div>
             </div>
           </article>

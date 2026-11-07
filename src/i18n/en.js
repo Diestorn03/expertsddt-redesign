@@ -177,6 +177,7 @@ export default {
       pill: 'Free download', title: 'ExpertsDDT implant libraries',
       lead: 'Manufacturer-ready implant components for accurate restorations across major systems. Free digital library for your Exocad workflow, ready to import.',
       download: 'Download', premium: 'See premium libraries', disc: ['.exocad', 'IMPLANT', 'LIBRARY'],
+      dl: { title: 'Get your free download', sub: 'Enter your details and the download starts right away.', name: 'Name', email: 'Email address', submit: 'Download libraries', sending: 'Sending…', close: 'Close', ok: 'You are all set! Your download should start automatically.', again: 'Download again', error: 'We could not register your details. Please try again or email us.', unavailable: 'The download is temporarily unavailable. Please contact us.', note: 'We use your details to send the files and occasional updates. Unsubscribe any time.', privacy: 'Privacy policy', version: 'Version {v} · updated {d} · {s} MB' },
       steps: [
         { t: 'Download', d: 'Get the free library package and unzip it on your design station.' },
         { t: 'Import into Exocad', d: 'Copy the folders into your DentalCAD implant library directory and restart Exocad.' },
@@ -190,8 +191,8 @@ export default {
       lead: 'Book a consultation, request support or just say hello. We answer fast.',
       bookingPill: 'Booking', bookingTitle: 'Consultation', duration: '1 hour', mode: 'Online or on-site in Florida',
       bookingText: 'Choose a slot in our calendar and we’ll confirm within the day. Time zones are detected automatically.',
-      bookingCta: 'See available appointments',
-      calendarNote: 'Online booking with instant confirmation is coming soon. Meanwhile, call us or message us on WhatsApp.',
+      bookingCta: 'Book on WhatsApp',
+      calendarNote: 'Tell us the day and time that suit you by WhatsApp, phone or the form below and we will confirm within the day.',
       channels: { phone: 'Phone', email: 'Email', portal: 'Doctor portal', concierge: 'Concierge', conciergeText: 'Apex, our digital concierge, guides you through services and workflows 24/7.', whatsapp: 'WhatsApp' },
       form: { title: 'Send a message', name: 'Name', email: 'Email', clinic: 'Clinic or lab', message: 'How can we help?', send: 'Send message', sending: 'Sending…', sent: 'Thank you! We’ll get back to you shortly.', error: 'Something went wrong. Please email us directly.', note: 'We reply within one business day.' },
     },

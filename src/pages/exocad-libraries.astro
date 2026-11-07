@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import Cta from '../components/Cta.astro';
+import LibraryDownload from '../components/LibraryDownload.astro';
 import { useI18n } from '../i18n/index.js';
 const { t, href } = useI18n(Astro);
 const l = t.pages.libraries;
@@ -14,9 +15,10 @@ const l = t.pages.libraries;
         <h1 class="h-display" data-split="words">{l.title}</h1>
         <p class="lead" data-reveal="up" data-delay=".3">{l.lead}</p>
         <div class="cta-row" data-reveal="up" data-delay=".45">
-          <a class="btn btn--white" href="https://expertsddt.com/exocad-libraries/" target="_blank" rel="noopener" data-magnetic>{l.download} <span class="arrow">↓</span></a>
+          <button type="button" class="btn btn--white" data-lib-open data-magnetic>{l.download} <span class="arrow">↓</span></button>
           <a class="btn btn--ghost" href={href('/store/')}>{l.premium}</a>
         </div>
+        <p class="lib__ver" data-reveal="up" data-delay=".55"><small data-lib-version></small></p>
       </div>
       <div class="lib" data-reveal="iris" aria-hidden="true">
         <div class="lib__disc"><span>{l.disc[0]}</span><b>{l.disc[1]}<br />{l.disc[2]}</b></div>
@@ -31,9 +33,11 @@ const l = t.pages.libraries;
   </section>
 
   <Cta title={l.ctaTitle} text={l.ctaText} />
+  <LibraryDownload />
 </Base>
 
 <style>
+  .lib__ver small { color: #8fc1ff; font-size: .85rem; }
   .lib { display: grid; place-items: center; }
   .lib__disc { width: min(380px, 70vw); aspect-ratio: 1; border-radius: 50%; background: conic-gradient(from 200deg, #046bd2, #1d3273, #2a7abf, #046bd2); display: grid; place-content: center; text-align: center; color: #fff; box-shadow: 0 50px 100px -40px rgba(4,107,210,.9), inset 0 0 0 18px rgba(255,255,255,.06); animation: spin 30s linear infinite; }
   .lib__disc span { font-size: .8rem; letter-spacing: .3em; opacity: .8; }
