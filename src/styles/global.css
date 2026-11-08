@@ -124,8 +124,11 @@ a.sr-only:focus-visible { position: fixed; top: .75rem; left: .75rem; width: aut
 .btn:hover .arrow { transform: translateX(4px); }
 
 /* ---------- reveal primitives (GSAP drives these) ---------- */
-[data-reveal] { opacity: 0; }
-[data-split] { visibility: hidden; }
+/* pre-hidden only when the reveals will actually run (motion.js running, motion allowed): no JS, a failed script or reduced motion = content as written */
+@media (prefers-reduced-motion: no-preference) {
+  html.motion [data-reveal] { opacity: 0; }
+  html.motion [data-split] { visibility: hidden; }
+}
 .line-mask { overflow: hidden; display: block; }
 
 /* ---------- card ---------- */
@@ -285,7 +288,8 @@ a.sr-only:focus-visible { position: fixed; top: .75rem; left: .75rem; width: aut
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important; animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important; scroll-behavior: auto !important;
+    /* none, not .01ms: a near-zero transition still delays layout changes (e.g. the stacked pillars) past ScrollTrigger's measurement */
+    transition: none !important; scroll-behavior: auto !important;
   }
   [data-reveal], [data-split] { opacity: 1 !important; visibility: visible !important; }
 }
