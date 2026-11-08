@@ -6,6 +6,7 @@ import type { CaptureResult, DetectResult } from '../state/jobs-handler';
 import type { App } from './app';
 import { fillKeep, h, pickFiles, q, radiogroup, setChecked } from './dom';
 import { noteCard } from './feedback';
+import { LIMITS } from '../core/limits';
 import { ACCEPT, buffersOf, readFiles } from './files';
 import { fmt, warningMessage } from './i18n/format';
 
@@ -43,10 +44,10 @@ export class CaptureStep {
     this.job?.abort();
     const job = (this.job = new AbortController());
     const busy = app.busy('1', app.plural(app.c.s1.reading, files.length), () => job.abort());
-    app.root.classList.add('is-dim');
+    app.root.classList.add('is-dim'); // the previous case stays visible, dimmed
     let result: CaptureResult;
     try {
-      const inputs = await readFiles(files);
+      const inputs = await readFiles(files, LIMITS.capture.maxBytes);
       result = await app.jobs.run<CaptureResult>({ type: 'readCapture', files: inputs }, buffersOf(inputs), job.signal);
     } catch (e) {
       app.error(1, e, 'positions');
@@ -101,7 +102,9 @@ export class CaptureStep {
       app.syncSites();
       app.viewer?.view('occlusal');
       const provisional = r.sites.filter((s) => s.flags.provisional).length;
-      app.say.say(fmt(app.lang, app.c.say.detected, { found: r.sites.length - provisional, provisional, unresolved: r.unresolved.length }));
+      const d = app.c.say.detected, parts = { found: r.sites.length - provisional, provisional, unresolved: r.unresolved.length };
+      // zero parts are left out (UI-DESIGN §12.7); "found" is always said
+      app.say.say((['found', 'provisional', 'unresolved'] as const).filter((k) => k === 'found' || parts[k] > 0).map((k) => fmt(app.lang, d[k], parts)).join(' '));
       this.rowsKey = '';
     } catch (e) {
       app.error(1, e, 'geometry');
@@ -167,7 +170,6 @@ export class CaptureStep {
     q(this.pane, '[data-implant-count="1"]').textContent = s.sites.length ? `· ${app.plural(c.s1.implantCount, s.sites.length - s.excluded.size)}` : '';
     const list = q(this.pane, '[data-list="implants1"]');
     fillKeep(list, app.implantRows(1), app.focusKey);
-    app.focusKey = null;
     const key = s.sites.map((x: ImplantSite) => x.id).join();
     if (key !== this.rowsKey) { this.rowsKey = key; app.motion.rows(list.children); }
 

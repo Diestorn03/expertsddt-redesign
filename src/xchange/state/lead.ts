@@ -24,19 +24,26 @@ export interface LeadEnv {
   warn?: (message: string) => void;
 }
 
+/** Storage blocked (private window, site data off): the state is kept for this visit only (asked again next visit). */
+let visit: LeadState | null = null;
+
 export function readLead(storage: StorageLike | null): LeadState | null {
+  if (!storage) return visit;
   try {
-    const raw = storage?.getItem(LEAD_KEY);
+    const raw = storage.getItem(LEAD_KEY);
     if (!raw) return null;
     const v = JSON.parse(raw) as LeadState;
     if (v?.v === 1 && v.state === 'sent') return { v: 1, state: 'sent' };
     if (v?.v === 1 && v.state === 'pending' && typeof v.email === 'string') return { v: 1, state: 'pending', email: v.email };
-  } catch { /* blocked or corrupt storage: ask again */ }
-  return null;
+  } catch {
+    return visit; // blocked storage
+  }
+  return null; // corrupt: ask again
 }
 
 function write(storage: StorageLike | null, state: LeadState): void {
-  try { storage?.setItem(LEAD_KEY, JSON.stringify(state)); } catch { /* storage blocked: asked again next visit */ }
+  if (!storage) { visit = state; return; }
+  try { storage.setItem(LEAD_KEY, JSON.stringify(state)); } catch { visit = state; /* storage blocked: kept for this visit */ }
 }
 
 /** True until an email was given on this browser (pending counts: it was given). */

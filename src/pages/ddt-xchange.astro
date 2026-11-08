@@ -94,7 +94,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                     <span class="xch__dot"><span class="xch__num">{i + 1}</span><svg class="xch__tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
                     <span class="xch__steptext"><span class="xch__stepname">{name}</span>{i === 2 && <span class="xch__stepopt">{c.steps.optional}</span>}<span class="sr-only" data-step-state></span></span>
                   </button>
-                  <span class="sr-only" id={`xch-steplock-${i + 1}`} data-step-lock></span>
+                  <span class="xch__steplock" id={`xch-steplock-${i + 1}`} data-step-lock></span>
                 </li>
               ))}
             </ol>
@@ -250,7 +250,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                     <button type="button" class="btn btn--outline xch-btn-sm" data-align="guided">{c.al.guided}</button>
                     <button type="button" class="btn btn--outline xch-btn-sm" data-align="refine" hidden>{c.al.refine}</button>
                   </div>
-                  <div class="xch__group">
+                  <div class="xch__group" data-surf-block>
                     <p class="xch__label" id="xch-surf-label">{c.al.surfaces}</p>
                     <div class="xch__seg" role="radiogroup" aria-labelledby="xch-surf-label" aria-describedby="xch-surf-help" data-surf-group>
                       <button type="button" role="radio" aria-checked="true" data-surf="replacement">{c.al.surfReplacement}</button>
@@ -265,7 +265,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 </div>
 
                 <div class="xch__block" data-sec="guided" hidden>
-                  <p class="xch__subtitle">{c.gp.title}</p>
+                  <p class="xch__subtitle" tabindex="-1">{c.gp.title}</p>
                   <p class="xch__small">{c.gp.text}</p>
                   <p class="xch__small xch__muted">{c.gp.keyboard}</p>
                   <ol class="xch__gplist" data-list="guided"></ol>
@@ -324,7 +324,8 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
             <div class="xch__stagewrap">
               <a class="xch__skiplink" href="#xch-export" data-skip-view>{c.view.skip}</a>
               <div class="xch__stage" role="application" aria-roledescription={c.view.role} aria-label={c.view.label} aria-describedby="xch-view-help" tabindex="0" data-lenis-prevent>
-                <p id="xch-view-help" class="sr-only">{c.view.help} {c.gp.keyboard}</p>
+                <p id="xch-view-help" class="sr-only">{c.view.help}</p>
+                <p id="xch-view-gp" class="sr-only">{c.gp.keyboard}</p>
                 <div class="xch__toolbar" role="toolbar" aria-label={c.view.toolbar}>
                   <div class="xch__views" role="group" aria-label={c.view.views}>
                     {presets.map(([id, label]) => <button type="button" class="xch__tool" data-view={id} aria-pressed="false">{label}</button>)}
@@ -345,7 +346,8 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <div class="xch__pad" role="toolbar" aria-label={c.pad.label} aria-orientation="vertical" data-pad hidden>
                   {pad.map(([group, items]) => (
                     <div class="xch__padgroup" role="group" aria-label={c.pad[group]}>
-                      {items.map(([key, glyph, op, dir]) => <button type="button" class="xch__padbtn" data-pad-op={op} data-pad-dir={dir} data-pad-key={key} aria-label={fmt(L, c.pad[key], { deg: 30, mm: 1 })} title={fmt(L, c.pad[key], { deg: 30, mm: 1 })}>{glyph}</button>)}
+                      <span class="xch__padcap" aria-hidden="true">{c.pad[group]}</span>
+                      {items.map(([key, glyph, op, dir]) => <button type="button" class="xch__padbtn" data-pad-op={op} data-pad-dir={dir} data-pad-key={key} aria-label={fmt(L, c.pad[key], { deg: 30, mm: 1 })}>{glyph}</button>)}
                     </div>
                   ))}
                   <p class="xch__padhint" aria-hidden="true">{c.pad.hint}</p>
@@ -399,10 +401,11 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
         <button type="button" class="xch-dialog__close" data-close aria-label={c.email.close}>×</button>
         <h2 class="h-lg" id="xch-email-title">{c.email.title}</h2>
         <p>{c.email.text}</p>
-        <label>{c.email.label}
-          <input type="email" name="email" required autocomplete="email" inputmode="email" maxlength="160" placeholder={c.email.placeholder} aria-describedby="xch-email-hint" data-invalid={c.email.invalid} />
+        <div class="xch-dialog__field">
+          <label for="xch-email-input">{c.email.label}</label>
+          <input id="xch-email-input" type="email" name="email" required autocomplete="email" inputmode="email" maxlength="160" placeholder={c.email.placeholder} aria-describedby="xch-email-hint" data-invalid={c.email.invalid} />
           <span class="xch-dialog__hint" id="xch-email-hint">{c.email.hint}</span>
-        </label>
+        </div>
         <input type="text" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
         <p class="xch-dialog__note">{c.email.note} <a href={href('/privacy-policy/')} target="_blank" rel="noopener">{c.email.privacy}</a></p>
         <p class="xch-dialog__note">{c.email.once}</p>
@@ -444,7 +447,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
     <div class="wrap">
       <header class="xch-help__head" data-reveal-scope>
         <span class="eyebrow" data-reveal="up">{c.help.eyebrow}</span>
-        <h2 class="h-xl" data-split="lines">{c.help.title} <span class="underline-accent">{c.help.titleAccent}</span></h2>
+        <h2 class="h-xl" id="xch-help-title" tabindex="-1" data-split="lines">{c.help.title} <span class="underline-accent">{c.help.titleAccent}</span></h2>
         <p class="lead" data-reveal="up" data-delay=".2">{c.help.lead}</p>
       </header>
       <h3 class="xch-help__sub" data-reveal="up">{c.help.howTitle}</h3>

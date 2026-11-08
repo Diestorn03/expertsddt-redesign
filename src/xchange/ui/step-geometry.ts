@@ -12,7 +12,9 @@ import type { App } from './app';
 import { dropZone } from './step-capture';
 import { fill, fillKeep, h, icon, pickFiles, q, radiogroup, setChecked } from './dom';
 import { noteCard } from './feedback';
-import { ACCEPT, buffersOf, download, readFiles } from './files';
+import { LIMITS } from '../core/limits';
+import { LIBRARY_FILE_MAX_BYTES } from '../state/library-file';
+import { ACCEPT, buffersOf, download, readFiles, revokeUrl } from './files';
 import { fmt, num, warningMessage } from './i18n/format';
 
 type ListMode = 'apply' | 'reference';
@@ -25,7 +27,6 @@ export class GeometryStep {
   private removing: string | null = null;
   private query = '';
   private notes: HTMLElement[] = [];
-  private libUrl: string | null = null;
 
   constructor(private readonly app: App) {
     const { root, signal } = app;
@@ -63,7 +64,7 @@ export class GeometryStep {
     const busy = app.busy(mode === 'reference' ? '1' : 'lib', app.c.lib.saving);
     let r: GeometryResult;
     try {
-      const [input] = await readFiles([file]);
+      const [input] = await readFiles([file], LIMITS.geometry.maxBytes);
       const sites = mode === 'apply' ? activeSites(app.s) : [];
       r = await app.jobs.run<GeometryResult>({ type: 'readGeometry', file: input!, sites, captureMesh: mode === 'apply' ? app.s.captureMesh ?? undefined : undefined }, buffersOf([input!]));
     } catch (e) {
@@ -114,14 +115,17 @@ export class GeometryStep {
     const save = h('button', 'btn btn--primary xch-btn-sm', { type: 'submit', text: c.lib.save });
     const cancel = h('button', 'btn btn--outline xch-btn-sm', { type: 'button', text: c.lib.cancel });
     const form = h('form', 'xch__field', {}, h('label', 'xch__field', {}, c.lib.nameLabel, input), h('small', '', { id: 'xch-namehint', text: c.lib.nameHint }), h('div', 'cta-row', {}, save, cancel));
-    cancel.addEventListener('click', () => box.replaceChildren());
-    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); box.replaceChildren(); } });
+    // closing the field gives focus back to the button that opened the file picker
+    const close = (): void => { box.replaceChildren(); q<HTMLElement>(app.root, mode === 'reference' ? '[data-pick="reference"]' : '[data-pick="geometry"]').focus(); };
+    cancel.addEventListener('click', close);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
         const meta = await app.library.add(input.value, mesh);
         box.replaceChildren();
         app.meshCache.set(meta.id, { mesh, normals: normals ?? computeVertexNormals(mesh) });
+        app.focusKey = 'lib:' + meta.id; // the new row (an auto-advance then moves focus on to step 3)
         this.thumbnail(meta.id);
         app.toasts.show(fmt(app.lang, c.say.saved, { name: meta.name }));
         if (mode === 'reference') void app.capture.detect(meta.id);
@@ -143,14 +147,20 @@ export class GeometryStep {
       const data = app.meshData(id);
       if (!data || !app.viewer || app.signal.aborted) return;
       const png = app.viewer.thumbnail(data.mesh, data.normals);
-      if (png) void app.library.setThumbnail(id, png).then(() => app.render());
+      if (png) app.library.setThumbnail(id, png).then(() => app.render(), () => { /* without a thumbnail the row shows the glyph */ });
     });
   }
 
   /** Apply on pick. A positioned assembly always applies to all implants. */
   async apply(geometryId: string): Promise<void> {
     const app = this.app, s = app.s;
-    const data = await app.loadGeometry(geometryId);
+    let data;
+    try {
+      data = await app.loadGeometry(geometryId);
+    } catch (e) {
+      app.error(2, e, 'library');
+      return;
+    }
     if (!data) return;
     const one = this.target === 'one' && app.selected && !s.excluded.has(app.selected);
     const targets = one ? [app.selected!] : activeSites(s).map((x) => x.id);
@@ -169,7 +179,7 @@ export class GeometryStep {
     app.syncSites(changed);
     app.alignStep.onGeometryChanged();
     const target = all ? c.lib.targetAll : fmt(app.lang, c.lib.targetOne, { label });
-    const text = fmt(app.lang, c.say.applied, { name, target });
+    const text = fmt(app.lang, c.say.applied, { name, target }); // the toast region (role=status) announces it
     let advanced = false;
     app.toasts.show(text, {
       label: c.say.undo,
@@ -181,7 +191,6 @@ export class GeometryStep {
         app.say.say(c.say.undone);
       },
     });
-    app.say.say(text);
     if (all && missingGeometry(app.s) === 0) app.later(() => { if (app.shown === 2) { advanced = true; app.go(3); } }, 600);
   }
 
@@ -205,7 +214,12 @@ export class GeometryStep {
       const main = this.mainButton(m.id, m.name, fmt(app.lang, c.lib.meta, { triangles: num(app.lang, m.triangles), size: m.extentMm.map((v) => num(app.lang, v, 1)).join(' × ') }), m.thumbnail, actionName(m.name), used(m.id), mode, pick);
       const star = h('button', 'xch__iconbtn', { type: 'button', 'aria-pressed': String(m.favorite), 'aria-label': `${c.lib.favorite}: ${m.name}`, 'data-key': `fav:${m.id}` }, icon('star', 18));
       star.addEventListener('click', async () => {
-        await app.library.setFavorite(m.id, !m.favorite);
+        try {
+          await app.library.setFavorite(m.id, !m.favorite);
+        } catch (e) {
+          app.error(2, e, 'library');
+          return;
+        }
         app.toasts.show(fmt(app.lang, m.favorite ? c.say.favOff : c.say.favOn, { name: m.name }));
         app.render();
       });
@@ -237,7 +251,7 @@ export class GeometryStep {
       group(c.lib.caseOnly, rows);
     }
     if (!nodes.length) nodes.push(h('p', 'xch__small xch__muted', { text: this.query ? fmt(app.lang, c.lib.noMatch, { query: this.query }) : c.lib.empty }));
-    fillKeep(container, nodes, app.focusKey?.startsWith('no:') || app.focusKey?.startsWith('lib:') ? app.focusKey : undefined);
+    fillKeep(container, nodes, app.focusKey);
   }
 
   private mainButton(id: string, name: string, meta: string, thumb: string, label: string, usedOn: number, mode: ListMode, onPick: () => void, badge?: string): HTMLButtonElement {
@@ -271,7 +285,10 @@ export class GeometryStep {
         const next = await app.library.rename(m.id, input.value);
         app.toasts.show(fmt(app.lang, c.say.renamed, { name: next.name }));
         done();
-      } catch { input.focus(); }
+      } catch (err) {
+        if (!(err instanceof LibraryError && err.code === 'nameEmpty')) app.error(2, err, 'library');
+        input.focus();
+      }
     });
     requestAnimationFrame(() => { input.focus(); input.select(); });
     return h('li', 'xch__libitem', {}, form);
@@ -284,10 +301,17 @@ export class GeometryStep {
     no.addEventListener('click', () => { this.removing = null; app.focusKey = `del:${m.id}`; app.render(); });
     yes.addEventListener('click', async () => {
       const list = app.library.list();
-      const nextId = list[list.findIndex((x) => x.id === m.id) + 1]?.id;
-      await app.library.remove(m.id); // implants using it keep the cached mesh for this case
+      const at = list.findIndex((x) => x.id === m.id);
+      const nextId = (list[at + 1] ?? list[at - 1])?.id;
+      try {
+        await app.library.remove(m.id); // implants using it keep the cached mesh for this case
+      } catch (e) {
+        app.error(2, e, 'library');
+        return;
+      }
       this.removing = null;
-      app.focusKey = nextId ? `lib:${nextId}` : null;
+      app.focusKey = nextId ? 'lib:' + nextId : null;
+      if (!nextId) q<HTMLElement>(this.pane, '[data-pick="geometry"]').focus(); // the list is empty now
       app.toasts.show(fmt(app.lang, c.say.removed, { name: m.name }));
       app.render();
     });
@@ -301,22 +325,22 @@ export class GeometryStep {
     const [file] = await pickFiles(ACCEPT.library, false);
     if (!file) return;
     app.clearAlerts(2);
+    const limit = { vars: { limit: LIBRARY_FILE_MAX_BYTES / 2 ** 20 } };
+    if (file.size > LIBRARY_FILE_MAX_BYTES) { app.error(2, new UiError('libraryFileTooLarge'), 'library', limit); return; } // before reading it
     const busy = app.busy('lib', c.lib.readingFile);
     try {
-      const [input] = await readFiles([file]);
-      if (input!.bytes.byteLength > 100 * 1024 * 1024) throw new UiError('libraryFileTooLarge');
+      const [input] = await readFiles([file], LIBRARY_FILE_MAX_BYTES);
       const r = await app.jobs.run<{ entries: { name: string; favorite: boolean; mesh: TriMesh }[]; skipped: number }>({ type: 'libraryIn', bytes: input!.bytes }, buffersOf([input!]));
       const res = await app.library.importEntries(r.entries);
       for (const m of res.added) if (await app.loadGeometry(m.id)) this.thumbnail(m.id);
       let text = app.plural(c.say.libImported, res.added.length);
       if (res.renamed) text += ' ' + app.plural(c.say.libRenamed, res.renamed);
       app.toasts.show(text);
-      app.say.say(text);
       const skipped = r.skipped + res.skipped;
       if (skipped) this.notes.push(noteCard(app.plural(c.ui.librarySkipped, skipped)));
       app.render();
     } catch (e) {
-      app.error(2, e, 'library', { vars: { limit: 100 } });
+      app.error(2, e, 'library', limit);
     } finally {
       busy.done();
     }
@@ -327,10 +351,15 @@ export class GeometryStep {
     try {
       const entries = await app.library.entriesForExport();
       const bytes = await app.jobs.run<Uint8Array>({ type: 'libraryOut', entries });
-      if (this.libUrl) URL.revokeObjectURL(this.libUrl);
-      this.libUrl = download(bytes, 'ddt-xchange-geometries.json', 'application/json');
-      app.later(() => { if (this.libUrl) URL.revokeObjectURL(this.libUrl); this.libUrl = null; }, 60_000);
+      const url = download(bytes, 'ddt-xchange-geometries.json', 'application/json');
+      app.later(() => revokeUrl(url), 60_000); // App.dispose revokes it sooner
       app.toasts.show(app.c.say.libExported);
+      // ponytail: one file, import cap 256 MB (50 ordinary parts fit); split the backup if real libraries outgrow it
+      if (bytes.byteLength > LIBRARY_FILE_MAX_BYTES) {
+        const m = app.c.ui.libraryExportTooLarge, vars = { size: Math.ceil(bytes.byteLength / 2 ** 20), limit: LIBRARY_FILE_MAX_BYTES / 2 ** 20 };
+        this.notes.push(noteCard(fmt(app.lang, m.t + ' ' + m.b, vars)));
+        app.render();
+      }
     } catch (e) {
       app.error(2, e, 'library');
     }
@@ -346,7 +375,7 @@ export class GeometryStep {
     one.textContent = sel ? fmt(app.lang, c.s2.selected, { label: sel.label }) : c.s2.selectedNone;
     one.setAttribute('aria-disabled', String(!sel));
     setChecked(group, this.target, 'data-apply');
-    fillKeep(q(this.pane, '[data-list="implants2"]'), app.implantRows(2));
+    fillKeep(q(this.pane, '[data-list="implants2"]'), app.implantRows(2), app.focusKey);
     q(this.pane, '[data-lib-filter]').hidden = app.library.size < 10;
     this.renderList(q(this.pane, '[data-list="lib"]'), 'apply');
     fill(q(this.pane, '[data-notes="2"]'), this.notes);
@@ -355,7 +384,4 @@ export class GeometryStep {
     q(this.pane, '[data-reason="2"]').textContent = missing ? app.plural(c.s2.need, missing) : '';
   }
 
-  dispose(): void {
-    if (this.libUrl) URL.revokeObjectURL(this.libUrl);
-  }
 }

@@ -138,6 +138,8 @@ const REVEALS = {
 };
 
 function initReveals() {
+  // reduced motion: content is simply there (global.css forces opacity); nothing slides, skews or scales
+  if (reduced) { gsap.utils.toArray('[data-reveal]').forEach((el) => el.classList.add('is-inview')); return; }
   gsap.utils.toArray('[data-reveal]').forEach((el) => {
     const type = el.dataset.reveal || 'up';
     const from = REVEALS[type] || REVEALS.up;
@@ -162,6 +164,7 @@ function initSplits() {
     // mobile: sober — chars become words, lines stay (cheap)
     const mode = coarse && el.dataset.split === 'chars' ? 'words' : el.dataset.split; // chars | words | lines
     el.style.visibility = 'visible';
+    if (reduced) { (el.closest('[data-reveal-scope]') || el).classList.add('is-inview'); return; }
     const split = new SplitText(el, { type: mode === 'chars' ? 'chars,words' : mode, aria: 'none', mask: mode === 'lines' ? 'lines' : undefined, linesClass: 'split-line', wordsClass: 'split-word', charsClass: 'split-char' });
     const targets = mode === 'chars' ? split.chars : mode === 'words' ? split.words : split.lines;
     const trig = { trigger: el, start: el.dataset.start || 'top 85%', once: true, onEnter: () => el.closest('[data-reveal-scope]')?.classList.add('is-inview') || el.classList.add('is-inview') };
@@ -178,7 +181,7 @@ function initSplits() {
 
 /* ---------------- Parallax ---------------- */
 function initParallax() {
-  if (coarse) return;
+  if (coarse || reduced) return;
   gsap.utils.toArray('[data-parallax]').forEach((el) => {
     const amt = parseFloat(el.dataset.parallax || '0.2');
     gsap.fromTo(el, { yPercent: amt * 40 }, { yPercent: -amt * 40, ease: 'none', scrollTrigger: { trigger: el.closest('[data-scene]') || el, start: 'top bottom', end: 'bottom top', scrub: true } });
@@ -447,10 +450,13 @@ function boot() {
 initLenis();
 // app-like pages (DDT Xchange) pause or drive the shared smooth scroll through events: the Lenis instance is private
 document.addEventListener('scroll-lock', (e) => (lenis ? (e.detail ? lenis.stop() : lenis.start()) : (document.body.style.overflow = e.detail ? 'hidden' : '')));
-document.addEventListener('scroll-to', (e) => (lenis ? lenis.scrollTo(e.detail, { offset: -90 }) : e.detail.scrollIntoView()));
+// same -90 px as Lenis without it (reduced motion): the fixed nav must not cover the target
+document.addEventListener('scroll-to', (e) => (lenis ? lenis.scrollTo(e.detail, { offset: -90 }) : window.scrollTo({ top: e.detail.getBoundingClientRect().top + window.scrollY - 90 })));
 document.addEventListener('astro:page-load', boot);
 let bpTimer;
-window.matchMedia('(max-width: 1180px)').addEventListener('change', () => { clearTimeout(bpTimer); bpTimer = setTimeout(() => { window.scrollTo(0, 0); lenis?.scrollTo(0, { immediate: true }); boot(); }, 150); });
+// the pinned scenes differ per side of 1180 px: rebuild them, except on a page holding an app (DDT Xchange), where a
+// zoom or window resize must not throw the user to the top mid-case (its reveals have run; ScrollTrigger refreshes itself)
+window.matchMedia('(max-width: 1180px)').addEventListener('change', () => { if (document.getElementById('xchange')) return; clearTimeout(bpTimer); bpTimer = setTimeout(() => { window.scrollTo(0, 0); lenis?.scrollTo(0, { immediate: true }); boot(); }, 150); });
 document.addEventListener('astro:before-swap', () => { ctx?.revert(); ScrollTrigger.getAll().forEach((t) => t.kill()); });
 document.addEventListener('astro:after-swap', () => {
   document.getElementById('loader')?.remove(); // client-side navigation: no loader

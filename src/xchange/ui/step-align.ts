@@ -1,7 +1,8 @@
 /**
  * Step 3 · Jaw scan and step 4 · Align and export (UI-DESIGN §5.5, §5.6, §6.6, §6.7, §8, §9).
  * Loading the jaw starts auto align. Every pose change is re-measured 250 ms after the gesture; a re-measure of
- * an unmoved pose keeps the original method (state/case mergeMeasured). With a jaw, export waits for an
+ * the aligned pose keeps the original method (state/case mergeMeasured). A measure is never aborted (that would
+ * terminate the align worker and rebuild the jaw target): a newer pose only makes its result stale. With a jaw, export waits for an
  * applied alignment. The email is asked once, before the first export, and never blocks the download.
  */
 import * as THREE from 'three';
@@ -17,9 +18,10 @@ import { markSent, needsEmail, retryPending, submitLead, type LeadEnv, type Stor
 import { rotatePose, translatePose, type ControlCallbacks } from '../viewer/controls';
 import { toEngine } from '../viewer/viewer';
 import type { App } from './app';
-import { fill, h, icon, pickFiles, q, qa, radiogroup, setChecked } from './dom';
+import { LIMITS } from '../core/limits';
+import { fill, fillKeep, h, icon, isOff, pickFiles, q, qa, radiogroup, setChecked } from './dom';
 import { bringIntoView, noteCard, openModal } from './feedback';
-import { ACCEPT, buffersOf, download, readFiles } from './files';
+import { ACCEPT, buffersOf, download, readFiles, revokeUrl } from './files';
 import { dropZone } from './step-capture';
 import { fmt, mb, num, warningMessage } from './i18n/format';
 
@@ -35,6 +37,9 @@ interface Guided {
   idx: number;
 }
 
+/** What the ZIP is built from: if one of these changed while it was built, it is not the case on screen. */
+const EXPORTED = ['arch', 'sites', 'excluded', 'geometryBySite', 'caseGeometries', 'assembly', 'jaw', 'alignment', 'format'] as const;
+
 const storage = (): StorageLike | null => { try { return window.localStorage; } catch { return null; } };
 
 export class AlignStep {
@@ -42,9 +47,11 @@ export class AlignStep {
   private readonly pane4: HTMLElement;
   private alignJob: AbortController | null = null;
   private jawJob: AbortController | null = null;
-  private measureJob: AbortController | null = null;
+  /** Token of the newest measure; an older one that finishes finds it changed and drops its result. */
+  private measureJob: object | null = null;
   private measureTimer = 0;
-  private poseMoved = false;
+  /** A jaw was sent to the align worker (released by Remove and by a new case). */
+  private jawLoaded = false;
   private alignedResult: AlignmentResult | null = null;
   private mapShown = false;
   guided: Guided | null = null;
@@ -54,6 +61,8 @@ export class AlignStep {
   private jawWarnings: HTMLElement[] = [];
   /** Sample jaw bytes (STL), set by the sample case. */
   sampleJaw: Uint8Array | null = null;
+  /** The jaw scan is the user's own file (not the sample's): the leave guard protects it. */
+  ownJaw = false;
 
   constructor(private readonly app: App) {
     const { root, signal } = app;
@@ -66,9 +75,13 @@ export class AlignStep {
     q(this.pane3, '[data-sample-jaw]').addEventListener('click', () => { if (this.sampleJaw) void this.loadJaw(null, this.sampleJaw.slice()); }, { signal });
     q(this.pane3, '[data-jaw-remove]').addEventListener('click', () => this.removeJaw(), { signal });
     q(this.pane3, '[data-skip]').addEventListener('click', () => { app.store.set({ jawSkipped: true }); app.go(4); }, { signal });
-    q(this.pane4, '[data-align="auto"]').addEventListener('click', () => void this.autoAlign(), { signal });
-    q(this.pane4, '[data-align="refine"]').addEventListener('click', () => void this.autoAlign(app.s.assembly), { signal });
-    q(this.pane4, '[data-align="guided"]').addEventListener('click', () => this.startGuided(), { signal });
+    const alignBtn = (kind: string, run: () => void): void => {
+      const b = q(this.pane4, `[data-align="${kind}"]`);
+      b.addEventListener('click', () => { if (isOff(b)) app.say.say(app.c.al.running); else run(); }, { signal });
+    };
+    alignBtn('auto', () => void this.autoAlign());
+    alignBtn('refine', () => void this.autoAlign(app.s.assembly));
+    alignBtn('guided', () => this.startGuided());
     radiogroup(q(this.pane4, '[data-surf-group]'), (b) => this.setSurfaces(b.dataset.surf as 'replacement' | 'capture'), signal);
     for (const b of qa<HTMLButtonElement>(this.pane4, '[data-gp]')) b.addEventListener('click', () => this.guidedAction(b.dataset.gp!), { signal });
     q(this.pane4, '[data-manual="jaw"]').addEventListener('click', () => this.moveToJaw(), { signal });
@@ -99,12 +112,13 @@ export class AlignStep {
       mode: () => this.mode(),
       onSelect: (id) => { if (app.shown !== 4 || !app.s.jaw) app.select(id, false); },
       onGuidedPoint: (p) => this.place(p),
+      onGuidedMiss: () => app.say.say(app.c.gp.miss),
       onSetChange: (pose, phase) => {
         if (phase === 'start') before = Float64Array.from(app.s.assembly);
         if (phase === 'end' && before) {
           app.store.set({ assembly: toEngine(pose), undo: pushUndo(app.s.undo, before), exportedSinceChange: false });
           before = null;
-          this.scheduleMeasure(true);
+          this.scheduleMeasure();
         }
       },
       onHover: (hit) => app.stage.readout(hit),
@@ -112,7 +126,7 @@ export class AlignStep {
       onToggleJawOpacity: () => app.stage.toggleJawOpacity(),
       onToggleMap: () => app.stage.toggleMap(),
       onShortcuts: () => app.stage.openKeys(),
-      onGuidedKey: (k) => (k === 'Escape' ? this.leaveGuided(true) : this.guidedAction('back')),
+      onGuidedKey: (k) => (k === 'Escape' ? this.leaveGuided() : this.guidedAction('back')),
       onCtrl: (down) => app.stage.ctrlChip(down && this.mode() === 'set'),
     };
   }
@@ -126,10 +140,12 @@ export class AlignStep {
     const job = (this.jawJob = new AbortController());
     const busy = app.busy('3', c.s3.reading, () => job.abort());
     try {
-      const [input] = file ? await readFiles([file]) : [{ bytes: bytes!, extension: 'stl' }];
+      const [input] = file ? await readFiles([file], LIMITS.jaw.maxBytes) : [{ bytes: bytes!, extension: 'stl' }];
       const r = await app.jobs.run<JawResult>({ type: 'readJaw', file: input! }, buffersOf([input!]), job.signal);
       busy.set(null, c.s3.preparing);
       await app.align.setJaw(r.mesh, { signal: job.signal });
+      this.jawLoaded = true;
+      this.ownJaw = !!file;
       this.cancelAll();
       this.alignedResult = null;
       app.jawNormals = r.normals;
@@ -156,6 +172,9 @@ export class AlignStep {
     this.cancelAll();
     this.alignedResult = null;
     this.jawWarnings = [];
+    this.jawLoaded = false;
+    this.ownJaw = false;
+    app.align.clearJaw(); // the worker's jaw target is hundreds of MB at the 3 M-triangle limit
     app.jawNormals = null;
     app.store.set({ jaw: null, jawColors: false, assembly: identity(), alignment: null, lastAttempt: null, lastAlignedPose: null, undo: [], deviation: null, exportedSinceChange: false });
     app.viewer?.setJaw(null, null);
@@ -168,7 +187,7 @@ export class AlignStep {
 
   onEnter(): void {
     const s = this.app.s;
-    if (s.jaw && s.deviation === null && s.alignment && !this.measureJob) this.scheduleMeasure(false);
+    if (s.jaw && s.deviation === null && s.alignment && !this.measureJob) this.scheduleMeasure();
   }
 
   private progress(): { busy: ReturnType<App['busy']>; onProgress: (stage: AlignStage, f: number) => void } {
@@ -195,6 +214,7 @@ export class AlignStep {
     this.alignJob?.abort();
     const job = (this.alignJob = new AbortController());
     const { busy, onProgress } = this.progress();
+    app.render(); // the align buttons show as disabled while it runs
     try {
       const r = await app.align.autoAlign(app.parts(), initial ? { initial } : {}, { signal: job.signal, onProgress });
       await this.applyResult(r);
@@ -222,11 +242,13 @@ export class AlignStep {
     await this.computeDeviation();
   }
 
-  private async computeDeviation(signal?: AbortSignal): Promise<void> {
+  /** Deviation map of the current pose; `current` false (a newer pose came meanwhile) drops it. */
+  private async computeDeviation(current: () => boolean = () => true): Promise<void> {
     const app = this.app;
     const parts = app.parts();
     if (!parts.length || !app.s.jaw) return;
-    const dev = await app.align.deviation(parts, app.s.assembly, { signal });
+    const dev = await app.align.deviation(parts, app.s.assembly);
+    if (!current()) return;
     app.store.set({ deviation: dev });
     this.applyDeviation();
     if (!this.mapShown) { this.mapShown = true; app.stage.setDisplay({ map: true }); }
@@ -243,69 +265,72 @@ export class AlignStep {
     app.store.set({ surfaces, deviation: null });
     this.applyDeviation();
     app.stage.setDisplay({ capture: surfaces === 'capture', parts: true });
-    if (app.s.alignment) this.scheduleMeasure(false);
+    if (app.s.alignment) this.scheduleMeasure();
   }
 
   onGeometryChanged(): void {
     const app = this.app;
     if (app.s.surfaces !== 'replacement') return;
     if (app.s.deviation) { app.store.set({ deviation: null }); this.applyDeviation(); }
-    if (app.s.jaw && app.s.alignment) this.scheduleMeasure(false);
+    if (app.s.jaw && app.s.alignment) this.scheduleMeasure();
   }
 
+  /** Stops waiting for a re-measure; one already in the worker finishes (it is short) and is dropped. */
   private stopMeasure(): void {
     clearTimeout(this.measureTimer);
-    this.measureJob?.abort();
     this.measureJob = null;
     if (this.app.s.measuring) this.app.store.set({ measuring: false });
   }
 
-  /** Re-measure 250 ms after the last change, cancelling one still running. */
-  scheduleMeasure(moved: boolean): void {
+  /** Re-measure 250 ms after the last change; a measure still running becomes stale. */
+  scheduleMeasure(): void {
     const app = this.app;
     if (!app.s.jaw) return;
-    this.poseMoved ||= moved;
     clearTimeout(this.measureTimer);
-    this.measureJob?.abort();
+    this.measureJob = null;
     if (!app.s.measuring) app.store.set({ measuring: true });
     this.measureTimer = window.setTimeout(() => void this.runMeasure(), 250);
   }
 
   private async runMeasure(): Promise<void> {
     const app = this.app;
-    const job = (this.measureJob = new AbortController());
+    const job = (this.measureJob = {});
+    const current = (): boolean => this.measureJob === job;
     const parts = app.parts();
     if (!parts.length) { app.store.set({ measuring: false }); return; }
     try {
       const pose = app.s.assembly;
-      const r = await app.align.measure(parts, pose, {}, { signal: job.signal });
-      const merged = mergeMeasured(app.s.alignment, r, this.poseMoved);
-      this.poseMoved = false;
+      const r = await app.align.measure(parts, pose, {});
+      if (!current()) return;
+      // moved = away from the aligned pose (an Undo back to it is no manual adjustment)
+      const aligned = app.s.lastAlignedPose;
+      const merged = mergeMeasured(app.s.alignment, r, !aligned || maxAbsDiff(pose, aligned) > 1e-12);
       app.store.set({ alignment: merged, lastAttempt: null, measuring: false });
       app.say.say(fmt(app.lang, app.c.say.measured, { status: app.c.al.status[merged.status], rms: num(app.lang, merged.rmsMm * 1000) }));
-      await this.computeDeviation(job.signal);
+      await this.computeDeviation(current);
     } catch (e) {
-      if ((e as { code?: string }).code === 'CANCELLED') return;
+      if ((e as { code?: string }).code === 'CANCELLED' || !current()) return;
       app.store.set({ measuring: false });
       app.error(4, e, 'jaw');
     } finally {
-      if (this.measureJob === job) this.measureJob = null;
+      if (current()) this.measureJob = null;
     }
   }
 
   /* ---------------- manual adjustment ---------------- */
 
-  private commitPose(m: Mat4, tween: 'step' | 'align' = 'step', moved = true): void {
+  private commitPose(m: Mat4, tween: 'step' | 'align' = 'step'): void {
     const app = this.app;
     app.store.set({ assembly: m, undo: pushUndo(app.s.undo, app.s.assembly), exportedSinceChange: false });
     app.viewer?.setAssembly(m, tween);
-    this.scheduleMeasure(moved);
+    this.scheduleMeasure();
   }
 
   /** Adjust pad: 30° / 1 mm per click, 5° / 0.1 mm with Shift, in screen axes about the set's center. */
   pad(op: string, dir: number, shift: boolean): void {
     const v = this.app.viewer;
     if (!v || !this.app.s.jaw) return;
+    v.finishPose(); // a quick second click starts from the committed pose, not from the in-between one
     const pose = v.assembly.matrix.clone();
     const pivot = v.setCenter();
     const { right, up, view } = v.axes();
@@ -327,6 +352,7 @@ export class AlignStep {
     const v = this.app.viewer;
     const jaw = v?.jawCenter();
     if (!v || !jaw) return;
+    v.finishPose();
     this.commitPose(toEngine(translatePose(v.assembly.matrix.clone(), jaw.sub(v.setCenter()))));
   }
 
@@ -338,7 +364,7 @@ export class AlignStep {
     const atAligned = !!app.s.lastAlignedPose && maxAbsDiff(prev, app.s.lastAlignedPose) < 1e-12;
     app.store.set({ assembly: prev, undo: stack, exportedSinceChange: false, ...(atAligned && this.alignedResult ? { alignment: this.alignedResult } : {}) });
     app.viewer?.setAssembly(prev, 'step');
-    this.scheduleMeasure(!atAligned);
+    this.scheduleMeasure();
     app.say.say(app.c.say.undone);
   }
 
@@ -347,7 +373,7 @@ export class AlignStep {
     if (!pose || !this.alignedResult) return;
     app.store.set({ assembly: pose, undo: pushUndo(app.s.undo, app.s.assembly), alignment: this.alignedResult, exportedSinceChange: false });
     app.viewer?.setAssembly(pose, 'step');
-    this.scheduleMeasure(false);
+    this.scheduleMeasure();
   }
 
   /* ---------------- guided points ---------------- */
@@ -360,9 +386,14 @@ export class AlignStep {
     this.guided = { targets, pairs: targets.map(() => null), skipped: new Set(), order: [], idx: 0 };
     app.stage.setGuided(true);
     this.syncGuided();
-    app.viewer?.fit();
+    const first = targets[0];
+    app.viewer?.fit(first ? [first.id] : undefined); // the crosshair starts on the first target, not inside the arch
     app.render();
-    q<HTMLElement>(this.pane4, '[data-sec="guided"] .xch__subtitle').scrollIntoView({ block: 'nearest' });
+    // the button that opened this is hidden now: focus the panel title, say what to do
+    const title = q<HTMLElement>(this.pane4, '[data-sec="guided"] .xch__subtitle');
+    title.focus({ preventScroll: true });
+    bringIntoView(title);
+    if (first) app.say.say(`${app.c.gp.text} ${fmt(app.lang, app.c.gp.first, { label: first.label })}`);
   }
 
   private syncGuided(): void {
@@ -405,7 +436,11 @@ export class AlignStep {
     if (!g) return;
     if (action === 'cancel') return this.leaveGuided(true);
     if (action === 'align') { if (this.canAlignGuided()) void this.runGuided(); return; }
-    if (action === 'back') {
+    if (action.startsWith('unskip:')) {
+      const i = Number(action.slice(7));
+      g.skipped.delete(i);
+      if (g.idx < 0) g.idx = i;
+    } else if (action === 'back') {
       const last = g.order.pop();
       if (last === undefined) return;
       g.pairs[last] = null;
@@ -430,9 +465,11 @@ export class AlignStep {
     this.app.render();
   }
 
+  /** Three points (or every target of a smaller case), or fewer once every other implant is skipped. */
   private canAlignGuided(): boolean {
     const g = this.guided;
-    return !!g && g.order.length >= Math.min(3, g.targets.length) && g.order.length > 0;
+    if (!g || !g.order.length) return false;
+    return g.order.length >= Math.min(3, g.targets.length) || g.idx < 0;
   }
 
   private async runGuided(): Promise<void> {
@@ -444,6 +481,7 @@ export class AlignStep {
     this.alignJob?.abort();
     const job = (this.alignJob = new AbortController());
     const { busy, onProgress } = this.progress();
+    app.render(); // the align buttons show as disabled while it runs
     try {
       const r = await app.align.alignFromLandmarks(app.parts(), pairs, {}, { signal: job.signal, onProgress });
       await this.applyResult(r);
@@ -457,12 +495,19 @@ export class AlignStep {
     }
   }
 
+  /** Focus in the guided panel (hidden now) goes back to the button that opened it; the stage keeps its focus. */
   leaveGuided(render = true): void {
     if (!this.guided) return;
+    const active = document.activeElement;
+    const inPanel = !active || active === document.body || q(this.pane4, '[data-sec="guided"]').contains(active);
     this.guided = null;
     this.app.stage.setGuided(false);
     this.syncGuided();
     if (render) this.app.render();
+    if (inPanel) {
+      q(this.pane4, '[data-sec="align"]').hidden = !this.app.s.jaw;
+      q<HTMLElement>(this.pane4, '[data-align="guided"]').focus({ preventScroll: true });
+    }
   }
 
   /* ---------------- export + email gate ---------------- */
@@ -493,6 +538,7 @@ export class AlignStep {
 
   private async onExport(btn: HTMLButtonElement): Promise<void> {
     const app = this.app;
+    if (btn.classList.contains('is-busy')) return; // one export at a time
     const blocker = exportBlocker(app.s);
     if (blocker) { app.say.say(q(this.pane4, '[data-reason="4"]').textContent ?? ''); return; }
     if (needsEmail(storage())) {
@@ -527,15 +573,17 @@ export class AlignStep {
       };
       const r = await app.jobs.run<ExportResult>({ type: 'export', request });
       const old = this.exportUrl;
-      if (old) app.later(() => URL.revokeObjectURL(old), 60_000);
+      if (old) app.later(() => revokeUrl(old), 60_000); // a download in progress may still read it
       this.exportUrl = download(r.zip, r.zipName, 'application/zip');
       this.exportName = r.zipName;
       const size = mb(app.lang, r.zip.byteLength);
-      this.exportLine = fmt(app.lang, c.ex.last, { time: new Intl.DateTimeFormat(app.lang, { timeStyle: 'short' }).format(new Date()), size });
-      app.store.set({ exportedSinceChange: true });
-      const text = fmt(app.lang, c.say.exportReady, { size });
-      app.toasts.show(text, { label: c.ex.again, run: () => this.downloadAgain() });
-      app.say.say(text);
+      // the ZIP holds the case as it was when the export started: a change made meanwhile keeps the guard armed
+      const now = app.s;
+      const unchanged = EXPORTED.every((k) => now[k] === s[k]);
+      this.exportLine = unchanged ? fmt(app.lang, c.ex.last, { time: new Intl.DateTimeFormat(app.lang, { timeStyle: 'short' }).format(new Date()), size }) : '';
+      if (unchanged) app.store.set({ exportedSinceChange: true });
+      // the toast region (role=status) announces it: no second message in #xch-status
+      app.toasts.show(fmt(app.lang, c.say.exportReady, { size }), unchanged ? { label: c.ex.again, run: () => this.downloadAgain() } : undefined);
     } catch (e) {
       app.error(4, e, 'jaw');
     } finally {
@@ -589,7 +637,7 @@ export class AlignStep {
     q(this.pane4, '[data-sec="guided"]').hidden = !g;
     q(this.pane4, '[data-sec="manual"]').hidden = !jaw || !!g;
     q(this.pane4, '[data-sec="review"]').hidden = jaw;
-    if (!jaw) fill(q(this.pane4, '[data-list="implants4"]'), app.implantRows(4));
+    if (!jaw) fillKeep(q(this.pane4, '[data-list="implants4"]'), app.implantRows(4), app.focusKey);
     const running = !!this.alignJob;
     for (const b of qa(this.pane4, '[data-align]')) b.setAttribute('aria-disabled', String(running));
     q(this.pane4, '[data-align="refine"]').hidden = !s.alignment;
@@ -598,6 +646,7 @@ export class AlignStep {
     setChecked(surf, s.surfaces, 'data-surf');
     q(surf, '[data-surf="capture"]').setAttribute('aria-disabled', String(!captureOk));
     q(this.pane4, '[data-surf-off]').hidden = captureOk;
+    q(this.pane4, '[data-surf-block]').hidden = !captureOk; // one possible choice is no choice (position files)
     q(this.pane4, '[data-not-yet]').hidden = !!(s.alignment || s.lastAttempt) || running;
     for (const b of qa(this.pane4, '[data-manual]')) {
       const kind = b.dataset.manual;
@@ -632,8 +681,12 @@ export class AlignStep {
     const metric = (value: number, label: string, help: string, unit: string, digits = 0): HTMLElement => {
       const b = h('b', '', { text: '0' });
       app.motion.count(b, value, (v) => `${num(app.lang, v, digits)} ${unit}`);
-      return h('div', 'xch__metric', { title: help }, b, h('span', '', { text: label }));
+      return h('div', 'xch__metric', {}, b, h('span', '', { text: label }));
     };
+    // what the numbers mean, for everyone (a title tooltip reaches neither keyboard, touch nor screen readers)
+    const help = h('details', 'xch__what', {}, h('summary', '', { text: c.al.metricsWhat }),
+      h('ul', '', {}, h('li', '', { text: `${c.al.rms}: ${c.al.rmsHelp}` }), h('li', '', { text: `${c.al.p95}: ${c.al.p95Help}` }),
+        h('li', '', { text: `${fmt(app.lang, c.al.coverage, { tol })}: ${fmt(app.lang, c.al.coverageHelp, { tol })}` })));
     const metrics = h('div', 'xch__metrics', {},
       metric(r.rmsMm * 1000, c.al.rms, c.al.rmsHelp, 'µm'),
       metric(r.p95Mm * 1000, c.al.p95, c.al.p95Help, 'µm'),
@@ -658,6 +711,7 @@ export class AlignStep {
       h('p', 'xch__small', { text: explain }),
       failed ? h('p', 'xch__label', { text: c.al.lastAttempt }) : null,
       metrics,
+      help,
       h('p', 'xch__small', { text: `${c.al.method}: ${c.al.methods[r.method]}` }),
       flags.length ? h('ul', 'xch__flags', {}, ...flags) : null,
       table,
@@ -676,6 +730,11 @@ export class AlignStep {
       const placed = !!g.pairs[i], now = i === g.idx, skipped = g.skipped.has(i);
       const li = h('li', placed ? 'is-placed' : now ? 'is-now' : '', {}, h('span', 'xch__gpnum', { text: String(i + 1) }), h('span', 'xch__rowlabel', { text: site.label }),
         h('span', 'xch__gpstate', { text: placed ? `✓ ${c.gp.placed}` : now ? `● ${c.gp.now}` : skipped ? c.gp.skipped : `○ ${c.gp.next}` }));
+      if (skipped) {
+        const undo = h('button', 'xch__textbtn', { type: 'button', text: c.gp.unskip });
+        undo.addEventListener('click', () => this.guidedAction(`unskip:${i}`));
+        li.append(undo);
+      }
       if (placed) {
         const redo = h('button', 'xch__textbtn', { type: 'button', text: c.gp.redo });
         redo.addEventListener('click', () => this.guidedAction(`redo:${i}`));
@@ -689,8 +748,10 @@ export class AlignStep {
     q(this.pane4, '[data-gp="back"]').setAttribute('aria-disabled', String(!g.order.length));
     const note = q(this.pane4, '[data-gp-note]');
     const n = g.order.length;
-    note.hidden = !(n > 0 && n < 3);
-    note.textContent = n === 1 ? c.gp.one : n === 2 ? c.gp.two : '';
+    // only when that many points is what the alignment will actually use
+    const few = n > 0 && n < 3 && this.canAlignGuided();
+    note.hidden = !few;
+    note.textContent = few ? (n === 1 ? c.gp.one : c.gp.two) : '';
   }
 
   private renderExport(): void {
@@ -717,7 +778,7 @@ export class AlignStep {
     q(this.pane4, '[data-reason="4"]').textContent = reason;
     const btn = q(this.pane4, '[data-export]');
     if (!btn.classList.contains('is-busy')) btn.setAttribute('aria-disabled', String(!!blocker));
-    if (!s.exportedSinceChange && this.exportUrl) { const u = this.exportUrl; this.exportUrl = null; app.later(() => URL.revokeObjectURL(u), 1000); this.exportLine = ''; }
+    if (!s.exportedSinceChange && this.exportUrl) { const u = this.exportUrl; this.exportUrl = null; app.later(() => revokeUrl(u), 1000); this.exportLine = ''; }
     const last = q(this.pane4, '[data-ex-last]');
     last.hidden = !this.exportLine;
     q(last, 'span').textContent = this.exportLine;
@@ -732,11 +793,22 @@ export class AlignStep {
     this.leaveGuided(false);
   }
 
+  /** A new case (App.resetCase): nothing of the previous jaw or result stays. */
+  resetCase(): void {
+    this.cancelAll();
+    if (this.jawLoaded) { this.jawLoaded = false; this.app.align.clearJaw(); }
+    this.jawWarnings = [];
+    this.ownJaw = false;
+    this.alignedResult = null;
+    this.sampleJaw = null;
+    this.mapShown = false;
+    this.resultKey = null;
+  }
+
   dispose(): void {
     this.cancelAll();
     clearTimeout(this.measureTimer);
-    if (this.exportUrl) URL.revokeObjectURL(this.exportUrl);
-    this.exportUrl = null;
+    this.exportUrl = null; // App.dispose revokes every blob URL (files.ts)
   }
 
   /** Brings the export section into view (skip link). */

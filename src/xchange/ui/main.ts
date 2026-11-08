@@ -92,13 +92,21 @@ export function mount(root: HTMLElement): Mounted {
   }, { rootMargin: '100% 0px' });
   near.observe(root);
   observers.push(near);
-  // the floats (WhatsApp, Apex) would cover the stage's corner while it fills the view
+  // the floats (WhatsApp, Apex) would cover the stage's corner while it fills the view; in the one-column layouts
+  // (< 1180 px, zoomed laptops) they would cover panel controls, so there they hide while any of the tool shows
   const stage = root.querySelector('.xch__stage');
+  const narrow = matchMedia('(max-width: 1179.98px)');
+  let stageHalf = false, toolIn = false;
+  const syncFloats = (): void => void document.documentElement.classList.toggle('xch-in-view', stageHalf || (narrow.matches && toolIn));
   if (stage) {
-    const io = new IntersectionObserver(([x]) => document.documentElement.classList.toggle('xch-in-view', !!x && x.intersectionRatio >= 0.5), { threshold: [0, 0.5, 1] });
+    const io = new IntersectionObserver(([x]) => { stageHalf = !!x && x.intersectionRatio >= 0.5; syncFloats(); }, { threshold: [0, 0.5, 1] });
     io.observe(stage);
     observers.push(io);
   }
+  const tool = new IntersectionObserver(([x]) => { toolIn = !!x?.isIntersecting; syncFloats(); });
+  tool.observe(root);
+  observers.push(tool);
+  narrow.addEventListener('change', syncFloats, { signal });
   // a tablet rotated to landscape mounts the 3D; shrinking never destroys a case
   small.addEventListener('change', () => { if (!small.matches) void start(); }, { signal });
   wireSmallCard(section, signal);

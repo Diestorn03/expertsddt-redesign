@@ -8,7 +8,8 @@ import type { TriMesh } from '../core/types';
 import { parseMesh } from '../io/mesh/index';
 
 export const LIBRARY_FILE_SCHEMA = 'ddt-xchange-geometries';
-export const LIBRARY_FILE_MAX_BYTES = 100 * 1024 * 1024;
+/** Covers a full library (50) of ordinary parts (~50 k triangles, ~3.3 MB each as base64 STL). */
+export const LIBRARY_FILE_MAX_BYTES = 256 * 1024 * 1024;
 
 export interface LibraryFileEntry {
   name: string;

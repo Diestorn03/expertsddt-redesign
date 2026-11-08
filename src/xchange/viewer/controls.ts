@@ -3,7 +3,7 @@
  * middle-drag / Shift-drag / left+right pans, wheel zooms toward the pointer, middle-click sets the
  * rotation center, Ctrl/Shift + middle-click toggles jaw transparency, double-click fits. In 'set' mode a
  * left-drag on an implant moves the whole set; Ctrl/⌘ + drag rotates it about its center (Shift: one axis).
- * Every listener is registered with the caller's AbortSignal.
+ * Every listener lives until the caller's AbortSignal or the viewer's dispose (a restart after a lost context).
  */
 import * as THREE from 'three';
 import type { Vec3 } from '../core/types';
@@ -16,6 +16,8 @@ export interface ControlCallbacks {
   mode(): ControlMode;
   onSelect(siteId: string | null): void;
   onGuidedPoint(point: Vec3): void;
+  /** Enter in guided mode with nothing under the crosshair. */
+  onGuidedMiss?(): void;
   /** World pose of the implant set during a drag; 'start' before the first move, 'end' after the last. */
   onSetChange(pose: THREE.Matrix4, phase: 'start' | 'move' | 'end'): void;
   onHover(hit: PartHit | null): void;
@@ -42,7 +44,8 @@ export function rotatePose(pose: THREE.Matrix4, axis: THREE.Vector3, angle: numb
 
 type Drag = { kind: 'rotate' | 'pan' | 'moveSet' | 'rotateSet'; x: number; y: number; x0: number; y0: number; t0: number; button: number; pose?: THREE.Matrix4; pivot?: THREE.Vector3; moved: boolean; shift: boolean; ctrl: boolean };
 
-export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCallbacks, signal: AbortSignal): void {
+export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCallbacks, outer: AbortSignal): void {
+  const signal = viewer.signal ? AbortSignal.any([outer, viewer.signal]) : outer;
   const canvas = viewer.canvas;
   const on = <K extends keyof HTMLElementEventMap>(el: HTMLElement | Window, type: K, fn: (e: HTMLElementEventMap[K]) => void, opts: AddEventListenerOptions = {}): void =>
     el.addEventListener(type, fn as EventListener, { ...opts, signal });
@@ -92,6 +95,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     else if (e.button === 0) {
       const hit = cb.mode() === 'set' ? viewer.pickPart(e.clientX, e.clientY) : null;
       if (hit) {
+        viewer.finishPose(); // a drag grabbed mid-animation starts from the stored pose, not an in-between one
         const pose = viewer.assembly.matrix.clone();
         drag = { kind: base.ctrl ? 'rotateSet' : 'moveSet', ...base, pose, pivot: viewer.setCenter() };
         stage.classList.add('is-grabbing');
@@ -157,14 +161,23 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     touchInput();
   });
 
+  /** A click (or tap) with the primary button: a guided point, else selection. */
+  const primaryClick = (x: number, y: number): void => {
+    if (cb.mode() === 'guided') {
+      const p = viewer.pickSurface(x, y, true);
+      if (p) cb.onGuidedPoint(p);
+    } else cb.onSelect(viewer.pickPart(x, y)?.siteId ?? null);
+  };
+
   const end = (e: PointerEvent): void => {
     if (e.pointerType === 'touch') {
       touches.delete(e.pointerId);
       if (touches.size < 2) pinch = null;
-      if (drag && !drag.moved && touches.size === 0) {
+      // a one-finger tap (never part of a pinch: drag is null then) acts like a click; a double tap fits
+      if (drag && !drag.moved && touches.size === 0 && e.type === 'pointerup') {
         const now = performance.now();
-        if (now - lastTap < 300) cb.onPreset('fit');
-        lastTap = now;
+        if (now - lastTap < 300) { cb.onPreset('fit'); lastTap = 0; }
+        else { lastTap = now; if (now - drag.t0 < 500) primaryClick(e.clientX, e.clientY); }
       }
       if (touches.size === 0) drag = null;
       return;
@@ -182,12 +195,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
         const p = viewer.pickSurface(e.clientX, e.clientY);
         if (p) viewer.setOrbitCenter(new THREE.Vector3(...p));
       }
-    } else if (d.button === 0) {
-      if (cb.mode() === 'guided') {
-        const p = viewer.pickSurface(e.clientX, e.clientY, true);
-        if (p) cb.onGuidedPoint(p);
-      } else cb.onSelect(viewer.pickPart(e.clientX, e.clientY)?.siteId ?? null);
-    }
+    } else if (d.button === 0) primaryClick(e.clientX, e.clientY);
   };
   on(canvas, 'pointerup', end);
   on(canvas, 'pointercancel', end);
@@ -222,6 +230,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       const [x, y] = center();
       const p = viewer.pickSurface(x, y, true);
       if (p) cb.onGuidedPoint(p);
+      else cb.onGuidedMiss?.();
     } else if ((k === 'Backspace' || k === 'Escape') && cb.mode() === 'guided') cb.onGuidedKey(k);
     else handled = false;
     if (handled) { e.preventDefault(); touchInput(); }

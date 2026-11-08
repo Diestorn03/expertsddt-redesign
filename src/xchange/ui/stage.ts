@@ -39,6 +39,11 @@ export class Stage {
     for (const b of qa<HTMLButtonElement>(bar, '[data-view]')) b.addEventListener('click', () => this.preset(b.dataset.view as Preset | 'fit'), { signal });
     this.popBtn.addEventListener('click', () => this.togglePopover(), { signal });
     this.pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.togglePopover(false); } }, { signal });
+    // it covers the adjust pad: focus leaving it (Tab, Shift+Tab) closes it, so nothing focused stays hidden under it
+    this.pop.addEventListener('focusout', (e) => {
+      const to = e.relatedTarget as Node | null;
+      if (to && !this.pop.contains(to) && to !== this.popBtn) this.togglePopover(false, false);
+    }, { signal });
     document.addEventListener('pointerdown', (e) => { if (!this.pop.hidden && !this.pop.contains(e.target as Node) && e.target !== this.popBtn) this.togglePopover(false, false); }, { signal });
     for (const sw of qa<HTMLButtonElement>(this.pop, '[data-switch]')) {
       sw.addEventListener('click', () => {
@@ -65,11 +70,19 @@ export class Stage {
     fs.addEventListener('click', () => { if (document.fullscreenElement) void document.exitFullscreen(); else void this.el.requestFullscreen?.(); }, { signal });
     document.addEventListener('fullscreenchange', () => { fs.textContent = document.fullscreenElement ? fs.dataset.on! : fs.dataset.off!; }, { signal });
     const pad = q(this.el, '[data-pad]');
-    roving(pad, signal, true);
+    roving(pad, signal);
     for (const b of qa<HTMLButtonElement>(pad, '[data-pad-op]')) b.addEventListener('click', (e) => app.alignStep.pad(b.dataset.padOp!, Number(b.dataset.padDir), e.shiftKey), { signal });
     q(this.el, '[data-restart]').addEventListener('click', () => { q(this.el, '[data-lost]').hidden = true; app.restartViewer(); }, { signal });
+    // handled here on every step (an in-page anchor would go to the router and Lenis, and drop focus)
     const skip = q<HTMLAnchorElement>(root, '[data-skip-view]');
-    skip.addEventListener('click', (e) => { if (app.shown === 4) { e.preventDefault(); app.alignStep.focusExport(); } }, { signal });
+    skip.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (app.shown === 4) { app.alignStep.focusExport(); return; }
+      const help = document.getElementById('xch-help-title');
+      if (!help) return;
+      document.dispatchEvent(new CustomEvent('scroll-to', { detail: help }));
+      help.focus({ preventScroll: true });
+    }, { signal });
     this.el.addEventListener('keydown', () => this.el.classList.add('is-keyboard'), { signal });
     this.el.addEventListener('pointerdown', () => this.el.classList.remove('is-keyboard'), { signal });
     this.wireDrop();
@@ -213,6 +226,7 @@ export class Stage {
 
   setGuided(on: boolean): void {
     this.el.classList.toggle('is-guided', on);
+    this.el.setAttribute('aria-describedby', on ? 'xch-view-help xch-view-gp' : 'xch-view-help'); // Enter places a point only now
     this.update();
   }
 

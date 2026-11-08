@@ -25,7 +25,8 @@ export interface GeometryMeta {
 }
 
 export class LibraryError extends Error {
-  constructor(readonly code: 'libraryFull' | 'storageFull' | 'nameEmpty') {
+  /** storageLost: the browser closed the database while the page was open (site data cleared). */
+  constructor(readonly code: 'libraryFull' | 'storageFull' | 'storageLost' | 'nameEmpty') {
     super(code);
   }
 }
@@ -68,6 +69,16 @@ const done = (tx: IDBTransaction): Promise<void> =>
   new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
 const isQuota = (e: unknown): boolean => e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED');
 
+/** Every IndexedDB failure becomes a LibraryError the UI explains (never an unhandled rejection). */
+async function guarded<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    if (e instanceof LibraryError) throw e;
+    throw new LibraryError(isQuota(e) ? 'storageFull' : 'storageLost');
+  }
+}
+
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     let r: IDBOpenDBRequest;
@@ -93,13 +104,23 @@ export class Library {
   /** Memory copy of meshes when not persistent, plus a cache of meshes read this visit. */
   private readonly meshes = new Map<string, TriMesh>();
 
+  /** The database went away mid-visit: nothing is written to memory only, silently. */
+  private lost = false;
+  private persistAsked = false;
+
   private constructor(private db: IDBDatabase | null) {}
+
+  private open(): IDBDatabase | null {
+    if (this.lost) throw new LibraryError('storageLost');
+    return this.db;
+  }
 
   static async open(useIndexedDb = true): Promise<Library> {
     const db = useIndexedDb ? await openDb() : null;
     const lib = new Library(db);
     if (db) {
-      db.onversionchange = () => { db.close(); lib.db = null; };
+      db.onversionchange = () => { db.close(); lib.db = null; lib.lost = true; };
+      db.onclose = () => { lib.db = null; lib.lost = true; };
       try {
         const all = await req(db.transaction('meta').objectStore('meta').getAll() as IDBRequest<GeometryMeta[]>);
         for (const m of all) if (m && m.schema === 1 && typeof m.id === 'string') lib.metas.set(m.id, m);
@@ -129,8 +150,9 @@ export class Library {
 
   async get(id: string): Promise<TriMesh | null> {
     const cached = this.meshes.get(id);
-    if (cached || !this.db) return cached ?? null;
-    const row = await req(this.db.transaction('mesh').objectStore('mesh').get(id) as IDBRequest<{ positions: Float32Array; indices: Uint32Array } | undefined>);
+    const db = cached ? null : this.open();
+    if (cached || !db) return cached ?? null;
+    const row = await guarded(() => req(db.transaction('mesh').objectStore('mesh').get(id) as IDBRequest<{ positions: Float32Array; indices: Uint32Array } | undefined>));
     if (!row) return null;
     const mesh: TriMesh = { positions: row.positions, indices: row.indices };
     this.meshes.set(id, mesh);
@@ -152,16 +174,16 @@ export class Library {
       triangles: countTriangles(mesh), extentMm: extentOf(mesh), thumbnail,
     };
     const stored: TriMesh = { positions: mesh.positions, indices: mesh.indices }; // colors are not kept
-    if (this.db) {
-      try {
-        const tx = this.db.transaction(['meta', 'mesh'], 'readwrite');
+    const db = this.open();
+    if (db) {
+      await guarded(() => {
+        const tx = db.transaction(['meta', 'mesh'], 'readwrite');
         tx.objectStore('meta').put(meta);
         tx.objectStore('mesh').put({ id: meta.id, ...stored });
-        await done(tx);
-      } catch (e) {
-        if (isQuota(e)) throw new LibraryError('storageFull');
-        throw e;
-      }
+        return done(tx);
+      });
+      // ask once that the browser not evict the library under storage pressure (a refusal changes nothing)
+      if (!this.persistAsked) { this.persistAsked = true; void navigator.storage?.persist?.().catch(() => false); }
     }
     this.metas.set(meta.id, meta);
     this.meshes.set(meta.id, stored);
@@ -169,11 +191,8 @@ export class Library {
   }
 
   private async putMeta(meta: GeometryMeta): Promise<void> {
-    if (this.db) {
-      const tx = this.db.transaction('meta', 'readwrite');
-      tx.objectStore('meta').put(meta);
-      await done(tx);
-    }
+    const db = this.open();
+    if (db) await guarded(() => { const tx = db.transaction('meta', 'readwrite'); tx.objectStore('meta').put(meta); return done(tx); });
     this.metas.set(meta.id, meta);
   }
 
@@ -201,11 +220,14 @@ export class Library {
   }
 
   async remove(id: string): Promise<void> {
-    if (this.db) {
-      const tx = this.db.transaction(['meta', 'mesh'], 'readwrite');
-      tx.objectStore('meta').delete(id);
-      tx.objectStore('mesh').delete(id);
-      await done(tx);
+    const db = this.open();
+    if (db) {
+      await guarded(() => {
+        const tx = db.transaction(['meta', 'mesh'], 'readwrite');
+        tx.objectStore('meta').delete(id);
+        tx.objectStore('mesh').delete(id);
+        return done(tx);
+      });
     }
     this.metas.delete(id);
     this.meshes.delete(id);

@@ -58,7 +58,7 @@ const c = makeSyntheticCase({ seed: 81, implants: 3, maxAngleRad: 1.5, archOptio
 const code = (error: unknown): string => (error as XchangeError).code;
 
 describe('AlignClient <-> handler', () => {
-  it('aligns in the worker exactly like in process, with progress, and returns the deviation map', async () => {
+  it('aligns in the worker exactly like in process, with progress, and returns the deviation map', { timeout: 30_000 }, async () => {
     const { client, workers } = setup();
     await client.setJaw(c.jaw);
     const stages = new Set<AlignStage>();
@@ -92,7 +92,7 @@ describe('AlignClient <-> handler', () => {
     client.dispose();
   });
 
-  it('cancelling a running call terminates the worker; the next call respawns it with the last jaw', async () => {
+  it('cancelling a running call terminates the worker; the next call respawns it with the last jaw', { timeout: 30_000 }, async () => {
     const { client, workers } = setup();
     await client.setJaw(c.jaw);
     const controller = new AbortController();

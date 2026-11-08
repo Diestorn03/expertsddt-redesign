@@ -39,22 +39,32 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 
 ## Estado (2026-11-07)
 
-**Funciona** (motor completo, todavía sin interfaz):
-- Importar mallas (STL binario y ASCII, PLY, OBJ) y las 6 familias de archivos de posiciones, con los límites de la
-  sección 7.4 comprobados antes de reservar memoria.
-- Recuperar los marcos de implante de una captura en malla con un cuerpo de referencia de la biblioteca, también
-  cuando la base del cuerpo no se escaneó; enlazar un archivo de posiciones con la malla.
-- Alinear con la mandíbula: automático (multiarranque), guiado 1-2-3-4, ajuste manual medido; métricas por implante y
-  mapa de desviación en µm, en un worker cancelable.
-- Exportar el ZIP: `combined.stl`, `replacements.stl`, un STL por implante, la mandíbula byte a byte, `report.json`
-  y `README.txt` (ES/EN).
+**Funciona en la interfaz** (`/ddt-xchange/` y `/es/ddt-xchange/`, dentro del sitio, con su motion, Lenis y ClientRouter):
+- Paso 1: arcada superior/inferior e importación de la captura (malla de scan bodies o uno o varios archivos de
+  posiciones; la misma etiqueta en dos archivos solo se acepta si las matrices coinciden en 1e-7). Posiciones
+  provisionales con confirmar o dejar fuera.
+- Paso 2: geometría de reemplazo desde "Tus geometrías" (IndexedDB, 50 como máximo, favoritas, renombrar, eliminar
+  con confirmación, copia de seguridad en JSON). Elegir una la aplica al instante a todos o al implante elegido en este
+  paso, con Deshacer; aplicada a todos, pasa sola al paso 3.
+- Paso 3: escaneo de la mandíbula (opcional) y, al cargarlo, alineación automática.
+- Paso 4: automática, puntos guiados 1-2-3-4 (clic, toque en tableta o Enter con la mira desde el teclado; se pueden
+  omitir implantes y alinear con los puntos puestos), resultado con RMS, cobertura, tabla por implante y mapa de
+  colores 0-100 µm; ajuste a mano (arrastrar, Ctrl + arrastrar, panel de 30°/5°, voltear 180°), re-medido 250 ms
+  después; Deshacer y Restablecer. Exportar el ZIP para Exocad tras pedir el correo una vez (webhook
+  `PUBLIC_N8N_FORM_WEBHOOK`; nunca bloquea la descarga).
+- Visor bajo demanda (60 fps, pausa fuera de pantalla), tema claro/oscuro en vivo, movimiento reducido respetado,
+  todo liberado al salir de la página (workers, WebGL, URLs blob, IndexedDB).
 
-**Probado:** 261 tests de Vitest en unos 12 s: unitarios por módulo, 33 adversariales (los hallazgos de la revisión,
-todos corregidos) y 2 de integración de punta a punta (malla de captura → sitios → alineación → ZIP; archivo de
-posiciones + malla → clics guiados → ZIP), con menos de 2 µm de error en los reemplazos exportados.
-`npm run typecheck:xchange` sin errores y `npm run build` correcto.
+**Cómo probar la demo:** `npm run build` y `npx astro preview`, abrir `/ddt-xchange/` y pulsar "Try a sample case"
+(o "Probar un caso de ejemplo"). Se genera en el navegador un caso sintético (arcada inferior, 4 implantes, archivo
+MicronMapper) que pasa por el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample
+jaw scan", y el paso 4 alinea solo (Good fit, unos 7 µm) y exporta el ZIP.
 
-**Falta:** `state/` (caso, biblioteca en IndexedDB, regla de la misma etiqueta en dos archivos), `viewer/` y `ui/`.
+**Probado:** 354 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
+correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
+cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones
+cortados.
 
 **Limitaciones conocidas:**
 - No hay plantilla integrada: la H6.6 del prototipo no se copia. La detección en malla necesita un cuerpo de
@@ -63,11 +73,15 @@ posiciones + malla → clics guiados → ZIP), con menos de 2 µm de error en lo
 - Con un solo cuerpo redondo, el giro axial queda arbitrario; se marca, no se adivina.
 - Quedan dos ICP y dos árboles de punto más cercano (`detect/` con BVH, `align/` con k-d tree). Es deuda aceptada:
   conviene unificarlos con casos reales para comparar.
+- La copia de la biblioteca es un solo JSON de hasta 256 MB (caben 50 piezas comunes); una mayor se descarga igual
+  con un aviso. Si las bibliotecas reales crecen más, hay que partirla en varios archivos.
+- La CSP de producción aún necesita `'unsafe-inline'` en script-src por el script de tema de `Base.astro` (moverlo a
+  un hash o a un archivo antes de quitarlo).
 - XLSX y los formatos nativos PIC, Tupel y BEB se rechazan. El ZIP se arma en memoria (pico de unas 2 veces el
   paquete, máximo 512 MB).
 - Todo se validó solo con datos sintéticos: una tira de encía y cilindros, sin dientes, paladar ni artefactos de escaneo.
 
-**Necesita casos reales de Fernando** (anonimizados):
+**Necesita al cliente (Fernando)**, con casos anonimizados:
 - P5/P14: 3-5 casos con la alineación correcta hecha en exocad, para calibrar los umbrales, que hoy son heurísticos.
   Alineación: RMS 50/100 µm, cobertura 95/80 %, ambigüedad 1,1 veces o 5 µm. Detección: 30 µm y 98 %, cobertura de
   la referencia 50 %.
@@ -76,3 +90,6 @@ posiciones + malla → clics guiados → ZIP), con menos de 2 µm de error en lo
   unidades si una mandíbula mide menos de 15 mm).
 - P3/P4: el CAD de los cuerpos de escaneo de referencia, con su licencia, y qué hacer con el giro axial de los
   cuerpos redondos.
+- Confirmar los ejes de las vistas predefinidas (`viewer/presets.ts`: se asume +Z oclusal en la inferior y -Y
+  anterior) con un caso real.
+- n8n: definir `PUBLIC_N8N_FORM_WEBHOOK` y añadir al flujo la rama `source: 'ddt-xchange'`.

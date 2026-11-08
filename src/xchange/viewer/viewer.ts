@@ -11,6 +11,7 @@ import { computeBounds } from '../core/mesh';
 import type { Arch, Mat4, TriMesh, Vec3 } from '../core/types';
 import { buildLut, colorize } from './colormap';
 import { presetView, type Preset } from './presets';
+import { forget, transient } from '../ui/motion';
 
 export interface SiteVisual {
   id: string;
@@ -133,6 +134,9 @@ export class Viewer {
   private raf = 0;
   private visible = true;
   private disposed = false;
+  private readonly life = new AbortController();
+  /** Aborted by dispose(): listeners bound to this viewer (controls) go with it. */
+  readonly signal = this.life.signal;
   private interactingUntil = 0;
   private lowRes = false;
   private restoreTimer = 0;
@@ -405,9 +409,9 @@ export class Viewer {
     this.pruneShared();
     if (animate && !this.opts.reducedMotion) {
       const s = { v: 0.85 };
-      const base = rowMajor(imp.site.matrix);
-      this.ctx.add(() => gsap.to(s, { v: 1, duration: 0.5, ease: 'back.out(1.4)', onUpdate: () => {
-        imp.mesh.matrix.copy(base).multiply(tmpM.makeScale(s.v, s.v, s.v));
+      // the site's matrix of this moment (setSites may move it while the scale-in runs)
+      transient(this.ctx, () => gsap.to(s, { v: 1, duration: 0.5, ease: 'back.out(1.4)', onUpdate: () => {
+        imp.mesh.matrix.copy(rowMajor(imp.site.matrix)).multiply(tmpM.makeScale(s.v, s.v, s.v));
         imp.mesh.matrixWorldNeedsUpdate = true;
         this.invalidate();
       } }));
@@ -471,7 +475,7 @@ export class Viewer {
       el.className = 'xch__pin';
       el.textContent = String(i + 1);
       this.labels.append(el);
-      if (!this.opts.reducedMotion) this.ctx.add(() => gsap.fromTo(el, { scale: 0 }, { scale: 1, duration: 0.45, ease: 'back.out(1.6)' }));
+      if (!this.opts.reducedMotion) transient(this.ctx, () => gsap.fromTo(el, { scale: 0 }, { scale: 1, duration: 0.45, ease: 'back.out(1.6)' }));
       this.pins.push({ mesh, el, n: i + 1 });
     });
     this.invalidate();
@@ -480,6 +484,8 @@ export class Viewer {
   /** Implant set pose (capture -> world). `tween` = 'align' (.9 s expo.out) or 'step' (.35 s power3.out). */
   setAssembly(m: Mat4, tween: 'none' | 'align' | 'step' = 'none'): void {
     this.poseTween?.kill();
+    forget(this.ctx, this.poseTween);
+    this.poseTween = null;
     const to = rowMajor(m);
     if (tween === 'none' || this.opts.reducedMotion) {
       this.assembly.matrix.copy(to);
@@ -494,8 +500,7 @@ export class Viewer {
     to.decompose(p1, q1, s);
     const one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), q = new THREE.Quaternion();
     const o = { t: 0 };
-    this.ctx.add(() => {
-      this.poseTween = gsap.to(o, {
+    this.poseTween = transient(this.ctx, () => gsap.to(o, {
         t: 1, duration: tween === 'align' ? 0.9 : 0.35, ease: tween === 'align' ? 'expo.out' : 'power3.out',
         onUpdate: () => {
           p.lerpVectors(p0, p1, o.t);
@@ -504,9 +509,13 @@ export class Viewer {
           this.assembly.matrixWorldNeedsUpdate = true;
           this.invalidate();
         },
-        onComplete: () => { this.assembly.matrix.copy(to); this.assembly.matrixWorldNeedsUpdate = true; this.updateSphere(); this.invalidate(); },
-      });
-    });
+        onComplete: () => { this.poseTween = null; this.assembly.matrix.copy(to); this.assembly.matrixWorldNeedsUpdate = true; this.updateSphere(); this.invalidate(); },
+      }));
+  }
+
+  /** Ends a running pose animation at its target: a drag starts from the pose the store holds, not an in-between one. */
+  finishPose(): void {
+    this.poseTween?.progress(1);
   }
 
   /* ---------------- bounds, camera ---------------- */
@@ -549,7 +558,7 @@ export class Viewer {
   }
 
   private tweenCamera(target: THREE.Vector3, q: THREE.Quaternion, dist: number, duration = 0.7): void {
-    this.camTween?.kill();
+    this.stopCameraTween();
     if (this.opts.reducedMotion || duration === 0) {
       this.target.copy(target);
       this.q.copy(q);
@@ -559,21 +568,22 @@ export class Viewer {
     }
     const t0 = this.target.clone(), q0 = this.q.clone(), d0 = this.dist;
     const o = { t: 0 };
-    this.ctx.add(() => {
-      this.camTween = gsap.to(o, {
-        t: 1, duration, ease: 'power3.inOut',
-        onUpdate: () => {
-          this.target.lerpVectors(t0, target, o.t);
-          this.q.slerpQuaternions(q0, q, o.t);
-          this.dist = d0 + (dist - d0) * o.t;
-          this.invalidate();
-        },
-      });
-    });
+    this.camTween = transient(this.ctx, () => gsap.to(o, {
+      t: 1, duration, ease: 'power3.inOut',
+      onUpdate: () => {
+        this.target.lerpVectors(t0, target, o.t);
+        this.q.slerpQuaternions(q0, q, o.t);
+        this.dist = d0 + (dist - d0) * o.t;
+        this.invalidate();
+      },
+      onComplete: () => { this.camTween = null; },
+    }));
   }
 
   stopCameraTween(): void {
     this.camTween?.kill();
+    forget(this.ctx, this.camTween);
+    this.camTween = null;
   }
 
   private fitDistance(radius: number): number {
@@ -715,6 +725,7 @@ export class Viewer {
 
   dispose(): void {
     this.disposed = true;
+    this.life.abort();
     cancelAnimationFrame(this.raf);
     clearTimeout(this.restoreTimer);
     this.ctx.revert();

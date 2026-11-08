@@ -892,7 +892,7 @@ the right (36 px targets). The row's main button has the accessible name "Apply 
 
 - JSON rather than a ZIP because import then needs no ZIP reader (the engine only writes ZIPs): `JSON.parse`, base64,
   and the hardened `parseMesh(bytes, 'geometry')` per entry.
-- Import limits: file ≤ 100 MB (`ui.libraryFileTooLarge`); total ≤ 50 entries with the existing ones (extra entries
+- Import limits: file ≤ 256 MB (`ui.libraryFileTooLarge`, checked from File.size before reading; 50 ordinary ~50 k-triangle parts fit; an export over it gets the `ui.libraryExportTooLarge` note); total ≤ 50 entries with the existing ones (extra entries
   skipped and counted); wrong `schema` → `ui.libraryFileInvalid`; a bad entry is skipped and counted
   (`ui.librarySkipped`), never fatal; names pass the §7.1 rules.
 - The file holds nothing about cases: no ids, no dates of use.

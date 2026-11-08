@@ -86,6 +86,17 @@ export class AlignClient {
     return new Map(response.perSite.map((site) => [site.siteId, site.distancesUm]));
   }
 
+  /**
+   * Forgets the jaw: running and queued calls are cancelled and the worker (with its jaw target) is terminated;
+   * the next call starts a fresh worker without a jaw.
+   */
+  clearJaw(): void {
+    this.jaw = null;
+    for (const job of [...this.queue]) this.abort(job);
+    if (this.current) this.abort(this.current);
+    else this.dropWorker();
+  }
+
   /** Terminates the worker and rejects every pending call with CANCELLED. The client cannot be reused. */
   dispose(): void {
     this.disposed = true;

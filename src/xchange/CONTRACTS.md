@@ -428,6 +428,8 @@ export class AlignClient {
   measure(parts: readonly AssemblyPart[], transform: Mat4, options?: AlignOptionsData, call?: CallOptions): Promise<AlignmentResult>;
   /** Per site id: µm per vertex of that part's mesh (after transform) to the jaw surface. */
   deviation(parts: readonly AssemblyPart[], transform: Mat4, call?: CallOptions): Promise<Map<string, Float32Array>>;
+  /** Forgets the jaw: running and queued calls are CANCELLED, the worker (and its IcpTarget) is terminated. */
+  clearJaw(): void;
   dispose(): void;
 }
 ```

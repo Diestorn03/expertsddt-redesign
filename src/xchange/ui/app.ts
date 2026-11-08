@@ -8,14 +8,15 @@ import { inverseRigid } from '../core/mat4';
 import { computeVertexNormals, transformMesh } from '../core/mesh';
 import type { ImplantSite, ReplacementGeometry, TriMesh } from '../core/types';
 import { AlignClient } from '../align/client';
-import { activeSites, alignmentParts, freshCase, reachable, Store, type CaseState, type Step } from '../state/case';
+import { activeSites, alignmentParts, freshCase, reachable, step1Blocker, Store, type CaseState, type Step } from '../state/case';
 import { JobsClient } from '../state/jobs';
 import { UiError } from '../state/jobs-handler';
-import { Library } from '../state/library';
+import { Library, LibraryError } from '../state/library';
 import { attachControls } from '../viewer/controls';
 import { Viewer } from '../viewer/viewer';
 import { h, icon, q, qa } from './dom';
 import { alertCard, Announcer, bringIntoView, confirmDialog, noteCard, Toasts } from './feedback';
+import { revokeAllUrls } from './files';
 import type { Copy } from './i18n/en';
 import { errorMessage, fmt, plural, type Lang, type MessageContext, type Purpose } from './i18n/format';
 import { Motion } from './motion';
@@ -100,6 +101,10 @@ export class App {
       const m = this.c.ui.webglUnavailable;
       q(stageEl, '[data-empty]').replaceChildren(h('p', 'xch__emptytitle', { text: m.t }), h('p', '', { text: m.b }));
       qa<HTMLButtonElement>(this.root, '.xch__panel button').forEach((b) => b.setAttribute('aria-disabled', 'true'));
+      // greyed out means off: no panel button acts without the 3D view
+      this.root.addEventListener('click', (e) => {
+        if ((e.target as Element).closest('.xch__panel button')) { e.preventDefault(); e.stopImmediatePropagation(); this.say.say(`${m.t} ${m.b}`); }
+      }, { capture: true, signal: this.signal });
       return;
     }
     const v = this.viewer;
@@ -213,6 +218,7 @@ export class App {
       b.addEventListener('click', () => {
         const n = Number(b.dataset.step) as Step;
         if (reachable(this.s, n)) this.go(n);
+        else this.say.say(this.lockReason(n));
       }, { signal: this.signal });
     }
     for (const b of qa<HTMLButtonElement>(this.root, '[data-next]')) b.addEventListener('click', () => this.next(Number(b.dataset.next) as Step), { signal: this.signal });
@@ -238,13 +244,12 @@ export class App {
     this.shown = step;
     this.store.set({ step });
     this.stage.onStep(step);
+    // focus moves with the swap (never parked on <body> while the new pane rises in, never taken back later)
     void this.motion.panel(from, to, () => {
       from.hidden = true;
       to.hidden = false;
-    }).then(() => {
-      q<HTMLElement>(to, '.xch__h').focus({ preventScroll: true });
-      bringIntoView(q(this.root, '.xch__stepper'));
-    });
+      if (!to.contains(document.activeElement)) q<HTMLElement>(to, '.xch__h').focus({ preventScroll: true });
+    }).then(() => bringIntoView(q(this.root, '.xch__stepper')));
     this.say.say(fmt(this.lang, this.c.say.step, { n: step, name: this.c.steps.names[step - 1]! }));
     if (step === 4) this.alignStep.onEnter();
   }
@@ -265,7 +270,7 @@ export class App {
       b.setAttribute('aria-disabled', String(!ok));
       q(b, '[data-step-state]').textContent = ` · ${current ? this.c.steps.current : !ok ? this.c.steps.locked : done[i] ? this.c.steps.done : ''}`;
       const lock = b.parentElement?.querySelector('[data-step-lock]');
-      if (lock) lock.textContent = ok ? '' : n === 2 ? this.c.steps.lockedCapture : this.c.steps.lockedGeometry;
+      if (lock) lock.textContent = ok ? '' : this.lockReason(n);
     });
     const completed = done.slice(0, 3).filter(Boolean).length;
     q(this.root, '.xch__track i').style.transform = `scaleX(${Math.min(completed, 3) / 3})`;
@@ -275,6 +280,14 @@ export class App {
     this.geometry.render();
     this.alignStep.render();
     this.stage.update();
+    this.focusKey = null; // consumed by whichever list holds it
+  }
+
+  /** Why a step can't be opened yet: the first thing that blocks it. */
+  private lockReason(n: Step): string {
+    const b = step1Blocker(this.s);
+    if (b) return b === 'needCapture' ? this.c.steps.lockedCapture : this.c.s1[b];
+    return n > 2 ? this.c.steps.lockedGeometry : '';
   }
 
   /** Implant rows shared by steps 1, 2 and 4. */
@@ -328,7 +341,8 @@ export class App {
       if (focusCamera) this.viewer?.fit([siteId]);
       const site = this.s.sites.find((x) => x.id === siteId);
       if (site) this.say.say(fmt(this.lang, this.c.say.selected, { label: site.label }));
-      this.geometry.target = 'one';
+      // only a pick made in step 2 targets one implant; browsing in steps 1 and 4 keeps "all"
+      if (this.shown === 2) this.geometry.target = 'one';
     }
     this.render();
   }
@@ -376,9 +390,10 @@ export class App {
   /** Error alert in a step (CANCELLED only says so quietly). */
   error(step: Step | 'lib', error: unknown, purpose: Purpose, ctx: MessageContext & { vars?: Record<string, number> } = {}): void {
     const box = q(this.root, `[data-alerts="${step === 'lib' ? 2 : step}"]`);
+    const opener = document.activeElement;
     if (isXchangeError(error) && error.code === 'CANCELLED') { this.say.say(this.c.say.cancelled); return; }
     let msg;
-    if (error instanceof UiError || (error as { code?: string })?.code === 'libraryFull' || (error as { code?: string })?.code === 'storageFull') {
+    if (error instanceof UiError || error instanceof LibraryError) {
       const key = error instanceof UiError ? error.key : (error as { code: string }).code;
       const row = (this.c.ui as unknown as Record<string, { t: string; b: string }>)[key] ?? this.c.errors.INTERNAL;
       const vars = { limit: 50, ...ctx.vars };
@@ -387,7 +402,12 @@ export class App {
       if (!isXchangeError(error)) console.error(error);
       msg = errorMessage(this.c, this.lang, toErrorPayload(error), { purpose, labels: this.s.sites.map((x) => x.label), ...ctx });
     }
-    const card = alertCard(msg, this.c.err.dismiss, () => card.remove());
+    // Dismiss gives focus back to what started the action (or the step's heading)
+    const card = alertCard(msg, this.c.err.dismiss, () => {
+      card.remove();
+      const back = opener instanceof HTMLElement && opener !== document.body && opener.isConnected && !opener.closest('[hidden]') ? opener : q<HTMLElement>(this.root, `[data-pane="${this.shown}"] .xch__h`);
+      back.focus();
+    });
     box.replaceChildren(card);
     this.motion.appear(card);
     bringIntoView(card);
@@ -418,7 +438,7 @@ export class App {
 
   /** Replaces the whole case (arch and library stay). */
   resetCase(arch = this.s.arch): void {
-    this.alignStep.cancelAll();
+    this.alignStep.resetCase();
     this.jobs.cancelAll();
     this.selected = null;
     for (const id of this.s.caseGeometries.keys()) this.meshCache.delete(id);
@@ -433,7 +453,10 @@ export class App {
 
   /** Unexported work that the leave guard protects. */
   hasUnsaved(): boolean {
-    return (this.s.sites.length > 0 || !!this.s.captureMesh) && !this.s.exportedSinceChange;
+    const s = this.s;
+    // the sample is synthetic and one click away: only a jaw scan of the user's own makes it worth asking
+    if (s.sample && !this.alignStep.ownJaw) return false;
+    return (s.sites.length > 0 || !!s.captureMesh) && !s.exportedSinceChange;
   }
 
   dispose(): void {
@@ -448,6 +471,7 @@ export class App {
     this.viewer?.dispose();
     this.viewer = null;
     this.stage?.dispose();
+    revokeAllUrls(); // export ZIPs and library files, timers or not
     for (const d of qa<HTMLDialogElement>(this.section, 'dialog')) if (d.open) d.close();
     document.dispatchEvent(new CustomEvent('scroll-lock', { detail: false }));
     this.library?.close();

@@ -92,8 +92,8 @@ export function setChecked(group: HTMLElement, value: string | null, attr: strin
   if (!any && radios[0]) radios[0].tabIndex = 0;
 }
 
-/** role=toolbar roving tabindex: one Tab stop, arrows move. */
-export function roving(bar: HTMLElement, signal: AbortSignal, vertical = false): void {
+/** role=toolbar roving tabindex: one Tab stop; both arrow pairs move (the pad is a 2-column grid). */
+export function roving(bar: HTMLElement, signal: AbortSignal): void {
   const items = (): HTMLElement[] => qa<HTMLElement>(bar, 'button').filter((b) => !b.hidden && b.offsetParent !== null);
   const set = (el: HTMLElement): void => { for (const b of qa<HTMLElement>(bar, 'button')) b.tabIndex = b === el ? 0 : -1; };
   const first = items()[0];
@@ -103,10 +103,9 @@ export function roving(bar: HTMLElement, signal: AbortSignal, vertical = false):
     const list = items();
     const i = list.indexOf(document.activeElement as HTMLElement);
     if (i < 0) return;
-    const fwd = vertical ? 'ArrowDown' : 'ArrowRight', back = vertical ? 'ArrowUp' : 'ArrowLeft';
     let j = -1;
-    if (e.key === fwd) j = (i + 1) % list.length;
-    else if (e.key === back) j = (i - 1 + list.length) % list.length;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') j = (i + 1) % list.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') j = (i - 1 + list.length) % list.length;
     else if (e.key === 'Home') j = 0;
     else if (e.key === 'End') j = list.length - 1;
     if (j < 0) return;
@@ -121,13 +120,19 @@ export const extensionOf = (file: File): string => {
   return m ? m[1]!.toLowerCase() : '';
 };
 
-/** fill() that keeps keyboard focus: the element with the same data-key gets it back (or `prefer`). */
+/** fill() that keeps keyboard focus: `prefer` (a data-key) gets it if it is in `el`, else the element with the focused one's key. */
 export function fillKeep(el: Element, nodes: readonly Node[], prefer?: string | null): void {
   const active = document.activeElement;
-  const key = prefer ?? (active instanceof HTMLElement && el.contains(active) ? active.dataset.key : undefined);
+  const had = active instanceof HTMLElement && el.contains(active) ? active.dataset.key : undefined;
   fill(el, nodes);
-  if (key) el.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  for (const key of [prefer, had]) {
+    const next = key ? el.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) : null;
+    if (next) { next.focus({ preventScroll: true }); return; }
+  }
 }
+
+/** aria-disabled buttons stay focusable (they explain why); their click handlers check this first. */
+export const isOff = (el: Element): boolean => el.getAttribute('aria-disabled') === 'true';
 
 /** Opens the file picker; resolves [] on cancel. The input is removed (and its value cleared) right after. */
 export function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
