@@ -335,7 +335,9 @@ function initPillars() {
       onUpdate: (self) => {
         if (bar) bar.style.transform = `scaleX(${self.progress})`;
         // panels[0] is the intro: it shares "01" with the first pillar, so the HUD reads 01-04 like the pillar numbers
-        if (count) count.textContent = String(Math.min(panels.length - 1, Math.max(1, Math.round(self.progress * (panels.length - 1))))).padStart(2, '0');
+        // written only when it changes: a text write every frame invalidated layout, and the next trigger's scroll read paid for it
+        const n = String(Math.min(panels.length - 1, Math.max(1, Math.round(self.progress * (panels.length - 1))))).padStart(2, '0');
+        if (count && count.textContent !== n) count.textContent = n;
       },
     },
   });
