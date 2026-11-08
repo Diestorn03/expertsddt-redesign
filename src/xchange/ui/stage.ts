@@ -34,9 +34,9 @@ export class Stage {
     this.el = q(root, '.xch__stage');
     this.pop = q(this.el, '[data-display]');
     this.popBtn = q(this.el, '[data-display-btn]');
-    const bar = q(this.el, '.xch__toolbar');
-    roving(bar, signal);
-    for (const b of qa<HTMLButtonElement>(bar, '[data-view]')) b.addEventListener('click', () => this.preset(b.dataset.view as Preset | 'fit'), { signal });
+    roving(q(this.el, '.xch__toolbar'), signal);
+    roving(q(this.el, '.xch__views'), signal);
+    for (const b of qa<HTMLButtonElement>(this.el, '[data-view]')) b.addEventListener('click', () => this.preset(b.dataset.view as Preset | 'fit'), { signal });
     this.popBtn.addEventListener('click', () => this.togglePopover(), { signal });
     this.pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.togglePopover(false); } }, { signal });
     // it covers the adjust pad: focus leaving it (Tab, Shift+Tab) closes it, so nothing focused stays hidden under it
@@ -68,7 +68,20 @@ export class Stage {
     const fs = q<HTMLButtonElement>(this.el, '[data-fs-btn]');
     fs.hidden = !document.fullscreenEnabled;
     fs.addEventListener('click', () => { if (document.fullscreenElement) void document.exitFullscreen(); else void this.el.requestFullscreen?.(); }, { signal });
-    document.addEventListener('fullscreenchange', () => { fs.textContent = document.fullscreenElement ? fs.dataset.on! : fs.dataset.off!; }, { signal });
+    document.addEventListener('fullscreenchange', () => {
+      const on = !!document.fullscreenElement, name = on ? fs.dataset.on! : fs.dataset.off!;
+      fs.setAttribute('aria-label', name);
+      fs.dataset.tip = name;
+      fs.classList.toggle('is-on', on);
+    }, { signal });
+    // icon tooltips (CSS, data-tip): Esc hides the one showing until the pointer or focus leaves it (WCAG 1.4.13)
+    this.el.addEventListener('keydown', (e) => { if (e.key === 'Escape') for (const t of qa(this.el, '[data-tip]:hover, [data-tip]:focus-visible')) t.classList.add('is-tipoff'); }, { signal });
+    const tipBack = (e: Event): void => {
+      const t = (e.target as Element).closest?.('[data-tip]'), to = (e as FocusEvent).relatedTarget as Node | null;
+      if (t && !(to && t.contains(to))) t.classList.remove('is-tipoff');
+    };
+    this.el.addEventListener('pointerout', tipBack, { signal });
+    this.el.addEventListener('focusout', tipBack, { signal });
     const pad = q(this.el, '[data-pad]');
     roving(pad, signal);
     for (const b of qa<HTMLButtonElement>(pad, '[data-pad-op]')) b.addEventListener('click', (e) => app.alignStep.pad(b.dataset.padOp!, Number(b.dataset.padDir), e.shiftKey), { signal });

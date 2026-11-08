@@ -5,7 +5,7 @@
  */
 import type { Arch, Vec3 } from '../core/types';
 
-export type Preset = 'occlusal' | 'front' | 'back' | 'left' | 'right' | 'top';
+export type Preset = 'occlusal' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
 export const PRESET_KEYS: Readonly<Record<string, Preset>> = { '1': 'occlusal', '2': 'front', '3': 'back', '4': 'left', '5': 'right', '6': 'top' };
 
 /** `from`: unit direction from the target to the camera; `up`: camera up. */
@@ -23,5 +23,7 @@ export function presetView(preset: Preset, arch: Arch | null): { from: Vec3; up:
       return { from: [-1, 0, 0], up: [0, 0, 1] };
     case 'top':
       return { from: [0, 0, 1], up: [0, -1, 0] };
+    case 'bottom': // the occlusal side of an upper arch, anterior at the top
+      return { from: [0, 0, -1], up: [0, -1, 0] };
   }
 }

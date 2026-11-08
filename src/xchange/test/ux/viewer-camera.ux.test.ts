@@ -133,3 +133,68 @@ describe('replacements over the scan bodies they coincide with (z-fighting)', ()
     v.dispose();
   });
 });
+
+describe('highlight ring and materials (look: gold parts, color map, grey placeholders)', () => {
+  const setup = (): { v: Viewer; ring: (id: string) => THREE.Mesh[]; part: (id: string) => THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial> } => {
+    const v = new Viewer(fakeElement() as unknown as HTMLElement, fakeElement() as unknown as HTMLElement, { reducedMotion: true, onContextLost() {} });
+    v.setJaw(box(), null);
+    v.setSites([{ id: 'a', label: 'A', matrix: at(-20, -10, 6) }, { id: 'b', label: 'B', matrix: at(18, 12, 6) }]);
+    const part = (id: string) => v.assembly.children.find((o) => o.userData.siteId === id) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial>;
+    return { v, part, ring: (id) => part(id).children as THREE.Mesh[] };
+  };
+
+  it('the selected implant, the guided target and a pulse show the ring; nothing else does', () => {
+    const { v, ring } = setup();
+    expect(v.assembly.children).toHaveLength(2); // the ring hangs under each part, never in the set itself
+    const shown = (id: string): boolean => ring(id).every((r) => r.visible);
+    const hidden = (id: string): boolean => ring(id).every((r) => !r.visible);
+    expect(ring('a')).toHaveLength(9); // stencil mask + 8 shifted copies
+    expect(hidden('a') && hidden('b')).toBe(true);
+    v.setSelected('a');
+    expect(shown('a') && hidden('b')).toBe(true);
+    v.setSelected(null);
+    v.setGuided({ current: 'b', dim: true });
+    expect(hidden('a') && shown('b')).toBe(true);
+    v.setGuided(null);
+    expect(hidden('a') && hidden('b')).toBe(true);
+    v.pulseSites(['a']);
+    expect(shown('a')).toBe(true);
+    v.dispose();
+  });
+
+  it('the ring follows the part geometry and is drawn last (mask before copies)', () => {
+    const { v, ring, part } = setup();
+    const body = makeScanBodyCad();
+    v.setGeometry('a', 'body', body, null);
+    for (const r of ring('a')) expect(r.geometry).toBe(part('a').geometry);
+    const [mask, ...copies] = ring('a');
+    expect(mask!.renderOrder).toBeLessThan(Math.min(...copies.map((c) => c.renderOrder)));
+    expect(mask!.renderOrder).toBeGreaterThan(Math.max(part('a').renderOrder, 2)); // after the see-through jaw (2)
+    v.setGeometry('a', null, null, null);
+    for (const r of ring('a')) expect(r.geometry).toBe(part('a').geometry);
+    v.dispose();
+  });
+
+  it('a position without geometry is an opaque grey placeholder; a part is gold; the map keeps its LUT colors', () => {
+    const { v, part } = setup();
+    const body = makeScanBodyCad();
+    const m = part('a').material;
+    expect(m.opacity).toBe(1);
+    expect('#' + m.color.getHexString()).toBe('#b8b5b0');
+    v.setGeometry('a', 'body', body, null);
+    expect('#' + m.color.getHexString()).toBe('#d8ad77');
+    const gold = m.specular.r;
+    // color map on: vertex colors, white base, less specular, and no warm glow on a highlighted part (it would read as µm)
+    v.setDeviation(new Map([['a', new Float32Array(body.positions.length / 3).fill(80)]]), 'replacement', () => undefined);
+    v.setDisplay({ map: true });
+    v.setSelected('a');
+    expect(m.vertexColors).toBe(true);
+    expect(m.color.getHex()).toBe(0xffffff);
+    expect(m.specular.r).toBeLessThan(gold / 2);
+    expect(m.emissiveIntensity).toBe(0);
+    expect(part('a').children.every((r) => r.visible)).toBe(true);
+    v.setDisplay({ map: false });
+    expect(m.emissiveIntensity).toBeGreaterThan(0);
+    v.dispose();
+  });
+});

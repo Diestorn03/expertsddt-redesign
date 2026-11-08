@@ -699,12 +699,18 @@ only warn (`ex.warn*`; blocking is Fernando's call, §15.3). Export also waits w
   one ghost mesh per captured component (`components[i].mesh`, the same meshes the engine measures, so deviation values
   map 1:1 onto vertices); before a geometry exists, a site glyph (translucent ⌀4 × 8 mm cylinder along +Z with a flat
   facing +X, so axis and index read at a glance).
-- Lights: hemisphere (sky `#ffffff`, ground `#8a99b3`) + a directional headlight parented to the camera, exocad-like:
-  the lit side always faces you.
-- Materials: jaw `MeshStandardMaterial({ color: --xch-jaw, roughness: .78, metalness: 0, side: DoubleSide,
-  vertexColors: <PLY colors on> })`; parts `{ color: --xch-part, roughness: .35, metalness: .15 }`; ghosts `{ color:
-  --xch-capture, transparent: true, opacity: .35, depthWrite: false }`; selected or current guided target: `emissive =
-  --xch-active`, `emissiveIntensity .35`. With the color map on, parts switch to `vertexColors: true`, `color #fff`.
+- Look (dental-CAD conventions, `LOOK` in `viewer/viewer.ts`): the stage is a flat deep indigo-violet (`--xch-stage`,
+  a barely visible radial falloff) in both site themes; Neutral tone mapping; DPR capped at 2 (1.5 on touch screens).
+- Lights: a directional front light parented to the camera, just above-left of the eye (the lit side always faces you,
+  exocad's default), plus a hemisphere fill whose sky follows the screen's up (warm white over a lavender bounce).
+- Materials (Blinn-Phong, `MeshPhongMaterial`): jaw `{ color: --xch-jaw (stone, used when the scan has no colors),
+  side: DoubleSide, vertexColors: <PLY colors on> }` with a faint sheen; parts `--xch-part` warm beige-gold with a soft
+  specular; a position without geometry is an opaque grey placeholder (`--xch-capture`); ghosts `{ color:
+  --xch-capture, opacity: .45, depthWrite: false }`. With the color map on, parts switch to `vertexColors: true`,
+  `color #fff` and nearly no specular, so the LUT colors stay what the legend says.
+- Highlight (selected implant, current guided target, a pulse): a 2.5 px `--xch-active` ring around the part's whole
+  silhouette, drawn last and over everything (the part into the stencil, then 8 copies shifted on screen where the
+  stencil is clear), plus a faint warm glow only when the map is off.
 - Transparency: jaw opacity < 1 → `transparent, depthWrite: false`, drawn after the opaque parts (`renderOrder`).
 - Coincident surfaces: once aligned, a replacement (or captured body) lies on the scan body inside the jaw scan with
   another tessellation, which z-fights in stripes. Parts and ghosts are drawn `DEPTH_BIAS_MM` = 20 µm nearer the
@@ -720,13 +726,16 @@ only warn (`ex.warn*`; blocking is Fernando's call, §15.3). Export also waits w
 
 ### 6.2 Toolbar
 
-`role="toolbar"` with roving tabindex (one Tab stop, arrow keys move), on `--xch-glass` with a 12 px radius at the top
-of the stage.
+Icon buttons (our own 24 px line icons, 1.8 stroke, `currentColor`) on `--xch-glass`, each with an accessible name and a
+tooltip (`data-tip`: after 400 ms of hover, at once on keyboard focus, Esc hides it). Two `role="toolbar"`s with
+roving tabindex (one Tab stop each, arrow keys move):
 
-- Views group: Fit · Occlusal · Front · Back · Left · Right · Top as text buttons, `aria-pressed` on the last preset
-  used; below 1180 px one "View" menu button.
-- Right group: Display (popover, §6.4) · Shortcuts (`?`, opens `#xch-keys`) · Full screen (`stage.requestFullscreen()`,
-  hidden when `document.fullscreenEnabled` is false; label toggles to "Exit full screen").
+- Icon bar, top right, vertical: Display (popover, §6.4, opens to its left) · Shortcuts (`?`, opens `#xch-keys`) · Full
+  screen (`stage.requestFullscreen()`, hidden when `document.fullscreenEnabled` is false; name, tooltip and icon toggle
+  to "Exit full screen").
+- Views dial, bottom right: Fit in the hub; Top, Back, Right, Bottom, Front, Left on a ring (screen up/down and
+  left/right, Front/Back on the depth diagonal); below, the default view button "Occlusal" (tooltip "Default view
+  (occlusal)"). `aria-pressed` on the last preset used; tooltips carry the key. 32 px targets, 44 px on touch.
 - Before the toolbar, a skip link visible on focus, "Skip the 3D view", jumps to the Export section (step 4) or to
   `#help`.
 
@@ -746,6 +755,7 @@ in `viewer/presets.ts`.
 | Left (patient's) | 4 | +X | +Z |
 | Right (patient's) | 5 | −X | +Z |
 | Top | 6 | +Z | −Y |
+| Bottom | — (A2) | −Z | −Y |
 
 Distance = `r / sin(fov/2) × 1.15`; tween per §3.2. After every import the view goes to Occlusal + Fit; after an
 alignment the camera stays and the implant set moves.
@@ -824,8 +834,9 @@ workspace but not in a text field. The context menu is suppressed on the canvas 
 over an implant; only Ctrl/⌘ turns a drag on an implant into a rotation. Gains: camera rotation 0.25°/px and set rotation 0.3°/px, both ×
 speed/3; pan maps pixels at the target depth; wheel step 12 %.
 
-**Adjust pad** (step 4 with a jaw): a vertical glass toolbar on the stage's right edge, 40 px buttons, 4 px gaps,
-groups separated by a hairline, `role="toolbar"` with roving tabindex.
+**Adjust pad** (step 4 with a jaw): a glass toolbar at the stage's top left, three columns of 36 px icon buttons (44 px
+on touch): Rotate one column per axis (tilt, turn, roll), Move as an arrow-key cluster, Flip; groups separated by a
+hairline, `role="toolbar"` with roving tabindex, tooltips as the toolbar.
 
 | Group | Buttons (the accessible name includes the amount) | Step |
 |---|---|---|
@@ -1229,7 +1240,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `s4.noJaw` | No jaw scan: the replacements stay in the capture's coordinates, exactly where the capture put them. | Sin escaneo de la arcada: los reemplazos quedan en las coordenadas de la captura, justo donde la captura los ubicó. |
 | `s4.alignment` | Alignment | Alineación |
 | `s4.manual` | Adjust by hand | Ajuste manual |
-| `s4.manualText` | Drag an implant to move the whole set; hold Ctrl (⌘ on Mac) and drag to rotate it. The panel on the right of the view turns it 30° per click, 5° with Shift. The fit is measured again after every move. | Arrastra un implante para mover todo el conjunto; mantén Ctrl (⌘ en Mac) y arrastra para girarlo. El panel a la derecha del visor lo gira 30° por clic, 5° con Shift. El ajuste se vuelve a medir después de cada movimiento. |
+| `s4.manualText` | Drag an implant to move the whole set; hold Ctrl (⌘ on Mac) and drag to rotate it. The adjust panel at the top left of the view turns it 30° per click, 5° with Shift. The fit is measured again after every move. | Arrastra un implante para mover todo el conjunto; mantén Ctrl (⌘ en Mac) y arrastra para girarlo. El panel de ajuste, arriba a la izquierda del visor, lo gira 30° por clic, 5° con Shift. El ajuste se vuelve a medir después de cada movimiento. |
 | `s4.moveToJaw` | Move to the jaw | Llevar a la arcada |
 | `s4.undo` | Undo | Deshacer |
 | `s4.reset` | Reset to last alignment | Volver a la última alineación |
@@ -1328,7 +1339,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | 2 | Pan · Middle-drag, or Shift + drag · Shift + arrow keys | Desplazar · Arrastrar con el botón central, o Shift + arrastrar · Shift + flechas |
 | 3 | Zoom · Wheel (toward the pointer) · + and − | Acercar o alejar · Rueda (hacia el puntero) · + y − |
 | 4 | Fit everything · Double-click · 0 or Home | Encuadrar todo · Doble clic · 0 o Inicio |
-| 5 | Views · Toolbar · 1 Occlusal, 2 Front, 3 Back, 4 Left, 5 Right, 6 Top | Vistas · Barra de herramientas · 1 Oclusal, 2 Frontal, 3 Posterior, 4 Izquierda, 5 Derecha, 6 Superior |
+| 5 | Views · View buttons, bottom right of the view · 1 Occlusal, 2 Front, 3 Back, 4 Left, 5 Right, 6 Top | Vistas · Botones de vista, abajo a la derecha del visor · 1 Oclusal, 2 Frontal, 3 Posterior, 4 Izquierda, 5 Derecha, 6 Superior |
 | 6 | Rotation center · Middle-click on a surface · — | Centro de giro · Clic central sobre una superficie · — |
 | 7 | Jaw transparency · Ctrl or Shift + middle-click · T | Transparencia del escaneo · Ctrl o Shift + clic central · T |
 | 8 | Color map · Display menu · C | Mapa de color · Menú Visualización · C |

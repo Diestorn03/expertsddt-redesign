@@ -21,7 +21,7 @@ describe('color map', () => {
 });
 
 describe('view presets', () => {
-  const all: Preset[] = ['occlusal', 'front', 'back', 'left', 'right', 'top'];
+  const all: Preset[] = ['occlusal', 'front', 'back', 'left', 'right', 'top', 'bottom'];
   it('up is perpendicular to the view direction', () => {
     for (const p of all) for (const arch of ['upper', 'lower'] as const) {
       const { from, up } = presetView(p, arch);
@@ -31,5 +31,11 @@ describe('view presets', () => {
   it('occlusal flips with the arch', () => {
     expect(presetView('occlusal', 'lower').from[2]).toBe(1);
     expect(presetView('occlusal', 'upper').from[2]).toBe(-1);
+  });
+  it('top and bottom look along the occlusal axis from both sides, whatever the arch', () => {
+    for (const arch of ['upper', 'lower', null] as const) {
+      expect(presetView('top', arch).from).toEqual([0, 0, 1]);
+      expect(presetView('bottom', arch).from).toEqual([0, 0, -1]);
+    }
   });
 });

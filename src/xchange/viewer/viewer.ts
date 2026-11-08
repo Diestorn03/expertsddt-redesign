@@ -37,6 +37,45 @@ export const DEFAULT_DISPLAY: DisplayOptions = { jaw: true, jawColor: true, part
 /** How much nearer the camera replacements and captured bodies are drawn than a coincident scan surface (mm). */
 export const DEPTH_BIAS_MM = 0.02;
 
+/**
+ * The look (UI-DESIGN §6.1): Blinn-Phong surfaces under a front light that turns with the camera (exocad's default) and
+ * a soft hemisphere fill whose sky is the screen's up, Neutral tone mapping so highlights roll off instead of clipping.
+ * Specular is a linear grey; with the color map on it drops so the LUT colors stay what the legend says.
+ */
+export const LOOK = {
+  head: 2.25,
+  fill: 1.25,
+  sky: 0xfff6ee,
+  ground: 0xa29cc8,
+  jaw: { specular: 0.035, shininess: 24 },
+  part: { specular: 0.1, shininess: 42 },
+  mapped: { specular: 0.02, shininess: 30 },
+  capture: { specular: 0.08, shininess: 36 },
+  /** Highlight ring around the selected implant or guided target, CSS px. */
+  ringPx: 2.5,
+} as const;
+
+type Shine = { readonly specular: number; readonly shininess: number };
+const shine = (m: THREE.MeshPhongMaterial, s: Shine): void => { m.specular.setScalar(s.specular); m.shininess = s.shininess; };
+
+// the ring: a highlighted part's full silhouette goes into the stencil, then the same part is drawn 8× shifted by
+// LOOK.ringPx on screen wherever the stencil stays clear. Last in the frame, over everything (it also shows where a
+// hidden implant is), in the same render call: no pass, no render target.
+const RING_VS = `uniform vec2 ringRes;
+uniform vec2 ringDir;
+void main() {
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position.xy += ringDir * 2.0 / ringRes * gl_Position.w;
+}`;
+const RING_FS = `uniform vec3 ringColor;
+void main() {
+  gl_FragColor = vec4(ringColor, 1.0);
+  #include <colorspace_fragment>
+}`;
+
+/** Pixel-ratio ceiling: 2 with a mouse, 1.5 on touch screens (tablets get the lighter path). */
+const dprCap = (): number => Math.min(window.devicePixelRatio || 1, window.matchMedia?.('(pointer: coarse)').matches ? 1.5 : 2);
+
 export interface PartHit {
   siteId: string;
   /** µm at the hit point when the map is on (barycentric). */
@@ -45,7 +84,9 @@ export interface PartHit {
 
 interface Implant {
   site: SiteVisual;
-  mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial>;
+  /** Children of `mesh` sharing its geometry: the stencil mask and the 8 ring copies. */
+  ring: THREE.Mesh[];
   geometryKey: string | null;
   top: THREE.Vector3; // label anchor in the implant frame
   label: HTMLElement;
@@ -68,7 +109,7 @@ function bufferGeometry(mesh: TriMesh, normals: Float32Array | null): THREE.Buff
   return g;
 }
 
-/** Translucent ⌀4 × 8 mm cylinder along +Z with an index tab on +X, before a geometry exists. */
+/** ⌀4 × 8 mm cylinder along +Z with an index tab on +X: an implant position before a geometry exists. */
 function glyphGeometry(): THREE.BufferGeometry {
   const cyl = new THREE.CylinderGeometry(2, 2, 8, 28, 1).rotateX(Math.PI / 2).translate(0, 0, 4);
   const tab = new THREE.BoxGeometry(0.8, 1.6, 3).translate(2.2, 0, 6.5);
@@ -119,10 +160,10 @@ export class Viewer {
   readonly q = new THREE.Quaternion();
   dist = 100;
 
-  private jaw: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | null = null;
+  private jaw: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial> | null = null;
   private jawLinearColors: Float32Array | null = null;
   private readonly implants = new Map<string, Implant>();
-  private readonly ghosts: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[] = [];
+  private readonly ghosts: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial>[] = [];
   private ghostUm: (Float32Array | null)[] = [];
   private readonly shared = new Map<string, THREE.BufferGeometry>();
   private readonly glyph = glyphGeometry();
@@ -130,7 +171,20 @@ export class Viewer {
   private readonly pinGeometry = new THREE.SphereGeometry(1, 16, 12);
   private readonly pinMaterial = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
   private readonly lut = buildLut().linear;
-  private colors = { jaw: '#e3c8bc', part: '#046bd2', capture: '#94a3b8', active: '#f59e0b' };
+  private colors = { jaw: '#d9d1c4', part: '#d8ad77', capture: '#b8b5b0', active: '#f59e0b' };
+  private readonly fill = new THREE.HemisphereLight(LOOK.sky, LOOK.ground, LOOK.fill);
+  private readonly ringRes = { value: new THREE.Vector2(800, 600) };
+  private readonly ringColor = { value: new THREE.Color() };
+  private readonly ringMask = new THREE.MeshBasicMaterial({
+    colorWrite: false, depthTest: false, depthWrite: false, transparent: true,
+    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+  });
+  private readonly ringCopies = Array.from({ length: 8 }, (_, i) => new THREE.ShaderMaterial({
+    uniforms: { ringRes: this.ringRes, ringColor: this.ringColor, ringDir: { value: new THREE.Vector2(Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)).multiplyScalar(LOOK.ringPx) } },
+    vertexShader: RING_VS, fragmentShader: RING_FS,
+    depthTest: false, depthWrite: false, transparent: true,
+    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc,
+  }));
   private selected: string | null = null;
   private guided: { current: string | null; dim: boolean } | null = null;
   private pulse = new Set<string>();
@@ -154,9 +208,10 @@ export class Viewer {
   private onLost: (e: Event) => void;
 
   constructor(readonly stage: HTMLElement, private readonly labels: HTMLElement, private readonly opts: ViewerOptions) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x000000, 0);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.setPixelRatio(dprCap());
     this.canvas = this.renderer.domElement;
     this.canvas.className = 'xch__canvas';
     this.canvas.setAttribute('aria-hidden', 'true');
@@ -164,9 +219,10 @@ export class Viewer {
     this.onLost = (e: Event) => { e.preventDefault(); opts.onContextLost(); };
     this.canvas.addEventListener('webglcontextlost', this.onLost);
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a99b3, 1.25));
-    const head = new THREE.DirectionalLight(0xffffff, 2.1);
-    head.position.set(0.25, 0.35, 1);
+    // the fill's sky follows the screen's up (updateCamera); the head light sits just above-left of the eye
+    this.scene.add(this.fill);
+    const head = new THREE.DirectionalLight(0xffffff, LOOK.head);
+    head.position.set(-0.2, 0.3, 1);
     head.target.position.set(0, 0, -1);
     this.camera.add(head, head.target);
     this.scene.add(this.camera);
@@ -200,7 +256,7 @@ export class Viewer {
     this.interactingUntil = performance.now() + 250;
     clearTimeout(this.restoreTimer);
     this.restoreTimer = window.setTimeout(() => {
-      if (this.lowRes) { this.lowRes = false; this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); this.resize(); }
+      if (this.lowRes) { this.lowRes = false; this.renderer.setPixelRatio(dprCap()); this.resize(); }
     }, 260);
   }
 
@@ -218,6 +274,7 @@ export class Viewer {
     const w = Math.max(1, this.stage.clientWidth), h = Math.max(1, this.stage.clientHeight);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    this.ringRes.value.set(w, h);
     if (render) this.invalidate();
   }
 
@@ -226,6 +283,7 @@ export class Viewer {
     cam.fov = this.display.fovDeg;
     cam.quaternion.copy(this.q);
     cam.position.set(0, 0, this.dist).applyQuaternion(this.q).add(this.target);
+    this.fill.position.set(0, 1, 0).applyQuaternion(this.q);
     const d = cam.position.distanceTo(this.sphere.center), r = Math.max(this.sphere.radius, 1);
     cam.near = Math.max(d - 1.5 * r, d / 1000);
     cam.far = d + 1.5 * r;
@@ -262,8 +320,9 @@ export class Viewer {
   refreshTheme(): void {
     const s = getComputedStyle(this.stage);
     const v = (name: string, fallback: string): string => s.getPropertyValue(name).trim() || fallback;
-    this.colors = { jaw: v('--xch-jaw', '#e3c8bc'), part: v('--xch-part', '#046bd2'), capture: v('--xch-capture', '#94a3b8'), active: v('--xch-active', '#f59e0b') };
+    this.colors = { jaw: v('--xch-jaw', '#d9d1c4'), part: v('--xch-part', '#d8ad77'), capture: v('--xch-capture', '#b8b5b0'), active: v('--xch-active', '#f59e0b') };
     this.pinMaterial.color.set(this.colors.active);
+    this.ringColor.value.set(this.colors.active);
     this.restyle();
   }
 
@@ -274,7 +333,7 @@ export class Viewer {
       const m = this.jaw.material;
       const colored = d.jawColor && !!this.jawLinearColors;
       m.vertexColors = colored;
-      m.color.set(colored ? '#ffffff' : this.colors.jaw);
+      m.color.set(colored ? '#ffffff' : this.colors.jaw); // without scanner colors: stone
       m.opacity = d.jawOpacity;
       m.transparent = d.jawOpacity < 1;
       m.depthWrite = d.jawOpacity >= 1;
@@ -287,11 +346,15 @@ export class Viewer {
       const isGlyph = imp.geometryKey === null;
       const mapped = d.map && !!imp.um && !isGlyph;
       m.vertexColors = mapped;
-      m.color.set(mapped ? '#ffffff' : this.colors.part);
+      // a position without geometry is a grey placeholder (a scanned scan body's grey); a library part is gold
+      m.color.set(mapped ? '#ffffff' : isGlyph ? this.colors.capture : this.colors.part);
+      shine(m, mapped ? LOOK.mapped : isGlyph ? LOOK.capture : LOOK.part);
+      // highlighted: the ring (any color, any view, even behind the jaw); a warm glow only where it cannot be read as a µm color
       const active = imp.site.id === this.selected || imp.site.id === this.guided?.current || this.pulse.has(imp.site.id);
-      m.emissive.set(active ? this.colors.active : '#000000');
-      m.emissiveIntensity = active ? 0.35 : 0;
-      let opacity = isGlyph ? 0.55 : d.partOpacity;
+      m.emissive.set(active && !mapped ? this.colors.active : '#000000');
+      m.emissiveIntensity = active && !mapped ? 0.18 : 0;
+      for (const r of imp.ring) r.visible = active;
+      let opacity = d.partOpacity;
       if (this.guided?.dim && imp.site.id !== this.guided.current) opacity *= 0.4;
       m.opacity = opacity;
       m.transparent = opacity < 1;
@@ -306,7 +369,8 @@ export class Viewer {
       const mapped = d.map && !!this.ghostUm[i];
       m.vertexColors = mapped;
       m.color.set(mapped ? '#ffffff' : this.colors.capture);
-      m.opacity = mapped ? 1 : 0.35;
+      shine(m, mapped ? LOOK.mapped : LOOK.capture);
+      m.opacity = mapped ? 1 : 0.45;
       m.transparent = !mapped;
       m.depthWrite = mapped;
       m.needsUpdate = true;
@@ -336,7 +400,8 @@ export class Viewer {
         this.jawLinearColors = linearSrgbFromBytes(mesh.colors);
         g.setAttribute('color', new THREE.BufferAttribute(this.jawLinearColors, 3));
       }
-      const m = new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0, side: THREE.DoubleSide });
+      const m = new THREE.MeshPhongMaterial({ side: THREE.DoubleSide });
+      shine(m, LOOK.jaw);
       this.jaw = new THREE.Mesh(g, m);
       this.jaw.matrixAutoUpdate = false;
       this.scene.add(this.jaw);
@@ -355,7 +420,7 @@ export class Viewer {
     this.ghosts.length = 0;
     this.ghostUm = [];
     for (const c of components) {
-      const g = new THREE.Mesh(bufferGeometry(c.mesh, c.normals), new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0, side: THREE.DoubleSide }));
+      const g = new THREE.Mesh(bufferGeometry(c.mesh, c.normals), new THREE.MeshPhongMaterial({ side: THREE.DoubleSide }));
       g.matrixAutoUpdate = false;
       g.renderOrder = 1;
       this.assembly.add(g);
@@ -379,16 +444,24 @@ export class Viewer {
         imp.mesh.matrixWorldNeedsUpdate = true;
         continue;
       }
-      const mesh = new THREE.Mesh(this.glyph, new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.15 }));
+      const mesh = new THREE.Mesh(this.glyph, new THREE.MeshPhongMaterial());
       mesh.matrixAutoUpdate = false;
       mesh.matrix.copy(rowMajor(site.matrix));
       mesh.userData.siteId = site.id;
+      const ring = [this.ringMask, ...this.ringCopies].map((m, i) => {
+        const r = new THREE.Mesh(this.glyph, m);
+        r.matrixAutoUpdate = false;
+        r.renderOrder = i ? 11 : 10; // every mask before any copy, after everything else
+        r.visible = false;
+        return r;
+      });
+      mesh.add(...ring);
       this.assembly.add(mesh);
       const label = document.createElement('span');
       label.className = 'xch__tag';
       label.textContent = site.label;
       this.labels.append(label);
-      this.implants.set(site.id, { site, mesh, geometryKey: null, top: new THREE.Vector3(0, 0, 8), label, um: null });
+      this.implants.set(site.id, { site, mesh, ring, geometryKey: null, top: new THREE.Vector3(0, 0, 8), label, um: null });
     }
     this.updateSphere();
     this.restyle();
@@ -434,6 +507,7 @@ export class Viewer {
       imp.geometryKey = null;
       imp.top.set(0, 0, 8);
     }
+    for (const r of imp.ring) r.geometry = imp.mesh.geometry;
     this.pruneShared();
     if (animate && !this.opts.reducedMotion) {
       const s = { v: 0.85 };
@@ -705,15 +779,16 @@ export class Viewer {
 
   /* ---------------- thumbnails ---------------- */
 
-  /** 96×96 PNG of a geometry in a 3/4 view, --xch-part on transparent. */
+  /** 96×96 PNG of a geometry in a 3/4 view, --xch-part on transparent, lit like the stage. */
   thumbnail(mesh: TriMesh, normals: Float32Array | null): string {
     const size = 96;
     const rt = new THREE.WebGLRenderTarget(size, size, { samples: 4 });
     rt.texture.colorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene();
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a99b3, 1.3));
+    scene.add(new THREE.HemisphereLight(LOOK.sky, LOOK.ground, LOOK.fill));
     const g = bufferGeometry(mesh, normals);
-    const mat = new THREE.MeshStandardMaterial({ color: this.colors.part, roughness: 0.35, metalness: 0.15 });
+    const mat = new THREE.MeshPhongMaterial({ color: this.colors.part });
+    shine(mat, LOOK.part);
     scene.add(new THREE.Mesh(g, mat));
     const sph = g.boundingSphere!;
     const cam = new THREE.PerspectiveCamera(20, 1, 0.1, 1000);
@@ -725,7 +800,7 @@ export class Viewer {
     cam.near = d - sph.radius * 1.5;
     cam.far = d + sph.radius * 1.5;
     cam.updateProjectionMatrix();
-    const light = new THREE.DirectionalLight(0xffffff, 2);
+    const light = new THREE.DirectionalLight(0xffffff, LOOK.head);
     light.position.copy(cam.position);
     scene.add(light);
     const prev = this.renderer.getRenderTarget();
@@ -770,6 +845,8 @@ export class Viewer {
     this.glyph.dispose();
     this.pinGeometry.dispose();
     this.pinMaterial.dispose();
+    this.ringMask.dispose();
+    for (const m of this.ringCopies) m.dispose();
     this.scene.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); (m.material as THREE.Material | undefined)?.dispose?.(); });
     this.renderer.dispose();
     this.renderer.forceContextLoss();

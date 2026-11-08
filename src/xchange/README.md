@@ -61,7 +61,7 @@ All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángul
 el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
 solo (Good fit, unos 4 µm) y exporta el ZIP.
 
-**Probado:** 363 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 385 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones

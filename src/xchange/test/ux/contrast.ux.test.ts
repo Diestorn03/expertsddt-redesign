@@ -129,6 +129,26 @@ describe('status chips where they are rendered (always icon + word, but the word
   }
 });
 
+describe('text on the indigo stage and its chrome (the stage is dark in both themes, the chrome keeps the site glass)', () => {
+  const cases: [string, string, string[]][] = [
+    ['empty state text on the stage', '.xch__empty', ['.xch__stage']],
+    ['empty state title on the stage', '.xch__empty .xch__emptytitle', ['.xch__stage']],
+    ['"Loading the 3D view…" on the stage', '.xch__empty .xch__loading', ['.xch__stage']],
+    ['icon tooltips (inverted pill)', '.xch__stage [data-tip]::after', ['.xch__stage [data-tip]::after']],
+    ['adjust pad group captions', '.xch__padcap', ['.xch__pad', '.xch__stage']],
+    ['adjust pad hint', '.xch__padhint', ['.xch__pad', '.xch__stage']],
+    ['"Occlusal" (default view) under the views dial', '.xch__tool', ['.xch__tool.xch__home', '.xch__views', '.xch__stage']],
+    ['color scale legend', '.xch__legend', ['.xch__legend', '.xch__stage']],
+    ['implant labels in the scene', '.xch__tag', ['.xch__tag', '.xch__stage']],
+  ];
+  for (const theme of ['light', 'dark'] as const) {
+    for (const [what, text, grounds] of cases) {
+      const r = pair(theme, text, grounds);
+      it(`${r < AA ? 'BUG: ' : ''}${theme}: ${what} reaches 4.5:1 (computed ${r.toFixed(2)}:1)`, () => expect(r).toBeGreaterThanOrEqual(AA));
+    }
+  }
+});
+
 describe('3D view toolbar (glass over the stage gradient)', () => {
   for (const theme of ['light', 'dark'] as const) {
     const t = tokens(theme);
