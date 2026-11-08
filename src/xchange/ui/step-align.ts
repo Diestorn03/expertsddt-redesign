@@ -59,7 +59,7 @@ export class AlignStep {
   private exportLine = '';
   private resultKey: unknown = null;
   private jawWarnings: HTMLElement[] = [];
-  /** Sample jaw bytes (STL), set by the sample case. */
+  /** Sample jaw bytes (PLY with colors), set by the sample case. */
   sampleJaw: Uint8Array | null = null;
   /** The jaw scan is the user's own file (not the sample's): the leave guard protects it. */
   ownJaw = false;
@@ -140,7 +140,7 @@ export class AlignStep {
     const job = (this.jawJob = new AbortController());
     const busy = app.busy('3', c.s3.reading, () => job.abort());
     try {
-      const [input] = file ? await readFiles([file], LIMITS.jaw.maxBytes) : [{ bytes: bytes!, extension: 'stl' }];
+      const [input] = file ? await readFiles([file], LIMITS.jaw.maxBytes) : [{ bytes: bytes!, extension: 'ply' }];
       const r = await app.jobs.run<JawResult>({ type: 'readJaw', file: input! }, buffersOf([input!]), job.signal);
       busy.set(null, c.s3.preparing);
       await app.align.setJaw(r.mesh, { signal: job.signal });

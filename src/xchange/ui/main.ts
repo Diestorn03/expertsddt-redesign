@@ -133,7 +133,7 @@ async function loadSample(a: App, opener: Element | null): Promise<void> {
   if (a.hasUnsaved() && !(await a.confirm('sample', opener))) return;
   const { makeSample } = await import('./demo');
   const sample = makeSample();
-  a.resetCase('lower');
+  a.resetCase(sample.arch);
   a.go(1);
   try {
     const r = await a.jobs.run<CaptureResult>({ type: 'readCapture', files: [{ bytes: sample.csv, extension: 'csv' }] }, [sample.csv.buffer as ArrayBuffer]);
@@ -144,8 +144,8 @@ async function loadSample(a: App, opener: Element | null): Promise<void> {
   }
   const caseGeometries = new Map(a.s.caseGeometries);
   caseGeometries.set('sample-body', { id: 'sample-body', name: a.c.lib.sampleName, mesh: sample.body, kind: 'sample', group: 'sample' });
-  a.store.set({ arch: 'lower', caseGeometries, exportedSinceChange: false });
-  if (a.viewer) a.viewer.arch = 'lower';
+  a.store.set({ arch: sample.arch, caseGeometries, exportedSinceChange: false });
+  if (a.viewer) a.viewer.arch = sample.arch;
   a.alignStep.sampleJaw = sample.jaw;
   a.say.say(a.c.say.sample);
   a.root.querySelector<HTMLElement>('[data-next="1"]')?.focus({ preventScroll: true });

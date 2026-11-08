@@ -214,13 +214,16 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     const k = e.key;
     if ((k === 'Control' || k === 'Meta') && cb.mode() === 'set') { cb.onCtrl(true); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    let handled = true;
+    // only keys that move the camera themselves take it over from a running tween: a preset key would otherwise stop
+    // the tween it has just started, and a toggle would freeze one mid-way
+    let handled = true, moves = false;
     if (k.startsWith('Arrow')) {
       const sx = k === 'ArrowLeft' ? -1 : k === 'ArrowRight' ? 1 : 0, sy = k === 'ArrowUp' ? -1 : k === 'ArrowDown' ? 1 : 0;
       if (e.shiftKey) { const step = 0.05 * stage.clientHeight; pan(-sx * step, -sy * step); }
       else rotateCamera((sx * 10 * DEG) / gain(), (sy * 10 * DEG) / gain());
-    } else if (k === '+' || k === '=') zoomAt(...center(), 1 / 1.15);
-    else if (k === '-' || k === '_') zoomAt(...center(), 1.15);
+      moves = true;
+    } else if (k === '+' || k === '=') { zoomAt(...center(), 1 / 1.15); moves = true; }
+    else if (k === '-' || k === '_') { zoomAt(...center(), 1.15); moves = true; }
     else if (k === '0' || k === 'Home') cb.onPreset('fit');
     else if (PRESET_KEYS[k]) cb.onPreset(PRESET_KEYS[k]!);
     else if (k === 't' || k === 'T') cb.onToggleJawOpacity();
@@ -233,7 +236,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       else cb.onGuidedMiss?.();
     } else if ((k === 'Backspace' || k === 'Escape') && cb.mode() === 'guided') cb.onGuidedKey(k);
     else handled = false;
-    if (handled) { e.preventDefault(); touchInput(); }
+    if (handled) { e.preventDefault(); if (moves) touchInput(); }
   });
   const center = (): [number, number] => { const r = canvas.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
   on(stage, 'keyup', (e) => { if (e.key === 'Control' || e.key === 'Meta') cb.onCtrl(false); });

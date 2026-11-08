@@ -59,7 +59,7 @@ beforeAll(() => {
   // The sample case through the real pipeline, exactly as ui/main.ts loadSample + step 3 "Use the sample jaw scan".
   const sample = makeSample();
   const capture = readCapture([{ bytes: sample.csv, extension: 'csv' }]);
-  const jaw = readJaw({ bytes: sample.jaw, extension: 'stl' });
+  const jaw = readJaw({ bytes: sample.jaw, extension: 'ply' });
   const geometry: ReplacementGeometry = { id: 'sample-body', name: 'Sample scan body', mesh: sample.body };
   const target = buildIcpTarget(jaw.mesh);
   const auto = multiStartAlign(alignmentParts(capture.sites, () => sample.body, [], 'replacement'), target);
@@ -121,7 +121,7 @@ describe('what you see is what you export (sample case)', () => {
 
     const sites = demo.sites;
     const bundle = buildBundle({
-      arch: 'lower', captureFormat: 'demo', sites, geometryBySite: Object.fromEntries(sites.map((s) => [s.id, demo.geometry])),
+      arch: 'upper', captureFormat: 'demo', sites, geometryBySite: Object.fromEntries(sites.map((s) => [s.id, demo.geometry])),
       assemblyTransform: pose, jaw: { mesh: demo.jaw.mesh, originalBytes: demo.jaw.originalBytes, format: demo.jaw.format },
       alignment: measureManualPose(alignmentParts(sites, () => demo.geometry.mesh, [], 'replacement'), demo.target, pose),
       createdAt: '2026-11-07T12:00:00Z', appVersion: XCHANGE_VERSION,

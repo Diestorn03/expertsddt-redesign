@@ -97,7 +97,7 @@ describe('privacy: files never leave this computer', () => {
 
     const sample = makeSample();
     const capture = runJob({ type: 'readCapture', files: [{ bytes: sample.csv, extension: 'csv' }] }, []) as CaptureResult;
-    const jaw = runJob({ type: 'readJaw', file: { bytes: sample.jaw, extension: 'stl' } }, []) as JawResult;
+    const jaw = runJob({ type: 'readJaw', file: { bytes: sample.jaw, extension: 'ply' } }, []) as JawResult;
     const parts = alignmentParts(capture.sites, () => sample.body, [], 'replacement');
     const answers: AlignResponse[] = [];
     const align = createAlignHandler((m) => void answers.push(m));
@@ -109,13 +109,13 @@ describe('privacy: files never leave this computer', () => {
     expect(answers.filter((a) => a.type === 'error')).toEqual([]);
     const geometry = { id: 'sample-body', name: 'Sample scan body', mesh: sample.body };
     const exported = runJob({ type: 'export', request: {
-      arch: 'lower', captureFormat: 'demo', sites: capture.sites, geometryBySite: Object.fromEntries(capture.sites.map((s) => [s.id, geometry])),
+      arch: sample.arch, captureFormat: 'demo', sites: capture.sites, geometryBySite: Object.fromEntries(capture.sites.map((s) => [s.id, geometry])),
       assemblyTransform: auto.transform, jaw: { mesh: jaw.mesh, originalBytes: jaw.originalBytes, format: jaw.format }, alignment: auto,
       createdAt: '2026-11-07T12:00:00Z', appVersion: XCHANGE_VERSION,
     } }, []) as ExportResult;
     const libraryFile = runJob({ type: 'libraryOut', entries: [{ name: 'Sample scan body', favorite: true, mesh: sample.body }] }, []) as Uint8Array;
     runJob({ type: 'libraryIn', bytes: libraryFile }, []);
-    expect(exported.zipName).toBe('DDT-Xchange_lower_export.zip');
+    expect(exported.zipName).toBe('DDT-Xchange_upper_export.zip');
     expect(used).toEqual([]);
   });
 

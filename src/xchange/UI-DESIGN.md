@@ -706,6 +706,11 @@ only warn (`ex.warn*`; blocking is Fernando's call, §15.3). Export also waits w
   --xch-capture, transparent: true, opacity: .35, depthWrite: false }`; selected or current guided target: `emissive =
   --xch-active`, `emissiveIntensity .35`. With the color map on, parts switch to `vertexColors: true`, `color #fff`.
 - Transparency: jaw opacity < 1 → `transparent, depthWrite: false`, drawn after the opaque parts (`renderOrder`).
+- Coincident surfaces: once aligned, a replacement (or captured body) lies on the scan body inside the jaw scan with
+  another tessellation, which z-fights in stripes. Parts and ghosts are drawn `DEPTH_BIAS_MM` = 20 µm nearer the
+  camera: `polygonOffset`, factor −1 (grazing walls) and units recomputed every frame per mesh from the current
+  near/far, its view depth and distance (24-bit depth), so the bias stays 20 µm at every zoom and field of view. A real
+  deviation above 20 µm still shows the scan through.
 - Labels: `CSS2DRenderer` (three/addons, inside the existing dependency) at each implant's guide point: a pill in
   `--xch-glass` with `--ink` text `.75rem` 600; prefixed "1 ·" in guided mode; `aria-hidden` (the lists carry the same
   information).
@@ -943,20 +948,37 @@ the right (36 px targets). The row's main button has the accessible name "Apply 
   sample once mounted), the workspace header button, and the step 1 empty state.
 - If the case holds work, `#xch-confirm` asks first ("Load the sample case?").
 - Generated in the browser, deterministic, with no network and no patient: `ui/demo.ts` (loaded with `import()`, so it
-  costs nothing until used) calls the synthetic generators already in `test/fixtures` (pure and worker-safe):
-  `makeSyntheticCase({ arch: 'lower', implants: 4, noiseSigmaMm: 0.01, seed: 3 })` and
-  `encodeMicronMapperCSV(frames)`; the jaw bytes are `writeBinarySTL(sample.jaw)`; the replacement geometry is
-  `sample.body` (a scan body with a flat), named "Sample scan body". *ponytail: imports the test generators; move them
-  to `demo/` if test and sample needs ever diverge.*
-- The sample goes through the **real** pipeline (`parsePositions` on the CSV bytes, `parseMesh` on the STL bytes, real
-  alignment, real export): it demonstrates the tool rather than faking it.
+  costs nothing until used) re-exports `makeSample()` from the runtime module `sample/` (the test fixtures stay
+  test-only). The case is an edentulous **upper** arch restored All-on-4 style: Fernando's recorded cases are upper
+  arches, and the palate is what makes a scan read as a mouth at a glance (an edentulous lower arch is a bare
+  horseshoe).
+  - Jaw scan: binary PLY with per-vertex colors, ~280 k triangles of ~0.165 mm, 5.7 MB, in the scanner coordinates of
+    an upper arch (occlusal −Z, anterior −Y, patient's left +X: §6.3). Palate vault with rugae, incisive papilla and
+    raphe; rounded crest with healed-socket dimples, tuberosities, vestibule fold, lip mucosa and frena; fine scan
+    noise and a ragged scan border. Colors: lighter attached gingiva on the crest, pale pink palate, redder mucosa, a
+    dark vestibule fold, a redder soft palate, mottling; grey scan bodies with a darker sulcus where they leave the
+    gingiva.
+  - Implants: MicronMapper markers AXO01–AXO04 from the patient's right to left; two anterior near-straight, two
+    posterior tilted 30° distally. Each carries our own generic scan body (⌀4.8 × 10 mm cylinder, full-height index
+    flat on +X, 0.8 mm chamfer on top: no manufacturer's part), scanned standing in the gingiva (5 µm noise, tissue
+    cuff, closed so the buried part is there to measure).
+  - Capture: a MicronMapper V1.4 CSV of the four implant frames in capture coordinates, 11° and ~16 mm away from the
+    jaw scan's, so the alignment has real work to do.
+  - Replacement geometry (step 2): the same scan body as clean CAD (96 segments, separate vertices at the creases),
+    named "Sample scan body".
+  - Budget: about 115 ms warm and 190–210 ms on the first run in Chrome on the development PC (2026-11).
+- The sample goes through the **real** pipeline (`parsePositions` on the CSV bytes, `parseMesh` on the PLY bytes, real
+  alignment, real export): it demonstrates the tool rather than faking it. `sample/sample.test.ts` pins it: the same
+  bytes every run, 250–600 k triangles, the All-on-4 layout, the jaw's scan bodies detected 4/4 as the offered
+  geometry, auto align "good" at ~4 µm RMS, export with the jaw byte for byte.
 - Walkthrough (the user still clicks Continue, so the flow is learned):
-  1. Step 1 filled: arch Lower, source "MicronMapper CSV · 4 positions" with a "Sample" chip; the header shows the pill
+  1. Step 1 filled: arch Upper, source "MicronMapper CSV · 4 positions" with a "Sample" chip; the header shows the pill
      "Sample case · synthetic data" + `[Exit sample]`. Live: `say.sample`. Focus moves to Continue.
   2. Step 2: "This case only" holds "Sample scan body" with the hint `say.sampleHint`; picking it applies to all and
      auto-advances.
-  3. Step 3: `[Use the sample jaw scan]` next to the normal drop zone → step 4 + auto align → expected "Good fit".
-  4. Step 4: color map, per-implant table, Export → email gate (first time) → `DDT-Xchange_lower_export.zip`.
+  3. Step 3: `[Use the sample jaw scan]` next to the normal drop zone → step 4 + auto align → expected "Good fit"
+     (RMS ~4 µm).
+  4. Step 4: color map, per-implant table, Export → email gate (first time) → `DDT-Xchange_upper_export.zip`.
 - Sample geometries are case-only and never saved to the library. `[Exit sample]` = New case.
 
 ---
@@ -1856,8 +1878,8 @@ needed for v1).
     case-only entries for the sample and positioned assemblies.
 15. Email gate: a required email before the first export only (LibraryDownload recipe, honeypot, privacy link in a new
     tab); the POST `{ source: 'ddt-xchange', email, lang, page }` never blocks the download; localStorage keeps only
-    "sent" (or the pending email until sent). The sample case is generated in the browser from `test/fixtures` and
-    runs through the real pipeline.
+    "sent" (or the pending email until sent). The sample case (an upper All-on-4 arch) is generated in the browser by
+    `sample/` and runs through the real pipeline.
 
 ### 15.2 Site follow-ups outside the tool
 

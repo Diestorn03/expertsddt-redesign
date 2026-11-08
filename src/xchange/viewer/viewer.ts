@@ -34,6 +34,9 @@ export interface DisplayOptions {
 
 export const DEFAULT_DISPLAY: DisplayOptions = { jaw: true, jawColor: true, parts: true, capture: false, labels: true, map: false, jawOpacity: 1, partOpacity: 1, fovDeg: 1, speed: 3 };
 
+/** How much nearer the camera replacements and captured bodies are drawn than a coincident scan surface (mm). */
+export const DEPTH_BIAS_MM = 0.02;
+
 export interface PartHit {
   siteId: string;
   /** µm at the hit point when the map is on (barycentric). */
@@ -204,6 +207,7 @@ export class Viewer {
   private render(): void {
     const t0 = performance.now();
     this.updateCamera();
+    this.biasDepth();
     this.renderer.render(this.scene, this.camera);
     this.placeLabels();
     const ms = performance.now() - t0;
@@ -227,6 +231,30 @@ export class Viewer {
     cam.far = d + 1.5 * r;
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
+  }
+
+  /**
+   * Replacements and captured bodies coincide with the scan bodies inside the jaw scan once aligned (different
+   * tessellations: z-fighting stripes). Each is drawn DEPTH_BIAS_MM nearer the camera, converted per mesh to units of
+   * the 24-bit depth buffer for this frame's near/far, so the bias stays the same in millimetres at every zoom.
+   */
+  private biasDepth(): void {
+    const cam = this.camera, c = new THREE.Vector3();
+    const bias = (mesh: THREE.Mesh, m: THREE.Material): void => {
+      // at the mesh's center: distance d and view depth z. Window depth is far·(z − near) / ((far − near)·z), and b mm
+      // along the view ray change z by b·z/d, so they span b·far·near / ((far − near)·z·d) of the depth range
+      const s = mesh.geometry.boundingSphere;
+      if (s) c.copy(s.center);
+      else c.set(0, 0, 0);
+      c.applyMatrix4(mesh.matrixWorld);
+      const d = Math.max(cam.near, cam.position.distanceTo(c));
+      const z = Math.max(cam.near, -c.applyMatrix4(cam.matrixWorldInverse).z);
+      m.polygonOffset = true;
+      m.polygonOffsetFactor = -1;
+      m.polygonOffsetUnits = -Math.ceil(((DEPTH_BIAS_MM * cam.far * cam.near) / ((cam.far - cam.near) * z * d)) * 2 ** 24);
+    };
+    for (const imp of this.implants.values()) bias(imp.mesh, imp.mesh.material);
+    for (const g of this.ghosts) bias(g, g.material);
   }
 
   /* ---------------- theme ---------------- */
