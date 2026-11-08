@@ -1,0 +1,757 @@
+# DDT Xchange · Viewer polish (clean-room exocad conventions)
+
+Spec for making the 3D viewer of `/ddt-xchange/` look and behave like the dental CAD its users already know, while it
+stays a section of expertsddt.com. Written 2026-11-08 on `ddt-xchange` at b03dd97, after Diego's review: the viewer
+looks nothing like exocad and looks cheap. Spec only: no code changes with this file.
+
+Order of work: **1** the look panel's base commit (z-fight, preset keys) → **2** the winning look merged →
+**3** slice A (navigation) → **4** slice B (tools and picking). Slices change behaviour, never the look.
+
+Contents: 0 Why it looks cheap · 1 Sources · 2 Gap table · 3 Look · 4 Slice A · 5 Slice B · 6 Integration notes
+
+**Terms.** MUST: the slice is not done without it. SHOULD: done if the slice still fits its budget, otherwise it stays
+here as To do. WON'T: decided against, reason given. Status values: `Exists` (in b03dd97) · `Handled (look base)` ·
+`Look` (the winning look decides) · `Slice A` · `Slice B` · `To do` · `Won't`. **< 960 px**: the one-column workspace
+(tablets in portrait, narrow or zoomed desktop windows down to 600 px, UI-DESIGN §4). Under 768 px on touch and under
+600 px on anything the workspace is replaced by the larger-screen card (UI-DESIGN §2.5): no viewer feature runs there.
+
+**Rules for both slices** (from the brief; they override anything below):
+
+- Clean room. Behave and render like a professional dental CAD, but never download, install, open or inspect exocad
+  software or files, and never copy its logo, icons, artwork, UI text or exact screen layout. Icons are our own inline
+  SVG. Key choices below are conventions, documented from public pages (§1).
+- Site identity. Chrome uses the site tokens in both themes (`html[data-theme]`), Poppins, the site radii, the site
+  easing (`--ease-out: cubic-bezier(.16,1,.3,1)`, GSAP `expo.out`) through the `ui/motion.ts` helpers, Lenis kept out
+  with `data-lenis-prevent` and the `scroll-lock` event, mount on `astro:page-load`, full dispose on
+  `astro:before-swap`, `prefers-reduced-motion` respected.
+- No new npm dependency; procedural only (no textures, no HDR files); nothing is fetched; patient files never leave
+  the browser.
+- Every new string in `ui/i18n/en.ts` and `es.ts` (same keys, same `{tokens}`, natural Spanish with the existing terms).
+- WCAG 2.2 AA: names and tooltips on icon buttons, a keyboard path for every pointer action, visible focus, 4.5:1 text,
+  3:1 non-text, in both themes.
+- Tests: existing assertions are never weakened; new logic gets Vitest tests. Behaviour pinned today and kept:
+  one-finger drag only turns the view, a tap places a guided point or selects an implant
+  (`test/ux/controls-touch.ux.test.ts`); T, C and Backspace act once after a viewer restart, a set drag commits the
+  pose on release, pad steps start from the committed pose (`test/adversarial/viewer-export.adversarial.test.ts`);
+  preset up ⟂ direction, Occlusal flips with the arch (`viewer/viewer.test.ts`); EN/ES same keys and tokens
+  (`ui/i18n/i18n.test.ts`); impersonal Spanish around `{name}` (`test/ux/copy.ux.test.ts`); toolbar contrast
+  (`test/ux/contrast.ux.test.ts`). So: new `ControlCallbacks` members are optional (`onX?()`), `pickSurface(x, y,
+  jawOnly)` keeps its signature, and `ControlMode` only grows.
+
+---
+
+## 0. Why it looks cheap (what Diego saw)
+
+Screenshots of the sample case in step 4, light and dark, 2026-11-07:
+
+1. The in-browser sample jaw is a smooth pink tube: `ui/demo.ts` reuses the test fixture generator. It is not a mouth.
+2. Z-fighting: each replacement scan body coincides with the scanned scan body inside the jaw scan and renders as
+   green and pink "pinwheel" stripes.
+3. Basic lighting and materials: matte clay, no specular, no depth; a radial gradient behind it.
+4. The chrome is text buttons ("Fit Occlusal Front Back Left Right Top") and loose arrow glyphs on the pad, not a CAD
+   view widget.
+
+(1), (3) and (4) are the look (§3). (2) and the preset-key bug are fixed in the look panel's base commit (§3.4). The
+behaviour gaps against exocad's conventions are slices A and B.
+
+## 1. Sources
+
+| Id | Source | Used for |
+|---|---|---|
+| HK | exocad wiki, "Hotkeys" (releases from 2025 on), https://wiki.exocad.com/wiki/index.php/Hotkeys | Mouse, keys, numpad views, Home, PageUp/PageDown, Ctrl+R/P/D, Alt, middle-click variants |
+| OV | exocad wiki, "DentalCAD - overview", https://wiki.exocad.com/wiki/index.php/DentalCAD_-_overview | Navigation, touch gestures, view arrows and cube, Show all / Alt |
+| WV | exocad wiki, "Viewing a scene in exocad webview", https://wiki.exocad.com/wiki/index.php/Viewing_a_scene_in_exocad_webview | Group selector top-left, standard-view arrows lower right, Default view |
+| SV | exocad wiki, "Sectional view", https://wiki.exocad.com/wiki/index.php/Sectional_view | Cut plane slider, Invert, Rotate, several planes |
+| CV | exocad wiki, "Using the Cut View feature", https://wiki.exocad.com/wiki/index.php/Using_the_Cut_View_feature | 2D cut window (not adopted) |
+| MT | exocad wiki, "Measurement Tool", https://wiki.exocad.com/wiki/index.php/Measurement_Tool | Distance by start/end clicks, drag to redo, 0.01 mm |
+| AL | exocad wiki, "Adjust Light", https://wiki.exocad.com/wiki/index.php/Adjust_Light | Light from the view direction, moves with the camera; flat shading, wireframe |
+| UI | exocad wiki, "User interface", https://wiki.exocad.com/wiki/index.php/User_interface | Light/Dark theme, background preset colours |
+| AS | App Store listing "exocad webview" 1.6.22 (2026-09-02), https://apps.apple.com/us/app/exocad-webview/id1206866034 | Touch & Hold rotation point, orthographic/perspective, flat/smooth, transparency |
+| F1 | Fernando's screen recordings of 2026-11-05 showing exocad webview 1.6.2 (client folder, contact sheets `work/sheets/v01_01.jpg`, `v01_02.jpg`; frames at 22 s and 40 s of v01) | The visual facts of §3.2. Colours were sampled from a compressed recording: approximate, for direction only |
+| F2 | Fernando's narration in the same recordings (v01, v02) | Rotation must be easy; FOV 1 "like exocad"; transparency and colour toggles; Ctrl + drag to rotate; he liked guided points 1-2-3-4 |
+| B | Viewer bench, 2026-11-07: the real Viewer, parser and BVH on a synthetic 3 M-triangle jaw | §5.0 |
+| Z | Z-fight probe, 2026-11-07 | §3.4 |
+| K | Preset-key probe, 2026-11-07 | §3.4 |
+
+Wiki pages and the store listing were read as documentation (2026-11-07/08). The recordings and contact sheets show
+names in exocad and in file dialogs: none is written anywhere. B, Z and K are scripts outside the repo, in the session
+scratchpad `C:\Users\Diestorn\AppData\Local\Temp\claude\C--Users-Diestorn-Desktop\84cb56f0-6a4f-4b0e-b909-161c4bd844eb\scratchpad\viewer-polish\`
+(`bench.ts` + `run-bench.mjs` + `serve.mjs` + `gen-jaw.mjs` + `jaw-3m.stl`, `zfight.ts` + `run-zfight.mjs`,
+`probe-keys2.mjs`, `shots.mjs`). They import playwright-core read-only from
+`expertsddt-sitefix/tools/qa/node_modules/playwright-core/index.mjs` and drive system Chrome with
+`--use-angle=d3d11 --enable-gpu --ignore-gpu-blocklist`; every timing is reported with its WebGL renderer string.
+
+## 2. Gap table
+
+"Now" is b03dd97. Rows marked "(not exocad)" are rendering or motion gaps with no exocad source.
+
+| # | exocad convention | Source | Now | Decision | Status |
+|---|---|---|---|---|---|
+| G1 | Right-drag rotates about the rotation center (the center of the scene objects by default) | OV, HK | Right-drag, or left-drag on empty space, turns a free trackball about the orbit target | Keep | Exists |
+| G2 | Webview: click and drag rotates the view | WV | Left-drag on empty space or on the jaw turns the view | Keep | Exists |
+| G3 | Both buttons drag = move the view | OV, HK | Left + right drag pans; so do middle-drag and Shift + drag | Keep | Exists |
+| G4 | Cursor keys move (translate) the view | HK, OV | Arrows turn 10°; Shift + arrows pan | Arrows pan; Shift + arrows turn | Slice A · A4 |
+| G5 | PageUp / PageDown rotate horizontally about the pivot | HK | Not handled: the page scrolls | Turn 10° about the screen's vertical axis | Slice A · A4 |
+| G6 | Wheel zooms, centered on the mouse position | OV, HK | Same, 12 % per notch | Keep | Exists |
+| G7 | Middle click centers the view and sets the rotation point | OV, HK | Same, but the pick is a linear raycast: 243–401 ms on a 3 M-triangle jaw | Keep; GPU pick | Slice B · B1 |
+| G8 | Home sets the rotation pivot at the cursor | HK | Home = Fit | Rotation center at the pointer, or at the crosshair from the keyboard | Slice A · A6 |
+| G9 | Numpad views: 1 Front, 2 Bottom, 3 Back, 4 Left, 5 Fit, 6 Right, 8 Top | HK | 0/Home Fit, 1 Occlusal, 2 Front, 3 Back, 4 Left, 5 Right, 6 Top; no Bottom; with motion on the keys never move the camera (bug) | exocad's map on the keypad and the number row; 0 = Default view (occlusal) | Slice A · A2; bug Handled (look base) |
+| G10 | Six view arrows plus a cube that fits (DentalCAD); arrows lower right plus "Default view" (webview) | OV, WV, F1 | Seven text buttons in a top toolbar | View buttons: Default view, Fit, six directions | Look (drawing) + Slice A · A7 |
+| G11 | View arrows follow the scene axes, not anatomy | OV | Presets assume +Z occlusal on the lower arch, −Y anterior (UI-DESIGN P8, open) | Keep; P8 stays open | Exists |
+| G12 | Touch (DentalCAD on Windows): 3 fingers rotate, 2 move or pinch, 1 selects | OV | 1 finger turns, 2 pinch and pan, a tap selects or places, a double tap fits | Keep ours: iPadOS owns three-finger swipes and pinches (undo, redo, copy, paste) | Won't |
+| G13 | Webview app: Touch & Hold sets the rotation point | AS | Nothing | Long-press 500 ms | Slice A · A8 |
+| G14 | Shift + middle click toggles the transparency of the object under the pointer | HK | Ctrl or Shift + middle click toggles the jaw, whatever is under the pointer | Per object (jaw scan, replacements) | Slice A · A9 |
+| G15 | Ctrl + middle click hides the object under the pointer; Ctrl + Shift + middle click shows it again | HK | Nothing | Same | Slice A · A9 |
+| G16 | Hold Alt to show all objects for a moment; "Show all" button | HK, OV | Nothing | S shows what was hidden (Alt reaches the browser menu on Windows) | Slice A · A9 |
+| G17 | No inertia documented | OV, HK | No inertia | Keep none | Exists |
+| G18 | Ctrl+P Sectional View: a slider moves a cut plane in; Invert; Rotate keeps it at its depth while you turn; several planes, one colour each | HK, SV | Nothing | One plane: P (Ctrl+P prints), Position slider, Show the other side, Follow the view (SHOULD) | Slice B · B2 |
+| G19 | Cut View: a 2D section window with its own measuring, set by clicks, follows the cursor, auto-rotation | CV | Nothing | Not adopted | Won't |
+| G20 | Ctrl+R Measurement tool: distance from a start and an end click, drag a point to redo it, 0.01 mm | HK, MT | Nothing | R (Ctrl+R reloads), two clicks, Enter at the crosshair, drag (SHOULD), two decimals | Slice B · B3 |
+| G21 | Angle, thickness, nearest, orthogonal, plane distance, object size | MT | Nothing | Not adopted | Won't |
+| G22 | Ctrl+D Show distances | HK | C toggles the color map (distance to the jaw scan) | D toggles it too (Ctrl+D bookmarks) | Slice B · B4 |
+| G23 | F11 full screen | HK | Full screen button (the stage only) | Keep the button; F11 stays the browser's | Exists |
+| G24 | Ctrl+Z / Ctrl+Y undo and redo | HK | Ctrl/⌘ + Z undoes implant-set moves (20 steps) | Keep; no redo stack | Exists; redo Won't |
+| G25 | Custom views (Ctrl+F1/F2), screenshot (Ctrl+Shift+Q), kiosk and remote-view modes | HK | Nothing | Not adopted (browser keys, out of scope) | Won't |
+| G26 | Light from the view direction that moves with the camera; ambient, diffuse, specular, shine; flat shading; wireframe | AL | Headlight parented to the camera plus a hemisphere light | The headlight stays; values and any flat/wireframe toggle are the look's | Look |
+| G27 | Background preset colours; Light / Dark UI theme | UI | Radial gradient per site theme (`--xch-stage`) | Background tokens per site theme | Look |
+| G28 | Scans shown in their scanner colours (Color/Texture) | F1, WV | PLY colours shown when present ("Jaw color (PLY)" switch) | Keep; the sample jaw must carry colours (L1) | Look |
+| G29 | Library parts warm beige-gold with a soft specular; scanned scan bodies grey | F1 | Parts site blue `#046bd2`, roughness .35; captured bodies slate at 35 % | Jaw, part and capture materials | Look |
+| G30 | Orthographic or perspective; flat or smooth shading; transparency per object | AS, WV | Field of view 1–60°, default 1°; jaw and geometry opacity sliders | Keep 1° (Fernando works at FOV 1) | Exists |
+| G31 | Group selector top-left: show/hide per object, mesh view, transparency slider | WV, OV | Display popover under the Display button | Where it sits is the look's; the behaviour exists | Look |
+| G32 | (Fernando, not exocad) rotate the implant set with Ctrl + drag | F2 | Only when the drag starts on an implant | Anywhere on the canvas in step 4 | Slice A · A5 |
+| G33 | (not exocad) coincident surfaces | Z | Pinwheel stripes where a replacement coincides with a scanned scan body | 20 µm depth bias toward the camera on replacements and captured bodies | Handled (look base) |
+| G34 | (not exocad) view changes | — | .7 s `power3.inOut` | .7 s `expo.out` (= `--ease-out`) | Slice A · A3 |
+
+## 3. Look
+
+### 3.1 How the look is chosen
+
+The look (stage background, jaw/part/capture materials, lights, and how the chrome is drawn: icon bar, view buttons,
+model list, pad) is **being chosen by Diego right now from a three-way look panel**: three variants built on one base
+commit. **The winner is merged into `ddt-xchange` before slice A starts.** Slices A and B then reuse the winner's
+tokens, components and icon style for anything they add (view buttons if the winner has none, Section and Distance
+buttons, the section popover, the distance overlay) and never restyle what the look decided.
+
+The base commit shared by the three variants fixes the z-fight and the preset-key bug (§3.4), and is set to replace
+the tube with a realistic in-browser sample (an edentulous upper arch with palate and scanner colours,
+`src/xchange/sample/`, in progress in this worktree while this spec was written). Whatever ships, L1 below is
+required.
+
+### 3.2 exocad visual facts
+
+| Fact | Source |
+|---|---|
+| Flat background in a deep indigo-violet (≈ `#473b6b` sampled), no gradient, no grid, no floor, no cast shadows | F1 |
+| The background colour is a user preset in DentalCAD (Settings, "+" adds preset colours); the UI theme is Light or Dark | UI |
+| Jaw scans keep their scanner colours (red-pink gingiva, darker reds in the crevices); webview toggles Color/Texture | F1, WV |
+| Scanned scan bodies read grey: their scanned colour | F1 |
+| Library parts (healing caps in the recording) are warm beige-gold (≈ `#d8ad77` sampled), smoothly shaded, with a soft specular highlight | F1 |
+| Scenes are lit from the front (the view direction) by default and the light moves with the camera unless detached; ambient, diffuse, specular and shine are adjustable; flat shading and wireframe are toggles | AL |
+| Orthographic or perspective projection; flat or smooth shading; per-mesh transparency | AS |
+| Webview: group selector (show/hide, mesh view, transparency slider) top-left; standard-view arrows lower right with "Default view"; Settings for language, texture, shading | WV |
+| Webview 1.6.2 adds a dark vertical icon bar on the right edge | F1 |
+| DentalCAD: six view arrows plus a cube that frames the scene; the arrows are not anatomical | OV |
+| Fernando inspects at FOV 1 | F1, F2 |
+
+### 3.3 Acceptance checks every look must pass
+
+| # | Check | How |
+|---|---|---|
+| L1 | The sample jaw reads as a mouth (gingiva, ridge, scanned scan bodies) in its own vertex colours; it is generated in the browser with no request | Screenshots at Default view and Front, light and dark; network log of the sample flow has page assets only; the "Jaw color (PLY)" switch is shown and on |
+| L2 | No z-fighting where a replacement coincides with a scanned scan body | Z probe: cap and wall 100 % replacement pixels at 1° FOV; sample screenshot at Fit and at 4× zoom without stripes |
+| L3 | Jaw, replacements and captured bodies are told apart in both themes; the selected implant and the current guided target stay distinct from the part colour (with gold parts an amber emissive alone disappears: use an outline, a rim or a clearly different hue) | Screenshots; ΔE (OKLab) ≥ .10 between highlighted and plain part pixels |
+| L4 | With the color map on, parts show the LUT colours faithfully (no tinted lights; specular never hides the 0/50/100 µm stops); the legend and readout stay authoritative | Sample at step 4 with the map on, both themes |
+| L5 | The light comes from the view direction: whatever faces the camera is lit, at any orientation | Turn 180° on each axis: no dark front |
+| L6 | Background, materials and chrome come from tokens in `ui/xchange.css` for light and dark (`html[data-theme]`); the canvas stays transparent | `contrast.ux.test.ts` passes with no lowered threshold (selectors follow any renamed class); chrome text ≥ 4.5:1, icons and the focus ring ≥ 3:1 over the glass and the background |
+| L7 | Site identity and clean room: Poppins, site tokens and radii, motion through `ui/motion.ts`, own inline SVG icons; no exocad logo, icon, artwork, UI text or exact layout | Review; `grep` the diff for copied strings |
+| L8 | Performance: the look adds ≤ 1 ms to the 3 M-triangle orbit p95 (GPU-synced); no post-processing, shadow maps, transmission or refraction; an environment map only if procedural (three's `RoomEnvironment` + PMREM, inside `three/addons`) and inside this budget | Bench §5.0, renderer string reported |
+| L9 | A theme switch mid-case restyles stage, materials, labels and chips at once (one MutationObserver), no reload | Toggle the site theme in step 4 |
+| L10 | Dispose: `renderer.info.memory` geometries and textures at 0 after dispose, environment maps and PMREM targets included | UI-DESIGN §3.4 round trips |
+| L11 | Privacy and CSP: nothing fetched (no texture, HDR or font), no new worker, no inline script | Network log; CSP check of UI-DESIGN §14.3 item 8 |
+| L12 | Labels, pins, readout and legend stay readable over the new background in both themes (text ≥ 4.5:1) | Screenshots, contrast of the glass pills |
+| L13 | No stage overlay overlaps another (toolbar or icon bar, view buttons, pad, legend, readout, Ctrl chip, popovers) | `getBoundingClientRect` probe at 1280×800, 960×700 and 768×1024 with touch emulation, EN and ES, pad shown and hidden |
+| L14 | Reduced motion: nothing moves except essential state; `no-preference` shows the motion of UI-DESIGN §3.2 | Playwright `reducedMotion` both ways (the developer PC forces reduce) |
+
+### 3.4 Handled by the look panel's base commit
+
+| Item | Cause (measured 2026-11-07) | Fix shape | Status |
+|---|---|---|---|
+| Z-fight (G33) | A replacement coincides with the scanned scan body of the jaw (different tessellation). Z probe, 24-bit depth, MSAA 4, near/far 641.9/750.3: no offset → 0 % replacement pixels on cap and wall; `polygonOffset(-1, -1)` → 15 %; units −2000 (≈ 13 µm) → 100 %; 20 µm (≈ 3096 units here) → 100 % | Replacements and captured bodies drawn 20 µm nearer the camera: `polygonOffset` factor −1, units converted from 20 µm to 24-bit depth units for each mesh's distance and the frame's near/far, so the bias stays 20 µm at every zoom | Handled (look base) |
+| Preset keys (G9) | With motion on, 1–6, 0 and Home never move the camera: the stage keydown runs `cb.onPreset()` (starts the .7 s tween) and then `touchInput()`, whose `viewer.stopCameraTween()` kills it. Reduced motion hid it (instant). Toolbar buttons work. K probe: `key2MovesCamera` false with `no-preference`, true with `reduce` | Only keys that move the camera themselves (arrows, zoom) stop a running tween; view keys and toggles no longer do | Handled (look base) |
+
+Both are re-checked by the slices: A1 and A2 (keys, both motion settings) and B5 (z-fight with the cut on).
+
+---
+
+## 4. Slice A · navigation, camera, view buttons, transitions, shortcuts, touch
+
+Budget: MUSTs ≈ 48 min, SHOULDs ≈ 22 min. Starts after the look merge. Files: `viewer/presets.ts`,
+`viewer/controls.ts`, `viewer/viewer.ts`, `ui/stage.ts`, `ui/motion.ts`, `ui/i18n/{en,es}.ts`, `ui/xchange.css` (only
+what the look lacks), `src/pages/ddt-xchange.astro` (§6), UI-DESIGN §3.2/§6.2–6.8/§12.3, tests. Items A1–A11 are
+§4.1–§4.11.
+
+| Id | Item | Level | Status | Min |
+|---|---|---|---|---|
+| A1 | Preset keys move the camera with motion on | MUST | Handled (look base) | 0 (re-check) |
+| A2 | exocad view keys, Bottom view, Default view on 0 | MUST | To do | 10 |
+| A3 | Camera transitions with the site easing | MUST | To do | 5 |
+| A4 | Arrows pan; Shift + arrows and PageUp/PageDown turn | MUST | To do | 8 |
+| A5 | Ctrl/⌘ + drag anywhere rotates the implant set | MUST | To do | 4 |
+| A6 | Home sets the rotation center | MUST | To do | 6 |
+| A7 | View buttons (behaviour of the look's widget) and tooltips | MUST | To do | 15 |
+| A8 | Touch & hold sets the rotation center | SHOULD | To do | 8 |
+| A9 | Per-object middle clicks and S | SHOULD | To do | 10 |
+| A10 | Pressed state follows the camera; keyboard views announced | SHOULD | To do | 4 |
+| A11 | Not in this slice | WON'T | Won't | — |
+
+### A1 · Preset keys move the camera with motion on (MUST, Handled (look base))
+
+- **Behaviour.** A view key starts its tween and nothing in the same keydown stops it (§3.4). The rule holds for every
+  key slice A adds: keys that start a camera tween (views, Default view, Fit, Home) never stop it; keys that move the
+  camera themselves (arrows, Shift + arrows, PageUp/PageDown, zoom) stop a running tween first.
+- **Input.** The view keys of A2. **Copy.** None. **Accessibility.** The keyboard path to the views works again.
+- **Reduced motion.** Already worked (instant). **< 960 px.** Same.
+- **Acceptance.** K probe (`probe-keys2.mjs`) after A2: `key2MovesCamera` true with `no-preference` and `reduce`. A
+  Vitest regression test exists after the slice (the base commit's, or one added here): with a controls stand-in, a
+  view key calls `onPreset` and `stopCameraTween` is not called after it.
+
+### A2 · exocad view keys, Bottom view, Default view on 0 (MUST)
+
+- **Behaviour.**
+  - `viewer/presets.ts`: `Preset` gains `'bottom'` = camera from −Z, up −Y (the occlusal view of an upper arch,
+    anterior at the top). The table stays the single place to change if P8 shows other axes.
+  - `PRESET_KEYS` is replaced by one pure function `viewForKey(code: string, key: string): Preset | 'fit' | null`.
+  - The **Default view** is `'occlusal'` (occlusal for the case's arch, framed): the view every import ends on
+    (UI-DESIGN §6.3, unchanged), and exocad webview's "Default view" [WV].
+  - Number row by `code` whatever `key` is (an AZERTY number row types `&é"'…` and still works). Keypad only with
+    NumLock on (`key` is the digit); with NumLock off the keypad sends Home, End, arrows and PageUp/PageDown and acts as
+    those keys (A4, A6).
+  - Symbols win: when `key` is `+`, `-`, `=`, `_` or `?`, `viewForKey` returns null and the key keeps its meaning
+    (Swiss and Czech layouts type `+` on the 1 key).
+  - Same scope as today: only while the stage itself has focus and no Ctrl, ⌘ or Alt is held (Shift allowed).
+- **Input.**
+
+  | Key (`Digit` or `Numpad`) | 1 | 2 | 3 | 4 | 5 | 6 | 8 | 0 | 7, 9 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | View | Front | Bottom | Back | Left | Fit | Right | Top | Default view | nothing |
+
+  Today's 1 Occlusal and 5 Right move to 0 and 6; Home moves to A6.
+- **Copy.** New `view.bottom`, `view.default`; keys rows 4–6 (§4.12). `view.occlusal` is deleted in both languages
+  when nothing uses it any more.
+- **Accessibility.** Each view button has `aria-keyshortcuts` with its digit; the dialog and the help table list the
+  map.
+- **Reduced motion.** The camera jumps (A3).
+- **< 960 px.** Same keys.
+- **Acceptance.** Vitest: `viewForKey` table (Digit and Numpad codes; `Numpad2` with `key: 'ArrowDown'` → null;
+  `Digit1` with `key: '&'` → front; `Digit1` with `key: '+'` → null; 7 and 9 → null); `presetView('bottom')` has up ⟂
+  direction. Browser probe, motion
+  on and reduced: every key 0–6 and 8 moves the camera to its view, on the number row and on the keypad.
+
+### A3 · Camera transitions with the site easing (MUST)
+
+- **Behaviour.**
+  - Every camera tween (a view, Fit, Default view, "Show AXO2 in the view", rotation center) eases with `expo.out`,
+    GSAP's twin of `--ease-out` (no CustomEase), through `transient()` in the viewer's `gsap.context`.
+  - `ui/motion.ts` exports the ease once (`EASE_OUT = 'expo.out'`). The camera tween and the existing alignment pose
+    tween use it.
+  - Durations unchanged: .7 s for views and Fit, .35 s for the rotation center.
+  - Interpolation: orientation slerps and the target lerps. SHOULD: the distance interpolates geometrically
+    (`d0 · (d1 / d0)^t`), so a large zoom change does not rush its near end.
+  - Interrupt, never queue: camera input (drag, wheel, pinch, keys other than view keys) stops the tween where it is,
+    and a new view starts from the in-between pose.
+  - Implant-set pose tweens are unchanged: .9 s `expo.out` after alignment, .35 s `power3.out` for pad steps.
+- **Input.** Every camera action: view keys and buttons, Fit, double-click and double tap, the per-implant table's
+  "Show AXO2 in the view", middle click, Home, touch & hold.
+- **Copy.** None.
+- **Accessibility.** Motion never carries information: the end state is the same with reduced motion, and A10
+  reports the view reached.
+- **Reduced motion.** Instant, no intermediate frame (unchanged).
+- **< 960 px.** Same.
+- **Acceptance.** Vitest with the fake DOM of `test/adversarial/fake-dom.ts` (as viewer-export does): `view('front')`
+  with motion on makes one tween with ease `expo.out` and duration .7; `setOrbitCenter` .35; with `reducedMotion` none.
+  UI-DESIGN §3.2 row "Camera preset, Fit, focus on an implant" reads `.7 s expo.out`.
+
+### A4 · Arrows pan; Shift + arrows and PageUp/PageDown turn (MUST)
+
+- **Behaviour.** Stage focused:
+  - ← → ↑ ↓ pan 5 % of the stage height per press. In exocad the arrow keys translate the camera [HK].
+  - Shift + arrows turn 10° about the screen axes, in the directions today's arrows use.
+  - PageUp and PageDown turn 10° about the screen's vertical axis, exocad's horizontal rotation about the pivot [HK].
+    PageUp turns like Shift + ←.
+  - + and − (also = and _) zoom 15 % at the center, unchanged.
+  - Held keys repeat at the OS rate, one step per repeat.
+  - Every handled key calls `preventDefault()`, so PageUp/PageDown stop scrolling the page while the stage has focus.
+  - These keys move the camera only, never the implant set.
+- **Input.** ← → ↑ ↓ · Shift + arrows · PageUp / PageDown (also keypad 9 and 3 with NumLock off) · + − = _.
+- **Copy.** `view.help`, `gp.keyboard`, `gp.miss`, keys rows 1–2 (§4.12).
+- **Accessibility.** Keys stay scoped to the focused stage (WCAG 2.1.4); the stage description and the guided-points
+  text say the new mapping.
+- **Reduced motion.** Steps are instant (already).
+- **< 960 px.** Same.
+- **Acceptance.** Vitest stand-in (pattern of `controls-touch.ux.test.ts`): ArrowLeft moves `target` and leaves `q`;
+  Shift + ArrowLeft changes `q` and leaves `target`; PageUp changes `q`; PageDown is `defaultPrevented`. Browser:
+  keyboard-only guided points on the sample still place four points (UI-DESIGN §14.3 item 2).
+
+### A5 · Ctrl/⌘ + drag anywhere rotates the implant set (MUST)
+
+- **Behaviour.**
+  - In `set` mode (step 4 with a jaw, not guided, not measuring), Ctrl or ⌘ + left-drag starting anywhere on the
+    canvas rotates the implant set. It is today's Ctrl-drag on an implant: arcball about the set's bounding-box
+    center, 0.3°/px × speed/3, + Shift = dominant axis only.
+  - A plain left-drag on an implant still moves the set; anywhere else it still turns the view.
+  - Store commit, undo and re-measure use the existing `onSetChange` start/move/end path.
+  - In other modes Ctrl-drag turns the view (unchanged).
+  - Why: Fernando rotates with Ctrl + drag [F2]; starting on a 4 mm scan body is fiddly, and the Ctrl chip already
+    promises "Drag to rotate".
+- **Input.** Ctrl/⌘ + left-drag (+ Shift).
+- **Copy.** keys row 14.
+- **Accessibility.** The adjust pad stays the single-pointer and keyboard alternative (WCAG 2.5.7).
+- **Reduced motion.** The drag follows the pointer, nothing animates.
+- **< 960 px.** Mouse only; touch never drags the set (unchanged).
+- **Acceptance.** Vitest stand-in in `set` mode with `pickPart` → null: Ctrl + drag → `onSetChange` start, move, end
+  with a rotated pose; the same drag without Ctrl → no `onSetChange` and `q` changed. The adversarial set-drag test
+  stays green.
+
+### A6 · Home sets the rotation center (MUST)
+
+- **Behaviour.**
+  - Home with the stage focused picks at the pointer if it is over the canvas (last position inside, no
+    `pointerleave` since), otherwise at the stage center, where the guided crosshair is.
+  - A hit calls `setOrbitCenter(point)` (.35 s, A3): the view centers there and turns about it, like a middle click.
+  - A hit from the keyboard announces `say.pivot`; a miss announces `say.pivotMiss`. Mouse paths stay silent.
+  - Home no longer fits: Fit is 5, double-click and the Fit button.
+  - The pick is `pickSurface` (any visible surface; GPU from B1).
+- **Input.** Home (also keypad 7 with NumLock off).
+- **Copy.** `say.pivot`, `say.pivotMiss`, keys row 7.
+- **Accessibility.** This is the keyboard path the "Rotation center" row lacked ("—" today).
+- **Reduced motion.** Instant recentering.
+- **< 960 px.** Same; touch has A8.
+- **Acceptance.** Vitest stand-in: Home with no pointer → `pickSurface` at the canvas center → `setOrbitCenter` with
+  its point; after a `pointermove` inside → at the pointer; a miss → the optional `onPivotMiss`.
+
+### A7 · View buttons and tooltips (MUST)
+
+- **Behaviour.** The look draws the widget, by default at the bottom-right of the stage as in exocad webview [WV];
+  this item owns what it does. If the winning look has none, A7 adds it with the look's glass, radius and icon style.
+  - Buttons: **Default view** (occlusal for the arch, framed), **Fit** (keeps the direction, frames everything
+    visible), and **Top, Bottom, Front, Back, Left, Right**. Each calls `Stage.preset()` and the camera tween (A3),
+    framing everything visible (UI-DESIGN §6.3 distance rule).
+  - It is the only preset UI: the toolbar's text presets go, if the look kept them.
+  - `role="toolbar"` named by `view.views`, one Tab stop with the existing `roving()` helper (arrows move, Home/End
+    jump, Enter/Space activate). The stop sits after the toolbar (or icon bar) and before the pad in UI-DESIGN §11.1
+    item 5.
+  - Each button has an accessible name (the view name), `aria-keyshortcuts` (its digit), and a tooltip `view.tip`
+    ("{name} · {key}"). The tooltip shows after 400 ms of hover and at once on keyboard focus. It hides on pointer
+    leave, blur or Esc (WCAG 1.4.13), is `aria-hidden` (the name already carries the text) and never covers its
+    button.
+  - Icons: our own inline SVG in `currentColor`.
+  - Targets: 32 px with a mouse, 44 px on `(pointer: coarse)`.
+- **Input.** Click or tap; Enter/Space; digits (A2).
+- **Copy.** `view.bottom`, `view.default`, `view.tip`; `view.views` is reused as the group name.
+- **Accessibility.** Icons ≥ 3:1 against the widget background; the site focus ring (3 px, `#6fb6ff` in dark);
+  `forced-colors` border `CanvasText` like `.xch__toolbar`.
+- **Reduced motion.** The camera jumps; the tooltip appears without a fade.
+- **< 960 px.** Stays visible; 44 px on touch; never overlaps the pad, legend, readout or popovers (L13). The look
+  decides whether the pad moves up or the widget moves left.
+- **Acceptance.** Keyboard: Tab reaches the group once, arrows move, Enter on Front frames the front. axe: 0
+  violations, light and dark. L13 overlap probe with step 4 (pad shown).
+
+### A8 · Touch & hold sets the rotation center (SHOULD)
+
+- **Behaviour.**
+  - One finger held within 8 px for 500 ms picks under the finger and calls `setOrbitCenter` (.35 s). This is the
+    exocad webview app's Touch & Hold [AS].
+  - Lifting that finger afterwards does nothing else (no tap, no selection, no guided point); moving it turns the view
+    as usual.
+  - Moving more than 8 px, or a second finger, before 500 ms cancels the hold (rotate or pinch, unchanged).
+  - Feedback: a 32 px ring at the finger (`--xch-active` 2 px stroke with a 1 px `#1e293b` halo, the crosshair
+    recipe). It appears at 150 ms, grows .6 → 1 until 500 ms (CSS transition on `var(--ease-out)`) and goes on lift.
+  - `.xch__stage` gets `-webkit-touch-callout: none` (no iOS callout).
+- **Input.** Touch only.
+- **Copy.** `keys.touch`, keys row 7.
+- **Accessibility.** Home (A6) and the middle click are the alternatives.
+- **Reduced motion.** The ring appears at 500 ms without growing.
+- **< 960 px.** This is the tablet case.
+- **Acceptance.** Vitest stand-in with fake timers: touch down, 520 ms → `setOrbitCenter` once; lift → no `onSelect`
+  or `onGuidedPoint`. The existing 30 ms tap tests stay green.
+
+### A9 · Per-object middle clicks and S (SHOULD)
+
+- **Behaviour.** A middle click (≤ 4 px, ≤ 300 ms) with modifiers acts on what is under the pointer:
+  `viewer.pickObject(x, y)` returns `'jaw'`, `'part'`, `'capture'` or null.
+
+  | Gesture | Jaw scan | Replacement | Captured scan body | Nothing |
+  |---|---|---|---|---|
+  | Shift + middle click | Jaw opacity 100 % ↔ last value, 30 % the first time (= T) | Geometry opacity 100 % ↔ 30 % | Nothing (always see-through) | Nothing |
+  | Ctrl/⌘ + middle click | Hide the jaw scan (Display switch off) | Hide the replacements | Hide the captured scan bodies | Nothing |
+  | Ctrl/⌘ + Shift + middle click, or S | Show again everything hidden this way | same | same | same |
+
+  - Hidden objects are remembered as a set until shown again or a new case starts.
+  - In slice A `pickObject` is three's raycast over the visible meshes. It is linear: about 0.4 s on a 3 M-triangle
+    jaw, acceptable for a rare modified click. B1 makes it a GPU pick.
+  - Today's "Ctrl or Shift + middle click = jaw transparency" changes: Shift keeps it on the jaw; Ctrl now hides.
+  - Alt is not used: it reaches the browser menu on Windows, hence S [HK, OV].
+- **Input.** Shift / Ctrl / Ctrl + Shift + middle click; S.
+- **Copy.** `say.hidden`, `say.shown`, keys rows 8–10.
+- **Accessibility.** The Display popover's switches and sliders are the keyboard path to hide; S shows; T toggles jaw
+  transparency.
+- **Reduced motion.** No animation involved.
+- **< 960 px.** Mouse only; tablets use the Display popover.
+- **Acceptance.** Vitest stand-in with a `pickObject` stub: each table cell calls its callback (the jaw cell still
+  calls `onToggleJawOpacity`; new optional `onToggleOpacity?`, `onHide?`, `onShowAll?`); S → `onShowAll`.
+
+### A10 · Pressed state follows the camera; keyboard views announced (SHOULD)
+
+- **Behaviour.**
+  - Manual camera input (drag, wheel, pinch, arrows, PageUp/PageDown, zoom keys) clears `aria-pressed` on the view
+    buttons through an optional `onCameraInput?()`; a view key or button sets it again.
+  - A view applied from the keyboard (a digit, or Enter/Space on a view button) announces `say.view` politely; mouse
+    clicks do not.
+- **Input.** Any camera input; digits; Enter/Space on a view button.
+- **Copy.** `say.view` ("View: {name}." / "Vista: {name}."), `{name}` = the view's label.
+- **Accessibility.** `aria-pressed` stops claiming a view the camera has left; keyboard and screen-reader users hear
+  which view they reached.
+- **Reduced motion.** Nothing animates. **< 960 px.** Same; touch input also clears the pressed state.
+- **Acceptance.** Vitest stand-in: a drag calls `onCameraInput`; a digit does not.
+
+### A11 · Not in this slice (WON'T)
+
+- Three-finger rotate (G12).
+- Inertia: exocad documents none, placement must be precise, and reduced motion would need a second path.
+- A live axis triad or view cube: exocad has none, and with P8 open its anatomical labels could mislead.
+- Roll by two-finger twist: not in exocad; the free trackball already rolls.
+- Alt, F11, Ctrl+R/P/D, Ctrl+Shift+Q, Ctrl+F1/F2: browser keys (G16, G18, G20, G22, G23, G25). Slice B maps R, P and D
+  without Ctrl.
+- Ctrl/⌘ + Y redo: no redo stack.
+- A true orthographic camera: 1° already reads orthographic, and one camera path is simpler.
+- A pivot that keeps the view still (exocad's Home): ours recenters like the middle click, one camera model (target =
+  pivot).
+
+### 4.12 Slice A copy (EN / ES)
+
+| Key | EN | ES |
+|---|---|---|
+| `view.help` (changed) | Drag or use Shift + the arrow keys to turn the view; the arrow keys or Shift + drag pan; the wheel or + and − zoom. Press ? for every shortcut. | Arrastra o usa Shift + flechas para girar la vista; las flechas o Shift + arrastrar la desplazan; la rueda o + y − acercan. Pulsa ? para ver todos los atajos. |
+| `view.bottom` | Bottom | Inferior |
+| `view.default` | Default view (occlusal) | Vista predeterminada (oclusal) |
+| `view.tip` | {name} · {key} | {name} · {key} |
+| `gp.keyboard` (changed) | Keyboard: turn the view with Shift + arrows, pan with the arrow keys, zoom with + and −, then press Enter to place the point under the crosshair. | Con teclado: gira la vista con Shift + flechas, desplázala con las flechas, acerca con + y −, y pulsa Enter para colocar el punto bajo la mira. |
+| `gp.miss` (changed) | Nothing under the crosshair. Pan (arrow keys) or turn (Shift + arrows) the view until it sits on the top of the scan body, then press Enter. | No hay nada bajo la mira. Desplaza (flechas) o gira (Shift + flechas) la vista hasta que quede sobre la parte superior del scan body y pulsa Enter. |
+| `keys.touch` (changed) | On a tablet: one finger turns the view, two fingers zoom and pan, a double tap fits everything, touch and hold sets the rotation center; move the implant set with the adjust panel. | En una tablet: un dedo gira la vista, dos dedos acercan y desplazan, un doble toque encuadra todo y mantener presionado fija el centro de giro; mueve el conjunto con el panel de ajuste. |
+| `say.pivot` | Rotation center set. | Centro de giro fijado. |
+| `say.pivotMiss` | No surface there. The rotation center did not change. | No hay ninguna superficie ahí. El centro de giro no cambió. |
+| `say.hidden` | {name} hidden. Press S to show everything again. | Se ocultó: {name}. Pulsa S para volver a mostrar todo. |
+| `say.shown` | Everything you hid is visible again. | Lo que ocultaste vuelve a estar visible. |
+| `say.view` | View: {name}. | Vista: {name}. |
+
+`{name}` in `say.hidden` is the Display switch label (`display.jaw`, `display.parts`, `display.capture`); the Spanish
+form is impersonal so no participle has to agree with it (`copy.ux.test.ts`).
+
+`keys.rows` after slice A (action · mouse · keyboard; "—" = none; slice B edits rows 11, 17 and 18 and adds two):
+
+| # | EN | ES |
+|---|---|---|
+| 1 | Turn the view · Right-drag, or left-drag on empty space · Shift + arrow keys, Page Up / Page Down | Girar la vista · Arrastrar con el botón derecho, o con el izquierdo sobre un espacio vacío · Shift + flechas, Re Pág / Av Pág |
+| 2 | Pan · Middle-drag, Shift + drag, or both buttons · Arrow keys | Desplazar · Arrastrar con el botón central, Shift + arrastrar, o con ambos botones · Flechas |
+| 3 | Zoom · Wheel (toward the pointer) · + and − | Acercar o alejar · Rueda (hacia el puntero) · + y − |
+| 4 | Fit everything · Double-click · 5 | Encuadrar todo · Doble clic · 5 |
+| 5 | Views · View buttons · 1 Front, 2 Bottom, 3 Back, 4 Left, 6 Right, 8 Top (number row or keypad, as in Exocad) | Vistas · Botones de vista · 1 Frontal, 2 Inferior, 3 Posterior, 4 Izquierda, 6 Derecha, 8 Superior (fila de números o teclado numérico, como en Exocad) |
+| 6 | Default view (occlusal) · View buttons · 0 | Vista predeterminada (oclusal) · Botones de vista · 0 |
+| 7 | Rotation center · Middle-click on a surface; on a tablet, touch and hold · Home (under the pointer, or at the center) | Centro de giro · Clic central sobre una superficie; en una tablet, mantener presionado · Inicio (bajo el puntero o en el centro) |
+| 8 | Transparency of what is under the pointer · Shift + middle-click · T (jaw scan) | Transparencia de lo que está bajo el puntero · Shift + clic central · T (escaneo) |
+| 9 | Hide what is under the pointer · Ctrl or ⌘ + middle-click · Display menu | Ocultar lo que está bajo el puntero · Ctrl o ⌘ + clic central · Menú Visualización |
+| 10 | Show what you hid · Ctrl or ⌘ + Shift + middle-click · S | Mostrar lo que ocultaste · Ctrl o ⌘ + Shift + clic central · S |
+| 11 | Color map · Display menu · C | Mapa de color · Menú Visualización · C |
+| 12 | Select an implant (step 2) · Click it · Implant list | Seleccionar un implante (paso 2) · Clic sobre él · Lista de implantes |
+| 13 | Move the implant set (step 4) · Drag an implant · Adjust panel | Mover el conjunto (paso 4) · Arrastrar un implante · Panel de ajuste |
+| 14 | Rotate the implant set (step 4) · Ctrl or ⌘ + drag anywhere (Shift: one axis) · Adjust panel (Shift: 5°) | Girar el conjunto (paso 4) · Ctrl o ⌘ + arrastrar en cualquier parte (Shift: un eje) · Panel de ajuste (Shift: 5°) |
+| 15 | Undo a move · — · Ctrl or ⌘ + Z | Deshacer un movimiento · — · Ctrl o ⌘ + Z |
+| 16 | Place a guided point · Click on the jaw · Enter at the crosshair | Colocar un punto guiado · Clic en el escaneo · Enter sobre la mira |
+| 17 | Remove the last point · — · Backspace | Quitar el último punto · — · Retroceso |
+| 18 | Cancel guided points, close menus · — · Esc | Cancelar los puntos guiados, cerrar menús · — · Esc |
+| 19 | Show this list · — · ? | Mostrar esta lista · — · ? |
+
+### 4.13 Slice A tests and acceptance
+
+- **Tests to add** (Vitest, synthetic, no WebGL): `viewForKey` table and the Bottom preset (in `viewer/viewer.test.ts`
+  or a new `viewer/presets.test.ts`); a new `test/ux/controls-keys.ux.test.ts` on the `attachControls` stand-in of
+  `controls-touch.ux.test.ts` covering A1, A4, A5, A6, A8 (fake timers), A9 and A10; the camera tween ease and
+  durations (A3) on the fake DOM.
+- **Commands.** `npm run test:xchange` (354 at b03dd97 plus the look's and these; all green, a timing test that fails
+  while the machine is busy is rerun alone before it counts), `npm run typecheck:xchange`,
+  `MSYS_NO_PATHCONV=1 MSYS2_ENV_CONV_EXCL='*' npm run build`, `MSYS_NO_PATHCONV=1 MSYS2_ENV_CONV_EXCL='*' npm test`.
+- **Browser** (built site on `npx astro preview --host 127.0.0.1 --port <free port>`, stopped afterwards; renderer
+  string reported): the K probe extended to every view key on the number row and keypad, NumLock on and off;
+  arrows, Shift + arrows and PageUp/PageDown; Home at the pointer and at the center; the view buttons by mouse and by
+  keyboard; Ctrl-drag from empty space in step 4; touch & hold with CDP touch events; per-object middle clicks.
+  Motion `no-preference` and `reduce`, light and dark, EN and ES, at 1280×800, 960×700 and 768×1024 (touch).
+- **Still pass.** UI-DESIGN §14.3 items 2 (keyboard-only sample flow), 4 (Lenis), 5 (ten round trips), 10 (axe 0).
+
+---
+
+## 5. Slice B · section plane, distance, GPU picking, 3 M triangles
+
+Budget: MUSTs ≈ 56 min, SHOULDs ≈ 15 min. Starts after slice A. Files: `viewer/viewer.ts`, a new `viewer/pick.ts` and
+`viewer/section.ts` (pure helpers), `viewer/controls.ts`, `ui/stage.ts`, `ui/step-align.ts` (mode exclusivity),
+`ui/i18n/{en,es}.ts`, `ui/xchange.css`, `src/pages/ddt-xchange.astro` (§6), UI-DESIGN §6.4–6.8/§12.3, tests. Items
+B1–B7 are §5.1–§5.7.
+
+### 5.0 Bench baseline (3 M triangles)
+
+Bench B, 2026-11-07: synthetic lower-arch jaw of 2,998,992 triangles and 1,502,788 vertices (143 MiB binary STL, the
+`LIMITS` jaw maximum), 1280×800, DPR 1, renderer ANGLE on Direct3D 11, NVIDIA GTX 1080 Ti, headed and headless.
+
+| Measure | Result |
+|---|---|
+| Parse / display normals (the jobs worker in the app) | 593–851 ms / 183–298 ms |
+| `setJaw` (main thread, once) | 76–120 ms |
+| First frame (upload and shader compile, once) | 174–229 ms, 68.7 MB of GPU buffers |
+| Warm frame | 2.3–3.7 ms |
+| Orbit, GPU-synced per frame | p50 1.4–2.1 ms, p95 2.3–4.8 ms |
+| Orbit, `requestAnimationFrame`, headed | 144.2 fps = the display refresh (p50 6.9 ms, max 8.1 ms) |
+| Orbit with one clipping plane, GPU-synced | p50 1.2–1.4 ms |
+| Click pick, three `Raycaster` (linear) | 243–401 ms: fails the 50 ms task budget |
+| Click pick, GPU (1×1 float target, half-pixel offset) | 0.9–2.9 ms; first 22–26 ms (shader compile); 9/9 within 0.05 mm of the raycast |
+| Engine BVH (`geometry/bvh.ts`) | Build 3.0–3.7 s on the main thread, 57.2 MB kept, ≈ 160 MB transient heap; query ≤ 0.5 ms; 9/9 agree |
+| JS heap after parse | ≈ 218–250 MB, of which 143 MB are the file bytes kept for the export |
+| Headless caveat | The first frame after heavy synchronous work stalls 0.75–1.0 s headless only: measure fps headed |
+
+Decision: **GPU picking** (no dependency, no build step, respects clipping). The BVH is not wired.
+
+| Id | Item | Level | Status | Min |
+|---|---|---|---|---|
+| B1 | GPU picking | MUST | To do | 15 |
+| B2 | Section plane | MUST (Follow the view: SHOULD) | To do | 18 + 4 |
+| B3 | Distance | MUST (dragging a point: SHOULD) | To do | 15 + 6 |
+| B4 | D toggles the color map | SHOULD | To do | 1 |
+| B5 | No z-fight with the cut | MUST | Handled (look base) | 0 (re-check) |
+| B6 | 3 M-triangle budget | MUST | To do | 8 |
+| B7 | Not in this slice | WON'T | Won't | — |
+
+### B1 · GPU picking (MUST)
+
+- **Behaviour.**
+  - `pickSurface(x, y, jawOnly)` keeps its signature (test stand-ins stub it) and changes inside. `pickObject(x, y)`
+    (A9) shares the same pass.
+  - One render into a 1×1 `RGBA32F` target. `camera.setViewOffset(w, h, x − left − 0.5, y − top − 0.5, 1, 1)` frames
+    the clicked CSS pixel; `scene.overrideMaterial` is one `ShaderMaterial` (`DoubleSide`) writing the world
+    position in rgb and an object code in a (1 jaw, 2 captured body, 3 + i implant i, 0 nothing). The code is set per
+    mesh in `onBeforeRender` with `uniformsNeedUpdate = true`, together with that mesh's polygon offset (the base
+    commit's depth bias), so where a replacement coincides with the scan the pick returns what is drawn on top.
+    `readRenderTargetPixels` reads a `Float32Array(4)`.
+  - Pickable: meshes on one pick layer (jaw, implant meshes, captured shells; never pins, labels, cut faces or
+    helpers), visible, with opacity ≥ 0.1. `jawOnly` (guided points) limits the layer mask to the jaw.
+  - The pick material carries the active section planes (B2): a click never lands on a removed part.
+  - Afterwards the render target, camera layers and view offset, override material and clear colour/alpha are exactly
+    as before, and no frame is scheduled.
+  - Warm-up (SHOULD): one pick at the stage center in `requestIdleCallback` (`setTimeout` 200 ms where missing) after
+    a jaw loads, so the 22–26 ms compile never lands on a click.
+  - Without `EXT_color_buffer_float` the three raycast stays as the fallback, with a `ponytail:` comment naming its
+    ceiling (≈ 0.25–0.4 s per click on 3 M triangles) and the upgrade path (RGBA8 depth packing + unproject).
+  - Hover (`pickPart`) stays a three raycast over the small part meshes: it needs the hit triangle for the µm readout.
+  - The target and the material are disposed in `Viewer.dispose()`.
+- **Input (callers).** Middle click, Home, touch & hold, guided points (click, tap, Enter), per-object clicks (A9),
+  distance points (B3).
+- **Copy.** None.
+- **Accessibility, reduced motion, < 960 px.** Nothing visible changes; every pick answers within a frame, taps
+  included.
+- **Acceptance.** Vitest: the pure decode in `viewer/pick.ts`, `(rgba, codes) → { point, object, siteId } | null`
+  (code 0, jaw, implant index → site id, captured body). Bench on the 3 M jaw: click pick p95 ≤ 5 ms and the first
+  click after warm-up ≤ 5 ms; 9/9 points within 0.05 mm of the raycast; with a cut on, a click on the removed half
+  hits what lies behind it; middle click to tween start ≤ 50 ms.
+
+### B2 · Section plane (MUST; Follow the view SHOULD)
+
+- **Behaviour.**
+  - **On and off.** The Section button (in the look's icon bar; `aria-expanded`, `aria-controls="xch-section"`) opens
+    the section popover and turns the cut on if it was off. Closing the popover (Esc, outside click, focus leaving it)
+    keeps the cut, as exocad does [SV]; the button shows it is on (the look's active style). "Remove the cut" turns it
+    off and closes the popover. P (stage focused) toggles the cut without moving focus and announces it.
+  - **Start.** Through the orbit target, perpendicular to the view direction, removing everything between the plane
+    and the camera: you look into the cut. The plane stays fixed in the scene (exocad's default), so turning the view
+    shows the cut from the side.
+  - **Position.** Native range from −r to +r mm (r = the visible bounding-sphere radius when the cut started), step
+    0.1 mm, `aria-valuetext` "{mm} mm". Shift + wheel over the stage moves it 0.5 mm per notch; read `deltaX` when
+    `deltaY` is 0, since Shift turns the wheel horizontal on macOS. With the cut off, Shift + wheel zooms as today.
+  - **Show the other side** (switch): removes the other half (exocad's Invert).
+  - **Follow the view** (switch, SHOULD; exocad's Rotate): while on, the plane stays perpendicular to the view at its
+    depth from the target as you turn.
+  - **Cut faces.** While the cut is on, the inner side of every cut surface draws flat and unlit in `--xch-cut`, so
+    the section reads as a section rather than a lit inside. It is a second draw of the same geometry with
+    `side: BackSide`, a `MeshBasicMaterial` and the same planes, not on the pick layer. Every object uses the same cut
+    colour, so coincident cut faces cannot stripe.
+  - **What is cut.** Jaw scan, replacements and captured scan bodies. Implant labels whose anchor is removed hide
+    (SHOULD). Guided pins and distance points stay.
+  - `renderer.localClippingEnabled = true`; the planes go on the jaw, part, capture, cut-face and pick materials.
+  - A new case, the sample, Exit sample and a viewer restart remove the cut. Display and Section popovers close each
+    other.
+- **Input.** P · Section button · Position slider · Shift + wheel · the two switches · Remove the cut.
+- **Copy.** `section.*`, `say.sectionOn`, `say.sectionOff`, keys row "Section" (§5.8).
+- **Accessibility.** The Display popover pattern: non-modal; Esc closes it and returns focus to the button; focus
+  leaving it closes it; opening it focuses Position. Switches use `role="switch"`. `--xch-cut` (defined per theme with
+  the look) reaches ≥ 3:1 against the stage background (WCAG 1.4.11) and differs from the jaw tone by ΔL ≥ .2
+  (OKLab).
+- **Reduced motion.** Nothing animates; the popover's CSS entrance is cut by `global.css`.
+- **< 960 px.** Anchored like Display, `max-width: calc(100% - 1.4rem)`, `data-lenis-prevent`.
+- **Acceptance.** Vitest: pure `sectionPlane(viewDir, target, offset, flipped)` in `viewer/section.ts` → normal and
+  constant. A point between plane and camera gets a negative signed distance (removed), a point behind it a positive
+  one, and flip swaps them. Bench on the 3 M jaw with the cut and the cut faces on: orbit GPU-synced p95 ≤ 6 ms.
+  Screenshots light and dark, EN and ES: cut on, flipped, seen from the side.
+
+### B3 · Distance (MUST; dragging a point SHOULD)
+
+- **Behaviour.**
+  - **On and off.** The Distance button (`aria-pressed`) or R toggles the tool; `ControlMode` gains `'measure'`.
+  - **Exclusive.** Not available during guided points: R is ignored and the button is `aria-disabled` with
+    `dist.busy`; starting guided points ends the tool. While measuring, the adjust pad hides and set drags pause (a
+    left-drag on an implant turns the view). Any change of the implant-set pose (undo, reset, alignment) ends the
+    tool, so a number never describes a pose you no longer see.
+  - **Points.** A click (≤ 4 px, ≤ 300 ms) or a tap (≤ 500 ms) on any visible surface places point 1; the next one
+    places point 2 and shows the value; a third starts a new pair. Picks use B1 and respect the cut. A click on
+    nothing does nothing.
+  - **Keyboard.** While the stage has keyboard focus the crosshair shows, as in guided mode. Enter places a point at
+    the crosshair (a miss announces `dist.miss`), Backspace removes the last point, Esc or R ends the tool.
+  - **Value.** Straight-line distance between the two surface points in mm with two decimals (exocad states 0.01 mm
+    [MT]), locale separator through `num(lang, d, 2)`: "12.34 mm", "12,34 mm".
+  - **Drawing.** In the labels layer, `aria-hidden`, positioned in `placeLabels()` with transforms and SVG attributes
+    only (no layout reads): two 12 px dots and a 2 px line in `--xch-active` with a 1 px `#1e293b` halo (the
+    crosshair recipe), and the value pill at the midpoint (`--xch-active` fill, `#1e293b` text: 6.8:1 light, 8.8:1
+    dark). All of it hides when a point projects off-screen. A hint chip (`dist.hint`) shows at the top center while
+    fewer than two points exist.
+  - **Drag a point** (SHOULD). Pressing within 12 px of a dot (24 px on touch) drags it along the surfaces: a GPU pick
+    under the pointer once per frame; over nothing the point stays. Release announces the new value. The
+    single-pointer alternative (WCAG 2.5.7) is clicking two new points.
+  - Leaving the tool clears the points.
+- **Input.** R · Distance button · click or tap · Enter · Backspace · Esc · drag a dot.
+- **Copy.** `dist.*`, `say.distFirst`, `say.distance`, `say.distOff`, keys rows (§5.8).
+- **Accessibility.** The stage's `aria-describedby` adds `xch-view-dist` (`dist.keyboard`) while the tool is on, as
+  guided mode adds `xch-view-gp`. Every value is announced politely through `#xch-status`. Cursor `crosshair`; targets
+  ≥ 24 px.
+- **Reduced motion.** Dots and pill appear without a scale-in.
+- **< 960 px.** Taps place points; 24 px touch radius for dots; the hint chip wraps.
+- **Acceptance.** Vitest stand-in in `measure` mode: two clicks call the optional `onMeasurePoint?` with the
+  `pickSurface` results; Enter picks at the canvas center; Backspace and Esc reach the optional `onMeasureKey?`; R is
+  ignored in guided mode. Unit: the displayed value equals the Euclidean distance at two decimals in EN and ES. Browser:
+  on the 3 M jaw each click answers in ≤ 50 ms; zoomed to ≤ 0.02 mm per pixel, two clicks on two scan-body cap centers
+  of the sample read within 0.05 mm of the generator's spacing.
+
+### B4 · D toggles the color map (SHOULD)
+
+- **Behaviour.** D does what C does; exocad's Ctrl+D shows distances [HK], and Ctrl+D itself stays the browser's
+  bookmark.
+- **Input.** D, stage focused, no modifier. **Copy.** keys row 11.
+- **Accessibility.** Same scope rule as C (WCAG 2.1.4). **Reduced motion.** Nothing animates. **< 960 px.** Same.
+- **Acceptance.** Stand-in: `d` → `onToggleMap` once.
+
+### B5 · No z-fight with the cut (MUST, Handled (look base))
+
+- **Behaviour.** The base commit's bias (§3.4) also holds with clipping on and with the cut-face pass.
+- **Input, copy, accessibility, reduced motion, < 960 px.** None: rendering only.
+- **Acceptance.** Z probe after B2: cap and wall 100 % replacement pixels; sample at Fit and at 4× zoom with the cut on
+  and off shows no stripes, light and dark.
+
+### B6 · 3 M-triangle budget (MUST)
+
+| Budget (3 M triangles, 1280×800) | Target | Baseline |
+|---|---|---|
+| Orbit, GPU-synced p95, cut and cut faces on | ≤ 6 ms | 2.3–4.8 ms without the cut |
+| Orbit, rAF headed | ≥ 95 % of the display refresh | 144.2 fps on 144 Hz |
+| Click pick p95 / first click after warm-up | ≤ 5 ms / ≤ 5 ms | 243–401 ms (raycast) |
+| Middle click to tween start | ≤ 50 ms | ≈ 0.4 s |
+| JS heap after 50 picks | ± 5 MB | — |
+| `renderer.info.memory` after dispose | 0 geometries, 0 textures | 0 |
+
+- **Kept as is:** hover never touches the jaw; the adaptive pixel ratio while interacting (UI-DESIGN §3.5); parsing
+  and normals in the jobs worker; the file bytes kept for the byte-identical `jaw.*` export.
+- **Input, copy, accessibility, reduced motion.** None: budgets only. **< 960 px.** The same budgets hold on the
+  smaller one-column canvas.
+- **Acceptance.** The bench re-run against the slice B code, headed and headless, renderer string and the table
+  above filled in the slice's commit message.
+
+### B7 · Not in this slice (WON'T)
+
+- Several planes, a colour per plane, the 2D Cut View window, placing the plane by clicks or by the cursor,
+  auto-rotation, a Reset button (Home/End on the slider reach the ends; Remove the cut + P restarts it) [SV, CV].
+- Angle, thickness, nearest, orthogonal, plane distance, object size, several distances at once, ΔX/ΔY/ΔZ [MT].
+- The engine BVH for picking: 3.0–3.7 s main-thread build, 57 MB kept and ≈ 160 MB transient for what a 1×1 render
+  answers in ≤ 3 ms.
+- `renderer.compileAsync` for the first frame (174–229 ms once, behind the import) and moving `setJaw`'s bounds work
+  to the worker (76–120 ms once).
+- Dropping the kept file bytes: the export copies the jaw byte for byte.
+
+### 5.8 Slice B copy (EN / ES)
+
+| Key | EN | ES |
+|---|---|---|
+| `section.title` | Section | Corte |
+| `section.position` | Position | Posición |
+| `section.value` | {mm} mm | {mm} mm |
+| `section.flip` | Show the other side | Mostrar el otro lado |
+| `section.follow` (SHOULD) | Follow the view | Seguir la vista |
+| `section.off` | Remove the cut | Quitar el corte |
+| `section.hint` | The cut starts facing you; turn the view to see it from the side. Shift + wheel moves it. | El corte empieza de frente a ti; gira la vista para verlo de lado. Shift + rueda lo mueve. |
+| `dist.title` | Distance | Distancia |
+| `dist.button` | Measure a distance | Medir una distancia |
+| `dist.hint` | Click two points on any surface. Drag a point to move it. | Haz clic en dos puntos de cualquier superficie. Arrastra un punto para moverlo. |
+| `dist.keyboard` | Keyboard: bring the crosshair onto a point (arrow keys pan, Shift + arrows turn) and press Enter. Backspace removes the last point; Esc ends. | Con teclado: lleva la mira a un punto (las flechas desplazan, Shift + flechas giran) y pulsa Enter. Retroceso quita el último punto; Esc termina. |
+| `dist.value` | {mm} mm | {mm} mm |
+| `dist.miss` | Nothing under the crosshair. Pan or turn the view until it sits on a surface, then press Enter. | No hay nada bajo la mira. Desplaza o gira la vista hasta que quede sobre una superficie y pulsa Enter. |
+| `dist.busy` | Finish the guided points first. | Termina primero los puntos guiados. |
+| `say.sectionOn` | Section on. | Corte activado. |
+| `say.sectionOff` | Section off. | Corte desactivado. |
+| `say.distFirst` | First point placed. Now the second. | Primer punto colocado. Ahora el segundo. |
+| `say.distance` | Distance: {mm} mm. | Distancia: {mm} mm. |
+| `say.distOff` | Distance tool closed. | Herramienta de distancia cerrada. |
+
+`{mm}` is passed already formatted (`num(lang, value, 2)` or `num(lang, value, 1)` for the slider). `say.measured`
+already exists (fit re-measure), hence `say.distance`. Tooltips reuse `view.tip`: "Section · P", "Measure a distance
+· R"; the buttons carry `aria-keyshortcuts`.
+
+`keys.rows` changes in slice B:
+
+| # | EN | ES |
+|---|---|---|
+| 11 (changed) | Color map · Display menu · C or D | Mapa de color · Menú Visualización · C o D |
+| new, after 11 | Section · Section button · P | Corte · Botón Corte · P |
+| new, after it | Measure a distance · Distance button, then click two points · R, then Enter at the crosshair | Medir una distancia · Botón Distancia y luego clic en dos puntos · R y luego Enter sobre la mira |
+| 17 (changed) | Remove the last point (guided points, distance) · — · Backspace | Quitar el último punto (puntos guiados, distancia) · — · Retroceso |
+| 18 (changed) | Cancel guided points or the distance, close menus · — · Esc | Cancelar los puntos guiados o la distancia, cerrar menús · — · Esc |
+
+### 5.9 Slice B tests and acceptance
+
+- **Tests to add.** `viewer/pick.ts` decode; `viewer/section.ts` plane maths; controls stand-in for P, R, D, Shift +
+  wheel with the cut on (`onSectionNudge?`), measure clicks, Enter, Backspace and Esc; distance formatting EN/ES.
+- **Commands.** As slice A (§4.13).
+- **Browser.** The B6 table filled in from the bench (renderer string); section and distance by mouse, keyboard and
+  touch emulation; light and dark, EN and ES; motion both ways; the L13 overlap probe with both popovers.
+- **Lifecycle.** Ten round trips to /services/ with the cut and a distance on before leaving: one canvas, no WebGL
+  context warning, `renderer.info.memory` at 0 after each dispose (the pick target, pick and cut materials included).
+
+---
+
+## 6. Integration notes (outside `src/xchange`)
+
+- **`src/pages/ddt-xchange.astro`** (the tool's own page): stage markup only.
+  - The view buttons group (`data-view` for `occlusal`, `fit`, `top`, `bottom`, `front`, `back`, `left`, `right`),
+    unless the winning look already has it; the toolbar's text presets and the `presets` array go.
+  - Section and Distance buttons in the look's icon bar.
+  - The section popover (`id="xch-section"`, server-rendered `hidden`, `data-lenis-prevent`).
+  - Inside `.xch__labels`: the distance overlay (one `<svg>` line, two dots, the value pill), the touch & hold ring
+    and the tooltip element.
+  - `<p id="xch-view-dist" class="sr-only">` for the stage description, and `aria-keyshortcuts` attributes.
+  - The shortcuts dialog and the help-section table render `c.keys.rows` and need no markup change.
+- **`src/pages/es/ddt-xchange.astro`**: no change (one-line wrapper).
+- **Not touched by either slice:** `src/scripts/motion.js` (another branch is reworking the site motion),
+  `src/layouts/*`, `src/styles/global.css` and every other global style, other pages, the site dictionaries
+  `src/i18n/*`, `public/.htaccess` (nothing new is fetched, no new worker), `package.json` and the lockfile (three
+  0.187 core only), `scripts/smoke.mjs`.
+- **Lenis.** No new modal, so no new `scroll-lock` use; the section popover carries `data-lenis-prevent`; the stage
+  already has it (wheel zooms, Shift + wheel moves the cut).
+- **Lifecycle.** Every new listener hangs on the mount or viewer `AbortSignal`; the new GPU resources are disposed in
+  `Viewer.dispose()`; mount on `astro:page-load` and dispose on `astro:before-swap` stay as they are (UI-DESIGN §3.4).
+- **Full screen.** New popovers and overlays live inside `.xch__stage`, so they show in full screen.
+- **Docs inside `src/xchange` to update with each slice:** UI-DESIGN §3.2 (camera row), §6.2–6.4, §6.6 (picking),
+  §6.7 (input table), §6.8, §12.3 (copy), §14.4 (tests); README "Estado".
+- **Git.** Merge order: look winner → A → B. Local commits only (no push), staged by explicit path: other agents
+  commit in this worktree. The bench and probe scripts stay out of the repo (Playwright is not a project dependency,
+  UI-DESIGN §15.4).
