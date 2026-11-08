@@ -281,7 +281,7 @@ the same module instance motion.js uses) or CSS transitions, with this vocabular
 | Toast | show / hide | `y: 24 → 0` + opacity | .5 s `expo.out` · .3 s `power2.in` |
 | Dialog | open / close | CSS `@starting-style { opacity:0; transform: translateY(16px) scale(.98) }`, backdrop fades; exit through `transition-behavior: allow-discrete` on `display, overlay` | .5 s `var(--ease-out)` · .3 s |
 | Display popover | open | opacity + `translateY(-8px) → 0` | CSS .35 s `var(--ease-out)` |
-| Camera preset, Fit, focus on an implant | click, key | slerp orientation + lerp target and distance | .7 s `power3.inOut` (≈ the loader curve `cubic-bezier(.76,0,.24,1)`) |
+| Camera preset, Fit, focus on an implant | click, key | slerp orientation, lerp target, geometric distance (`d0 · (d1 / d0)^t`) | .7 s `expo.out` = `EASE_OUT` in `ui/motion.ts` (≈ `--ease-out`); rotation center .35 s |
 | Implant set after an alignment | result applied | slerp + lerp from the old pose to the new one | .9 s `expo.out` (≈ `--ease-out`) |
 | Pad step (30°/5°, flip, move) | click | same pose tween | .35 s `power3.out` |
 | Geometry applied | apply-on-pick | new part meshes `scale .85 → 1`, material opacity 0 → 1 | .5 s `back.out(1.4)` |
@@ -709,17 +709,21 @@ only warn (`ex.warn*`; blocking is Fernando's call, §15.3). Export also waits w
   --xch-capture, opacity: .45, depthWrite: false }`. With the color map on, parts switch to `vertexColors: true`,
   `color #fff` and nearly no specular, so the LUT colors stay what the legend says.
 - Highlight (selected implant, current guided target, a pulse): a 2.5 px `--xch-active` ring around the part's whole
-  silhouette, drawn last and over everything (the part into the stencil, then 8 copies shifted on screen where the
-  stencil is clear), plus a faint warm glow only when the map is off.
+  silhouette, drawn last (the part into the stencil, then 8 copies shifted on screen where the stencil is clear: first
+  depth-tested at full strength where the part shows, then over everything at 40 % where the scan hides it, each ring
+  pixel drawn once), plus a faint warm glow only when the map is off. It never changes the color map's reading.
 - Transparency: jaw opacity < 1 → `transparent, depthWrite: false`, drawn after the opaque parts (`renderOrder`).
 - Coincident surfaces: once aligned, a replacement (or captured body) lies on the scan body inside the jaw scan with
   another tessellation, which z-fights in stripes. Parts and ghosts are drawn `DEPTH_BIAS_MM` = 20 µm nearer the
   camera: `polygonOffset`, factor −1 (grazing walls) and units recomputed every frame per mesh from the current
   near/far, its view depth and distance (24-bit depth), so the bias stays 20 µm at every zoom and field of view. A real
   deviation above 20 µm still shows the scan through.
-- Labels: `CSS2DRenderer` (three/addons, inside the existing dependency) at each implant's guide point: a pill in
-  `--xch-glass` with `--ink` text `.75rem` 600; prefixed "1 ·" in guided mode; `aria-hidden` (the lists carry the same
-  information).
+- Labels: DOM pills in the labels layer, moved with transforms in the render callback (no layout reads): `--xch-glass`
+  with `--ink` text `.75rem` 600, `aria-hidden` (the lists carry the same information). Each sits 6 px outside its
+  part's screen box, past the part's free end when its axis shows on screen, else outward from the middle of the set
+  (`labelSpot` in `viewer.ts`), so it never covers the part or its fit color.
+- Scale bar, bottom center (labels layer): the longest 1, 2 or 5 × 10ⁿ mm under 120 px at the orbit target's depth
+  (`niceScale`), exact for the whole scene at the default 1° field of view; written to the DOM only when it changes.
 - WebGL unavailable at mount: the stage shows `ui.webglUnavailable` and the step panels are disabled (nothing can be
   checked visually). Context lost later: `preventDefault()`, the stage shows "3D view paused" + `[Restart the 3D
   view]`, which disposes the viewer and rebuilds it from the case state (the case survives).
@@ -730,12 +734,15 @@ Icon buttons (our own 24 px line icons, 1.8 stroke, `currentColor`) on `--xch-gl
 tooltip (`data-tip`: after 400 ms of hover, at once on keyboard focus, Esc hides it). Two `role="toolbar"`s with
 roving tabindex (one Tab stop each, arrow keys move):
 
-- Icon bar, top right, vertical: Display (popover, §6.4, opens to its left) · Shortcuts (`?`, opens `#xch-keys`) · Full
-  screen (`stage.requestFullscreen()`, hidden when `document.fullscreenEnabled` is false; name, tooltip and icon toggle
-  to "Exit full screen").
-- Views dial, bottom right: Fit in the hub; Top, Back, Right, Bottom, Front, Left on a ring (screen up/down and
-  left/right, Front/Back on the depth diagonal); below, the default view button "Occlusal" (tooltip "Default view
-  (occlusal)"). `aria-pressed` on the last preset used; tooltips carry the key. 32 px targets, 44 px on touch.
+- Icon bar, top right, vertical: Display (popover, §6.4, opens to its left) · Color map (C) · Jaw transparency (T) |
+  Shortcuts (`?`, opens `#xch-keys`) · Full screen (`stage.requestFullscreen()`, hidden when
+  `document.fullscreenEnabled` is false; name, tooltip and icon toggle to "Exit full screen"). Color map and Jaw
+  transparency are toggles (`aria-pressed`) on the keys' path (`Stage.toggleMap()`, `toggleJawOpacity()`), so the
+  legend follows; `aria-disabled` before a measurement or a jaw scan.
+- Views dial, bottom right: Fit in the hub; Top, Back, Right, Bottom, Front, Left at the ends of three faint view axes
+  (screen up/down and left/right, Front/Back on the depth diagonal); below, the default view button "Occlusal"
+  (tooltip "Initial view (occlusal)"). `aria-pressed` on the last preset used; tooltips carry the key. 32 px discs on a
+  50 px radius, at least 6 px apart; 44 px on a 66 px radius on touch. Discs carry a tint and a hairline.
 - Before the toolbar, a skip link visible on focus, "Skip the 3D view", jumps to the Export section (step 4) or to
   `#help`.
 
@@ -757,8 +764,11 @@ in `viewer/presets.ts`.
 | Top | 6 | +Z | −Y |
 | Bottom | — (A2) | −Z | −Y |
 
-Distance = `r / sin(fov/2) × 1.15`; tween per §3.2. After every import the view goes to Occlusal + Fit; after an
-alignment the camera stays and the implant set moves.
+Framing (Default view, presets, Fit): the bounding box of what is shown (jaw, replacements, captured bodies that are
+visible), every corner checked in camera space, fills `LOOK.frame` = 80 % of the stage on its limiting side, a margin
+left for the chrome in the corners. "Show in the view" (one implant) keeps `r / sin(fov/2) × 1.15` with r ≥ 6 mm.
+Tween per §3.2. After every import the view goes to Occlusal + Fit; after an alignment the camera stays and the
+implant set moves.
 
 ### 6.4 Display popover
 
@@ -772,7 +782,8 @@ to the button).
   0–100 %; Perspective (field of view) 1–60°, default 1° (near-orthographic, exocad-like); Rotation speed 1–5, default
   3 (scales orbit and set-rotation gain).
 - Field of view and rotation speed persist in `localStorage['ddt-xchange:view']` (wrapped in try/catch).
-- Shortcuts: T toggles jaw opacity 100 % ↔ 30 % (also Ctrl/Shift + middle click); C toggles the color map.
+- Shortcuts: T toggles jaw opacity 100 % ↔ 30 % (also Ctrl/Shift + middle click and the icon bar); C toggles the color
+  map (also the icon bar). The legend shows exactly while the map is on and measured, whichever control changed it.
 
 ### 6.5 Color map and legend
 
@@ -781,8 +792,9 @@ to the button).
   and `--xch-map-100` (≥ 100 µm, saturated). Lightness falls from 0 to 100 µm, so the ramp also reads in grayscale and
   with red-green color blindness; exact numbers are always available (hover readout, per-implant table).
 - The map is drawn on the surfaces that were measured (replacements or captured bodies), which are the meshes shown.
-- Legend, bottom-left glass card: title "Distance to the jaw scan", 8 × 180 px gradient bar, ticks 0 · 25 · 50 · 75 ·
-  100+ µm, sub-line "On the replacement geometry" / "On the captured scan bodies". `role="img"` with `legend.aria`.
+- Legend, bottom-left glass card: title "Distance to the jaw scan" with "µm" at its right, 8 × 180 px gradient bar,
+  ticks 0 · 25 · 50 · 75 · 100+ each at its value on the bar (the ends align outward), sub-line "On the replacement
+  geometry" / "On the captured scan bodies". `role="img"` with `legend.aria`.
 
 ### 6.6 Hover readout, picking and the guided flow in the stage
 

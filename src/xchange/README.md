@@ -54,6 +54,9 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
   `PUBLIC_N8N_FORM_WEBHOOK`; nunca bloquea la descarga).
 - Visor bajo demanda (60 fps, pausa fuera de pantalla), tema claro/oscuro en vivo, movimiento reducido respetado,
   todo liberado al salir de la página (workers, WebGL, URLs blob, IndexedDB).
+- Aspecto del visor: el look A "Fiel a exocad" (fondo índigo, encía con los colores del escáner, piezas beige-dorado,
+  aro de selección), con barra de iconos, dial de vistas, barra de escala y leyenda con las marcas en su valor
+  (`VIEWER-POLISH.md` §3.5).
 
 **Cómo probar la demo:** `npm run build` y `npx astro preview`, abrir `/ddt-xchange/` y pulsar "Try a sample case"
 (o "Probar un caso de ejemplo"). Se genera en el navegador un caso sintético (`sample/`: arcada superior desdentada
@@ -61,7 +64,7 @@ All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángul
 el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
 solo (Good fit, unos 4 µm) y exporta el ZIP.
 
-**Probado:** 385 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 403 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones

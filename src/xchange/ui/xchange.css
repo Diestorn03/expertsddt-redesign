@@ -16,6 +16,9 @@
   --xch-part: #d8ad77; /* library parts: warm beige-gold */
   --xch-capture: #b8b5b0; /* scanned scan bodies: grey */
   --xch-active: #f59e0b;
+  /* section cut faces (slice B): the stage is dark in both themes, so one blue serves both: 3:1 on every stage stop and
+     an OKLab L .2 under the stone jaw (contrast.ux.test.ts) */
+  --xch-cut: #3d9ad4;
   --xch-ok: #166534;
   --xch-info: var(--blue-dark); /* 4.5:1 on its tint over --mist */
   /* small secondary text: --muted is 4.34:1 on --mist in light; dark keeps --muted (passes) */
@@ -252,7 +255,7 @@
 .xch__stagewrap { position: sticky; top: calc(var(--nav-h) + 1rem); display: grid; }
 .xch__skiplink { position: absolute; left: 1rem; top: -3rem; z-index: 6; padding: .5rem .9rem; border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 600; font-size: .85rem; box-shadow: 0 10px 30px -12px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
 .xch__skiplink:focus { top: 4rem; opacity: 1; pointer-events: auto; }
-.xch__stage { --xch-btn: 40px; --dial-b: 32px; --dial-r: 44px; position: relative; height: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); border-radius: calc(var(--radius) - 6px); overflow: hidden; background: var(--xch-stage); touch-action: none; user-select: none; -webkit-user-select: none; outline: none; isolation: isolate; transition: background .3s; }
+.xch__stage { --xch-btn: 40px; --dial-b: 32px; --dial-r: 50px; position: relative; height: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); border-radius: calc(var(--radius) - 6px); overflow: hidden; background: var(--xch-stage); touch-action: none; user-select: none; -webkit-user-select: none; outline: none; isolation: isolate; transition: background .3s; }
 /* on the indigo stage in both themes: the light focus blue (5:1 there) */
 .xch__stage:focus-visible { outline: 3px solid #8fc1ff; outline-offset: -3px; }
 .xch__canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
@@ -274,24 +277,31 @@
 .xch__stage .xch__tool:focus-visible { outline-offset: 1px; } /* the ring stays on the glass, off the indigo */
 .xch__tool[aria-pressed="true"], .xch__tool[aria-expanded="true"] { background: rgba(4,107,210,.14); color: var(--blue-dark); }
 [data-theme="dark"] .xch__tool:hover, [data-theme="dark"] .xch__tool[aria-pressed="true"], [data-theme="dark"] .xch__tool[aria-expanded="true"] { color: #8fc1ff; background: rgba(111,182,255,.14); }
+/* the map and transparency toggles before a measurement or a jaw: shown (their tooltip says what they are), inert */
+.xch__tool[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.xch__tool[aria-disabled="true"]:is(:hover, :active) { background: transparent; color: var(--ink); transform: none; }
+.xch__sep { height: 1px; margin: 3px 8px; background: var(--xch-glass-line); }
+/* one icon voice: 20 px, 1.8 stroke on the 24 grid, solid lines only (dashes blur into dots at 1x) */
 .xch__ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-.xch__ico-dash { stroke-dasharray: 1.6 2.6; opacity: .6; }
+.xch__ico-faint { opacity: .45; }
 .xch__fs-off, .is-on > .xch__fs-on { display: none; }
 .is-on > .xch__fs-off { display: block; }
-/* views dial: Fit in the hub, the six directions on a ring (up/down, left/right, the depth diagonal), Occlusal below;
-   --dial-r keeps neighbours apart: 2r·sin 22.5° ≥ b + 2 */
+/* views dial: Fit in the hub, the six directions at the ends of three view axes (up/down, left/right, the depth
+   diagonal), Occlusal below. --dial-r keeps neighbours at least 6 px apart: 2r·sin 22.5° ≥ b + 6 */
 .xch__views { right: .7rem; bottom: .7rem; display: grid; justify-items: center; gap: 6px; padding: 6px; border-radius: 20px; }
 .xch__dial { position: relative; width: calc(2 * var(--dial-r) + var(--dial-b) + 4px); aspect-ratio: 1; }
-.xch__dial::before { content: ''; position: absolute; inset: calc(var(--dial-b) / 2 + 2px); border-radius: 50%; border: 2px solid color-mix(in srgb, var(--ink) 12%, transparent); }
+.xch__axes { position: absolute; left: 50%; top: 50%; width: calc(2 * var(--dial-r)); height: calc(2 * var(--dial-r)); translate: -50% -50%; overflow: visible; fill: none; stroke: color-mix(in srgb, var(--ink) 22%, transparent); pointer-events: none; }
+.xch__axes path { stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .xch__dir { --xch-btn: var(--dial-b); position: absolute; left: calc(50% - var(--dial-b) / 2 + var(--x, 0px)); top: calc(50% - var(--dial-b) / 2 + var(--y, 0px)); border-radius: 50%; }
-.xch__dir:not(:hover, [aria-pressed="true"]) { background: var(--xch-glass); } /* knocks the ring out behind the arrows */
+/* discs: a tint and a hairline so they read on the glass in both themes (and hide the axes behind them) */
+.xch__dir:not(:hover, [aria-pressed="true"]) { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 20%, transparent); }
 .xch__dir--top { --y: calc(-1 * var(--dial-r)); }
 .xch__dir--bottom { --y: var(--dial-r); }
 .xch__dir--left { --x: calc(-1 * var(--dial-r)); }
 .xch__dir--right { --x: var(--dial-r); }
 .xch__dir--back { --x: calc(.7071 * var(--dial-r)); --y: calc(-.7071 * var(--dial-r)); }
 .xch__dir--front { --x: calc(-.7071 * var(--dial-r)); --y: calc(.7071 * var(--dial-r)); }
-.xch__dir--fit:not([aria-pressed="true"]) { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.xch__dir--fit:not(:hover, [aria-pressed="true"]) { background: color-mix(in srgb, var(--ink) 13%, var(--surface)); }
 .xch__tool.xch__home { width: 100%; height: var(--dial-b); grid-auto-flow: column; justify-content: center; gap: .4rem; padding: 0 .8rem; border-radius: 999px; font-size: .78rem; font-weight: 600; background: color-mix(in srgb, var(--ink) 7%, transparent); }
 .xch__home .xch__ico { width: 18px; height: 18px; }
 /* icon tooltips: after 400 ms of hover, at once on keyboard focus, never over their own button; Esc hides (stage.ts) */
@@ -315,7 +325,6 @@
 .xch__padgroup:last-of-type { border-bottom: 0; }
 .xch__padgroup[data-g="rotate"] { grid-auto-flow: column; grid-template-rows: auto repeat(2, var(--xch-btn)); }
 .xch__padgroup[data-g="flip"] { grid-template-columns: repeat(2, var(--xch-btn)); justify-content: center; }
-.xch__pad .xch__ico { width: 22px; height: 22px; }
 .xch__padgroup [data-pad-key="up"] { grid-area: 2 / 2; }
 .xch__padgroup [data-pad-key="left"] { grid-area: 3 / 1; }
 .xch__padgroup [data-pad-key="down"] { grid-area: 3 / 2; }
@@ -323,10 +332,23 @@
 .xch__padcap { grid-column: 1 / -1; grid-row: 1; padding: 2px 0 1px; font-size: .62rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--slate); text-align: center; }
 .xch__padhint { font-size: .68rem; color: var(--slate); max-width: calc(3 * var(--xch-btn) + 4px); line-height: 1.35; text-align: center; }
 .xch__legend { position: absolute; left: .7rem; bottom: .7rem; z-index: 3; padding: .6rem .8rem; border-radius: 14px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: var(--xch-float); display: grid; gap: .3rem; font-size: .72rem; color: var(--slate); }
-.xch__legendtitle { font-weight: 600; color: var(--ink); }
+.xch__legendtitle { display: flex; justify-content: space-between; gap: 1rem; font-weight: 600; color: var(--ink); }
+.xch__legendtitle span { font-weight: 500; color: var(--slate); }
 .xch__ramp { width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg in oklab, var(--xch-map-0), var(--xch-map-50), var(--xch-map-100)); }
-.xch__ticks { display: flex; justify-content: space-between; width: 180px; font-variant-numeric: tabular-nums; }
-.xch__readout { position: absolute; left: 50%; bottom: .9rem; transform: translateX(-50%); z-index: 3; padding: .35rem .8rem; border-radius: 999px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: var(--xch-float); color: var(--ink); font-size: .8rem; font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none; }
+/* every tick at its value on the ramp (the LUT is linear in µm), not spread by label width; the ends align outward */
+.xch__ticks { position: relative; width: 180px; height: 1.15rem; font-variant-numeric: tabular-nums; }
+.xch__ticks span { position: absolute; top: 5px; left: 50%; translate: -50% 0; white-space: nowrap; line-height: 1.2; }
+.xch__ticks span::before { content: ''; position: absolute; left: 50%; top: -6px; width: 1px; height: 4px; background: currentColor; }
+.xch__ticks span:nth-child(1) { left: 0; translate: none; }
+.xch__ticks span:nth-child(1)::before { left: 0; }
+.xch__ticks span:nth-child(2) { left: 25%; }
+.xch__ticks span:nth-child(4) { left: 75%; }
+.xch__ticks span:nth-child(5) { left: auto; right: 0; translate: none; }
+.xch__ticks span:nth-child(5)::before { left: auto; right: 0; }
+/* scale bar at the orbit target's depth (viewer.ts sets --w and the text); the readout sits above it */
+.xch__scale { position: absolute; left: 50%; bottom: .7rem; translate: -50% 0; display: grid; justify-items: center; gap: 3px; padding: .3rem .6rem .45rem; border-radius: 10px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: var(--xch-float); color: var(--ink); font-size: .7rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.xch__scale::after { content: ''; width: var(--w, 0); height: 5px; border: 1.5px solid currentColor; border-top: 0; }
+.xch__readout { position: absolute; left: 50%; bottom: 3.3rem; transform: translateX(-50%); z-index: 3; padding: .35rem .8rem; border-radius: 999px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: var(--xch-float); color: var(--ink); font-size: .8rem; font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none; }
 .xch__crosshair { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px; z-index: 3; pointer-events: none; display: none; }
 .xch__crosshair::before, .xch__crosshair::after { content: ''; position: absolute; background: var(--xch-active); box-shadow: 0 0 0 1px #1e293b; }
 .xch__crosshair::before { left: 11px; top: 0; width: 2px; height: 24px; }
@@ -399,7 +421,8 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
 /* touch: 44 px targets on the stage chrome */
 @media (pointer: coarse) {
   .xch__stage, .xch__pad { --xch-btn: 44px; }
-  .xch__stage { --dial-b: 44px; --dial-r: 60px; } /* ring spacing: 2r·sin 22.5° ≥ b + 2 */
+  .xch__stage { --dial-b: 44px; --dial-r: 66px; } /* 2r·sin 22.5° ≥ b + 6 */
+  .xch__padhint { display: none; } /* about clicks and Shift: nothing to do with a finger */
 }
 @media (max-width: 959.98px) {
   .xch__body { grid-template-columns: 1fr; }

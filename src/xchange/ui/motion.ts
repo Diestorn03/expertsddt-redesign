@@ -9,6 +9,9 @@ import gsap from 'gsap';
 
 type Data = { data: unknown[] };
 
+/** GSAP's twin of the site's --ease-out cubic-bezier(.16,1,.3,1): camera moves and arrivals. */
+export const EASE_OUT = 'expo.out';
+
 /** Drops an animation (and a timeline's children) from the context's record. */
 export function forget(ctx: gsap.Context, anim: gsap.core.Animation | null): void {
   if (!anim) return;
@@ -87,7 +90,7 @@ export class Motion {
 
   toastIn(el: Element): void {
     if (this.reduced) return;
-    this.add(() => gsap.fromTo(el, { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'expo.out', clearProps: 'transform,opacity' }));
+    this.add(() => gsap.fromTo(el, { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: EASE_OUT, clearProps: 'transform,opacity' }));
   }
 
   toastOut(el: Element, done: () => void): void {

@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { makeScanBodyCad } from '../../sample';
 import { attachControls, type ControlCallbacks } from '../../viewer/controls';
 import { PRESET_KEYS, presetView } from '../../viewer/presets';
-import { DEPTH_BIAS_MM, Viewer } from '../../viewer/viewer';
+import { DEPTH_BIAS_MM, LOOK, Viewer } from '../../viewer/viewer';
 import type { Mat4, TriMesh } from '../../core/types';
 import { fakeElement, installFakeDom, keyEvent } from '../adversarial/fake-dom';
 
@@ -148,7 +148,7 @@ describe('highlight ring and materials (look: gold parts, color map, grey placeh
     expect(v.assembly.children).toHaveLength(2); // the ring hangs under each part, never in the set itself
     const shown = (id: string): boolean => ring(id).every((r) => r.visible);
     const hidden = (id: string): boolean => ring(id).every((r) => !r.visible);
-    expect(ring('a')).toHaveLength(9); // stencil mask + 8 shifted copies
+    expect(ring('a')).toHaveLength(17); // stencil mask + 8 shifted copies where the part shows + 8 where the scan hides it
     expect(hidden('a') && hidden('b')).toBe(true);
     v.setSelected('a');
     expect(shown('a') && hidden('b')).toBe(true);
@@ -170,6 +170,21 @@ describe('highlight ring and materials (look: gold parts, color map, grey placeh
     const [mask, ...copies] = ring('a');
     expect(mask!.renderOrder).toBeLessThan(Math.min(...copies.map((c) => c.renderOrder)));
     expect(mask!.renderOrder).toBeGreaterThan(Math.max(part('a').renderOrder, 2)); // after the see-through jaw (2)
+    // where the part shows: depth-tested, full amber; where the scan hides it (the buried side): faint, drawn after
+    const mat = (r: THREE.Mesh): THREE.ShaderMaterial => r.material as THREE.ShaderMaterial;
+    const shown = copies.filter((c) => mat(c).depthTest), hidden = copies.filter((c) => !mat(c).depthTest);
+    expect([shown.length, hidden.length]).toEqual([8, 8]);
+    for (const c of shown) expect(mat(c).uniforms.ringAlpha!.value).toBe(1);
+    for (const c of hidden) expect(mat(c).uniforms.ringAlpha!.value).toBe(LOOK.ringHidden);
+    expect(LOOK.ringHidden).toBeGreaterThan(0.2);
+    expect(LOOK.ringHidden).toBeLessThan(0.7);
+    expect(Math.max(...shown.map((c) => c.renderOrder))).toBeLessThan(Math.min(...hidden.map((c) => c.renderOrder)));
+    // a ring pixel is drawn once: only where the stencil is still clear (0 < 1), and the copy marks it
+    for (const c of copies) {
+      expect(mat(c).stencilFunc).toBe(THREE.GreaterStencilFunc);
+      expect(mat(c).stencilRef).toBe(1);
+      expect(mat(c).stencilZPass).toBe(THREE.ReplaceStencilOp);
+    }
     v.setGeometry('a', null, null, null);
     for (const r of ring('a')) expect(r.geometry).toBe(part('a').geometry);
     v.dispose();

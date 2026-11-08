@@ -37,6 +37,10 @@ export class Stage {
     roving(q(this.el, '.xch__toolbar'), signal);
     roving(q(this.el, '.xch__views'), signal);
     for (const b of qa<HTMLButtonElement>(this.el, '[data-view]')) b.addEventListener('click', () => this.preset(b.dataset.view as Preset | 'fit'), { signal });
+    // the icon bar's direct toggles take the keys' path (C, T), so the legend follows the map
+    const enabled = (e: Event): boolean => (e.currentTarget as Element).getAttribute('aria-disabled') !== 'true';
+    q(this.el, '[data-map-btn]').addEventListener('click', (e) => { if (enabled(e)) this.toggleMap(); }, { signal });
+    q(this.el, '[data-xray-btn]').addEventListener('click', (e) => { if (enabled(e)) this.toggleJawOpacity(); }, { signal });
     this.popBtn.addEventListener('click', () => this.togglePopover(), { signal });
     this.pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.togglePopover(false); } }, { signal });
     // it covers the adjust pad: focus leaving it (Tab, Shift+Tab) closes it, so nothing focused stays hidden under it
@@ -151,8 +155,16 @@ export class Stage {
     this.syncControls();
   }
 
+  /** Every control that mirrors the display options, the legend included: whatever changed the map (C, the map button, the Display switch), the legend follows. */
   private syncControls(): void {
     const d = this.display, app = this.app, c = app.c;
+    const mapped = d.map && !!app.s?.deviation;
+    q(this.el, '[data-legend]').hidden = !mapped;
+    const map = q(this.el, '[data-map-btn]'), xray = q(this.el, '[data-xray-btn]');
+    map.setAttribute('aria-pressed', String(mapped));
+    map.setAttribute('aria-disabled', String(!app.s?.deviation));
+    xray.setAttribute('aria-pressed', String(d.jawOpacity < 1));
+    xray.setAttribute('aria-disabled', String(!app.s?.jaw));
     for (const sw of qa(this.pop, '[data-switch]')) {
       const key = sw.dataset.switch as keyof DisplayOptions;
       sw.setAttribute('aria-checked', String(!!d[key]));
@@ -177,9 +189,7 @@ export class Stage {
     const any = s.sites.length > 0 || !!s.captureMesh || !!s.jaw;
     q(this.el, '[data-empty]').hidden = any && !!app.viewer;
     q(this.el, '[data-pad]').hidden = !(app.shown === 4 && s.jaw && !app.alignStep?.guided);
-    const legend = q(this.el, '[data-legend]');
-    legend.hidden = !(this.display.map && s.deviation);
-    q(legend, '[data-legend-sub]').textContent = s.surfaces === 'capture' ? app.c.legend.onCapture : app.c.legend.onReplacement;
+    q(this.el, '[data-legend-sub]').textContent = s.surfaces === 'capture' ? app.c.legend.onCapture : app.c.legend.onReplacement;
     q<HTMLAnchorElement>(app.root, '[data-skip-view]').href = app.shown === 4 ? '#xch-export' : '#help';
     this.syncControls();
   }

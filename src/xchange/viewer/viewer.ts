@@ -7,11 +7,10 @@
 import gsap from 'gsap';
 import * as THREE from 'three';
 import { fromColumnMajor } from '../core/mat4';
-import { computeBounds } from '../core/mesh';
 import type { Arch, Mat4, TriMesh, Vec3 } from '../core/types';
 import { buildLut, colorize } from './colormap';
 import { presetView, type Preset } from './presets';
-import { forget, transient } from '../ui/motion';
+import { EASE_OUT, forget, transient } from '../ui/motion';
 
 export interface SiteVisual {
   id: string;
@@ -53,14 +52,19 @@ export const LOOK = {
   capture: { specular: 0.08, shininess: 36 },
   /** Highlight ring around the selected implant or guided target, CSS px. */
   ringPx: 2.5,
+  /** The ring's opacity where the scan hides the part (the buried side), so the outline never floats over the gum. */
+  ringHidden: 0.4,
+  /** Default view and Fit: the visible box fills this share of the stage, a margin left for the chrome in the corners. */
+  frame: 0.8,
 } as const;
 
 type Shine = { readonly specular: number; readonly shininess: number };
 const shine = (m: THREE.MeshPhongMaterial, s: Shine): void => { m.specular.setScalar(s.specular); m.shininess = s.shininess; };
 
 // the ring: a highlighted part's full silhouette goes into the stencil, then the same part is drawn 8× shifted by
-// LOOK.ringPx on screen wherever the stencil stays clear. Last in the frame, over everything (it also shows where a
-// hidden implant is), in the same render call: no pass, no render target.
+// LOOK.ringPx on screen wherever the stencil stays clear: first depth-tested (where the part shows), then over
+// everything at LOOK.ringHidden (where the scan hides it; it still shows where a buried implant is). Each copy marks the
+// pixels it draws, so every ring pixel is drawn once. Last in the frame, in the same render call: no pass, no target.
 const RING_VS = `uniform vec2 ringRes;
 uniform vec2 ringDir;
 void main() {
@@ -68,10 +72,38 @@ void main() {
   gl_Position.xy += ringDir * 2.0 / ringRes * gl_Position.w;
 }`;
 const RING_FS = `uniform vec3 ringColor;
+uniform float ringAlpha;
 void main() {
-  gl_FragColor = vec4(ringColor, 1.0);
+  gl_FragColor = vec4(ringColor, ringAlpha);
   #include <colorspace_fragment>
 }`;
+
+/** The scale bar: the longest 1, 2 or 5 × 10^n mm that fits in `maxPx` pixels, and its length in pixels. */
+export function niceScale(mmPerPx: number, maxPx: number): { mm: number; px: number } {
+  const most = mmPerPx * maxPx;
+  if (!(most > 0) || !Number.isFinite(most)) return { mm: 0, px: 0 };
+  const p = 10 ** Math.floor(Math.log10(most));
+  const mm = +([5, 2, 1].map((k) => k * p).find((v) => v <= most) ?? p).toPrecision(1);
+  return { mm, px: mm / mmPerPx };
+}
+
+/**
+ * Where an implant label goes (stage px): just outside the part's screen box, past its free end when the axis shows on
+ * screen (`axis`: base → free end, px), otherwise away from the middle of the set (`away`). `ox`/`oy` (−1…1) name the
+ * label edge that touches that point (CSS `translate((ox − 1) · 50 %, (oy − 1) · 50 %)`), so the pill never covers the
+ * part and its fit colour.
+ */
+export function labelSpot(box: { x0: number; y0: number; x1: number; y1: number }, axis: readonly [number, number], away: readonly [number, number]): { x: number; y: number; ox: number; oy: number } {
+  const al = Math.hypot(away[0], away[1]);
+  let dx = axis[0] + (al > 1e-6 ? (away[0] / al) * 12 : 0), dy = axis[1] + (al > 1e-6 ? (away[1] / al) * 12 : 0);
+  const l = Math.hypot(dx, dy);
+  if (l < 1e-6) { dx = 0; dy = -1; } else { dx /= l; dy /= l; }
+  // along the dominant axis the label starts 6 px past the box edge (that axis alone keeps them apart); across it, it
+  // straddles the direction line
+  const hw = (box.x1 - box.x0) / 2, hh = (box.y1 - box.y0) / 2, m = Math.max(Math.abs(dx), Math.abs(dy));
+  const reach = ((Math.abs(dx) >= Math.abs(dy) ? hw : hh) + 6) / m;
+  return { x: box.x0 + hw + dx * reach, y: box.y0 + hh + dy * reach, ox: dx / m, oy: dy / m };
+}
 
 /** Pixel-ratio ceiling: 2 with a mouse, 1.5 on touch screens (tablets get the lighter path). */
 const dprCap = (): number => Math.min(window.devicePixelRatio || 1, window.matchMedia?.('(pointer: coarse)').matches ? 1.5 : 2);
@@ -85,10 +117,9 @@ export interface PartHit {
 interface Implant {
   site: SiteVisual;
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial>;
-  /** Children of `mesh` sharing its geometry: the stencil mask and the 8 ring copies. */
+  /** Children of `mesh` sharing its geometry: the stencil mask, then 8 ring copies where the part shows and 8 where it is hidden. */
   ring: THREE.Mesh[];
   geometryKey: string | null;
-  top: THREE.Vector3; // label anchor in the implant frame
   label: HTMLElement;
   um: Float32Array | null;
 }
@@ -179,12 +210,19 @@ export class Viewer {
     colorWrite: false, depthTest: false, depthWrite: false, transparent: true,
     stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
   });
-  private readonly ringCopies = Array.from({ length: 8 }, (_, i) => new THREE.ShaderMaterial({
-    uniforms: { ringRes: this.ringRes, ringColor: this.ringColor, ringDir: { value: new THREE.Vector2(Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)).multiplyScalar(LOOK.ringPx) } },
+  // shown side first (depth-tested), then the hidden side; stencil 0 → 1: a pixel the ring already drew is never drawn again
+  private readonly ringCopies = [true, false].flatMap((shown) => Array.from({ length: 8 }, (_, i) => new THREE.ShaderMaterial({
+    uniforms: {
+      ringRes: this.ringRes, ringColor: this.ringColor, ringAlpha: { value: shown ? 1 : LOOK.ringHidden },
+      ringDir: { value: new THREE.Vector2(Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)).multiplyScalar(LOOK.ringPx) },
+    },
     vertexShader: RING_VS, fragmentShader: RING_FS,
-    depthTest: false, depthWrite: false, transparent: true,
-    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc,
-  }));
+    depthTest: shown, depthWrite: false, transparent: true,
+    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.GreaterStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+  })));
+  /** Scale bar, bottom centre (labels layer): exact at the orbit target's depth, which the 1° view makes the whole scene. */
+  private readonly scale: HTMLElement;
+  private scaleText = '';
   private selected: string | null = null;
   private guided: { current: string | null; dim: boolean } | null = null;
   private pulse = new Set<string>();
@@ -218,6 +256,10 @@ export class Viewer {
     stage.prepend(this.canvas);
     this.onLost = (e: Event) => { e.preventDefault(); opts.onContextLost(); };
     this.canvas.addEventListener('webglcontextlost', this.onLost);
+    this.scale = document.createElement('div');
+    this.scale.className = 'xch__scale';
+    this.scale.hidden = true;
+    labels.append(this.scale);
 
     // the fill's sky follows the screen's up (updateCamera); the head light sits just above-left of the eye
     this.scene.add(this.fill);
@@ -232,7 +274,8 @@ export class Viewer {
     this.ctx = gsap.context(() => {});
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(stage);
-    this.io = new IntersectionObserver(([e]) => { this.visible = !!e?.isIntersecting; if (this.visible) this.invalidate(); });
+    // the last entry is the current state (one callback can carry an enter and a leave)
+    this.io = new IntersectionObserver((entries) => { this.visible = !!entries[entries.length - 1]?.isIntersecting; if (this.visible) this.invalidate(); });
     this.io.observe(stage);
     this.mo = new MutationObserver(() => this.refreshTheme());
     this.mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -266,8 +309,21 @@ export class Viewer {
     this.biasDepth();
     this.renderer.render(this.scene, this.camera);
     this.placeLabels();
+    this.placeScale();
     const ms = performance.now() - t0;
     if (ms > 18 && t0 < this.interactingUntil && !this.lowRes) { this.lowRes = true; this.renderer.setPixelRatio(1); this.resize(false); }
+  }
+
+  /** Writes the DOM only when the bar changes (an orbit at one zoom writes nothing). */
+  private placeScale(): void {
+    const any = !!this.jaw || this.implants.size > 0 || this.ghosts.length > 0;
+    const { mm, px } = any ? niceScale(this.mmPerPixel(), 120) : { mm: 0, px: 0 };
+    const key = `${px.toFixed(1)}|${mm}`;
+    if (key === this.scaleText) return;
+    this.scaleText = key;
+    this.scale.hidden = !mm;
+    this.scale.style.setProperty('--w', `${px.toFixed(1)}px`);
+    this.scale.textContent = `${mm.toLocaleString(document.documentElement.lang || 'en')}\u00a0mm`;
   }
 
   private resize(render = true): void {
@@ -448,10 +504,11 @@ export class Viewer {
       mesh.matrixAutoUpdate = false;
       mesh.matrix.copy(rowMajor(site.matrix));
       mesh.userData.siteId = site.id;
-      const ring = [this.ringMask, ...this.ringCopies].map((m, i) => {
+      const ring = [this.ringMask, ...this.ringCopies].map((m) => {
         const r = new THREE.Mesh(this.glyph, m);
         r.matrixAutoUpdate = false;
-        r.renderOrder = i ? 11 : 10; // every mask before any copy, after everything else
+        // after everything else: every mask, then every shown-side copy, then the hidden side
+        r.renderOrder = m === this.ringMask ? 10 : m.depthTest ? 11 : 12;
         r.visible = false;
         return r;
       });
@@ -461,7 +518,7 @@ export class Viewer {
       label.className = 'xch__tag';
       label.textContent = site.label;
       this.labels.append(label);
-      this.implants.set(site.id, { site, mesh, ring, geometryKey: null, top: new THREE.Vector3(0, 0, 8), label, um: null });
+      this.implants.set(site.id, { site, mesh, ring, geometryKey: null, label, um: null });
     }
     this.updateSphere();
     this.restyle();
@@ -500,12 +557,9 @@ export class Viewer {
       g.boundingBox = base.boundingBox;
       imp.mesh.geometry = g;
       imp.geometryKey = key;
-      const b = computeBounds(mesh);
-      imp.top.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, b.max[2]);
     } else {
       imp.mesh.geometry = this.glyph;
       imp.geometryKey = null;
-      imp.top.set(0, 0, 8);
     }
     for (const r of imp.ring) r.geometry = imp.mesh.geometry;
     this.pruneShared();
@@ -603,7 +657,7 @@ export class Viewer {
     const one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), q = new THREE.Quaternion();
     const o = { t: 0 };
     this.poseTween = transient(this.ctx, () => gsap.to(o, {
-        t: 1, duration: tween === 'align' ? 0.9 : 0.35, ease: tween === 'align' ? 'expo.out' : 'power3.out',
+        t: 1, duration: tween === 'align' ? 0.9 : 0.35, ease: tween === 'align' ? EASE_OUT : 'power3.out',
         onUpdate: () => {
           p.lerpVectors(p0, p1, o.t);
           q.slerpQuaternions(q0, q1, o.t);
@@ -671,11 +725,11 @@ export class Viewer {
     const t0 = this.target.clone(), q0 = this.q.clone(), d0 = this.dist;
     const o = { t: 0 };
     this.camTween = transient(this.ctx, () => gsap.to(o, {
-      t: 1, duration, ease: 'power3.inOut',
+      t: 1, duration, ease: EASE_OUT,
       onUpdate: () => {
         this.target.lerpVectors(t0, target, o.t);
         this.q.slerpQuaternions(q0, q, o.t);
-        this.dist = d0 + (dist - d0) * o.t;
+        this.dist = d0 * (dist / d0) ** o.t; // geometric: a large zoom change does not rush its near end
         this.invalidate();
       },
       onComplete: () => { this.camTween = null; },
@@ -694,25 +748,51 @@ export class Viewer {
     return (Math.max(radius, 1) / Math.sin(half * Math.min(1, aspect))) * 1.15;
   }
 
+  /**
+   * Target and distance that frame what is shown, seen with orientation `q`: every corner of the visible box inside
+   * LOOK.frame of the stage (exocad fills its view; the margin keeps the chrome in the corners off the case). Tighter
+   * than the bounding sphere, which left the arch at about half the stage.
+   */
+  private frame(q: THREE.Quaternion): { center: THREE.Vector3; dist: number } {
+    this.updateSphere(); // also brings every matrixWorld up to date
+    const box = new THREE.Box3();
+    if (this.jaw?.visible) box.expandByObject(this.jaw);
+    for (const imp of this.implants.values()) if (imp.mesh.visible) box.expandByObject(imp.mesh);
+    for (const g of this.ghosts) if (g.visible) box.expandByObject(g);
+    if (box.isEmpty()) return { center: this.sphere.center.clone(), dist: this.fitDistance(this.sphere.radius) };
+    const center = box.getCenter(new THREE.Vector3()), inv = q.clone().invert(), c = new THREE.Vector3();
+    const ty = Math.tan(THREE.MathUtils.degToRad(this.display.fovDeg) / 2) * LOOK.frame, tx = ty * Math.max(0.2, this.camera.aspect);
+    let dist = 0;
+    for (let i = 0; i < 8; i++) {
+      // the corner in camera axes (z toward the eye): at view depth dist − z it must project within ±tx, ±ty
+      c.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(center).applyQuaternion(inv);
+      dist = Math.max(dist, c.z + Math.max(Math.abs(c.x) / tx, Math.abs(c.y) / ty));
+    }
+    return { center, dist: Math.max(dist, this.fitDistance(1)) };
+  }
+
   /** Frames everything visible (or only some sites), keeping the direction. */
   fit(siteIds?: readonly string[], instant = false): void {
+    if (!siteIds?.length) {
+      const { center, dist } = this.frame(this.q);
+      this.tweenCamera(center, this.q.clone(), dist, instant ? 0 : 0.7);
+      return;
+    }
     let sphere = this.sphere;
-    if (siteIds?.length) {
-      const box = new THREE.Box3();
-      this.assembly.updateMatrixWorld(true);
-      for (const id of siteIds) { const imp = this.implants.get(id); if (imp) box.expandByObject(imp.mesh); }
-      if (!box.isEmpty()) sphere = box.getBoundingSphere(new THREE.Sphere());
-      sphere.radius = Math.max(sphere.radius, 6);
-    } else this.updateSphere();
+    const box = new THREE.Box3();
+    this.assembly.updateMatrixWorld(true);
+    for (const id of siteIds) { const imp = this.implants.get(id); if (imp) box.expandByObject(imp.mesh); }
+    if (!box.isEmpty()) sphere = box.getBoundingSphere(new THREE.Sphere());
+    sphere.radius = Math.max(sphere.radius, 6);
     this.tweenCamera(sphere.center.clone(), this.q.clone(), this.fitDistance(sphere.radius), instant ? 0 : 0.7);
   }
 
   view(preset: Preset, instant = false): void {
-    this.updateSphere();
     const { from, up } = presetView(preset, this.arch);
     const m = new THREE.Matrix4().lookAt(new THREE.Vector3(...from), new THREE.Vector3(), new THREE.Vector3(...up));
     const q = new THREE.Quaternion().setFromRotationMatrix(m);
-    this.tweenCamera(this.sphere.center.clone(), q, this.fitDistance(this.sphere.radius), instant ? 0 : 0.7);
+    const { center, dist } = this.frame(q);
+    this.tweenCamera(center, q, dist, instant ? 0 : 0.7);
   }
 
   /** Orbit center at a world point (.35 s). */
@@ -761,20 +841,45 @@ export class Viewer {
 
   /* ---------------- labels ---------------- */
 
+  /** Transforms only, no layout reads (UI-DESIGN §3.5). Implant labels sit clear of their part (labelSpot). */
   private placeLabels(): void {
     const w = this.stage.clientWidth, h = this.stage.clientHeight;
     const v = new THREE.Vector3();
-    const place = (el: HTMLElement, world: THREE.Vector3): void => {
+    /** Stage px of a world point; null behind the camera or past far. */
+    const px = (world: THREE.Vector3): [number, number] | null => {
       v.copy(world).project(this.camera);
-      const off = v.z > 1 || v.z < -1;
-      el.classList.toggle('is-off', off);
-      if (!off) el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -130%)`;
+      return v.z > 1 || v.z < -1 ? null : [((v.x + 1) / 2) * w, ((1 - v.y) / 2) * h];
     };
-    if (this.display.labels) for (const imp of this.implants.values()) {
-      if (!imp.mesh.visible) continue;
-      place(imp.label, imp.top.clone().applyMatrix4(imp.mesh.matrixWorld));
+    for (const pin of this.pins) {
+      const at = px(pin.mesh.position);
+      pin.el.classList.toggle('is-off', !at);
+      if (at) pin.el.style.transform = `translate(${at[0]}px, ${at[1]}px) translate(-50%, -130%)`;
     }
-    for (const p of this.pins) place(p.el, p.mesh.position);
+    if (!this.display.labels) return;
+    const parts: { imp: Implant; box: { x0: number; y0: number; x1: number; y1: number }; axis: [number, number] }[] = [];
+    const p = new THREE.Vector3();
+    for (const imp of this.implants.values()) {
+      if (!imp.mesh.visible) continue;
+      const b = imp.mesh.geometry.boundingBox!, m = imp.mesh.matrixWorld;
+      const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+      let off = false;
+      for (let i = 0; i < 8; i++) {
+        const at = px(p.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(m));
+        if (!at) { off = true; break; }
+        box.x0 = Math.min(box.x0, at[0]); box.x1 = Math.max(box.x1, at[0]); box.y0 = Math.min(box.y0, at[1]); box.y1 = Math.max(box.y1, at[1]);
+      }
+      // the part's axis on screen, base → free end (+Z of the implant frame)
+      const cx = (b.min.x + b.max.x) / 2, cy = (b.min.y + b.max.y) / 2;
+      const base = off ? null : px(p.set(cx, cy, b.min.z).applyMatrix4(m)), end = base && px(p.set(cx, cy, b.max.z).applyMatrix4(m));
+      imp.label.classList.toggle('is-off', !end);
+      if (base && end) parts.push({ imp, box, axis: [end[0] - base[0], end[1] - base[1]] });
+    }
+    const mx = parts.reduce((s, q) => s + q.box.x0 + q.box.x1, 0) / (2 * parts.length || 1);
+    const my = parts.reduce((s, q) => s + q.box.y0 + q.box.y1, 0) / (2 * parts.length || 1);
+    for (const { imp, box, axis } of parts) {
+      const s = labelSpot(box, axis, [(box.x0 + box.x1) / 2 - mx, (box.y0 + box.y1) / 2 - my]);
+      imp.label.style.transform = `translate(${s.x}px, ${s.y}px) translate(${(s.ox - 1) * 50}%, ${(s.oy - 1) * 50}%)`;
+    }
   }
 
   /* ---------------- thumbnails ---------------- */

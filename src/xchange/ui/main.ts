@@ -99,11 +99,12 @@ export function mount(root: HTMLElement): Mounted {
   let stageHalf = false, toolIn = false;
   const syncFloats = (): void => void document.documentElement.classList.toggle('xch-in-view', stageHalf || (narrow.matches && toolIn));
   if (stage) {
-    const io = new IntersectionObserver(([x]) => { stageHalf = !!x && x.intersectionRatio >= 0.5; syncFloats(); }, { threshold: [0, 0.5, 1] });
+    // the last entry of a batch is the current state (as in the viewer)
+    const io = new IntersectionObserver((e) => { const x = e[e.length - 1]; stageHalf = !!x && x.intersectionRatio >= 0.5; syncFloats(); }, { threshold: [0, 0.5, 1] });
     io.observe(stage);
     observers.push(io);
   }
-  const tool = new IntersectionObserver(([x]) => { toolIn = !!x?.isIntersecting; syncFloats(); });
+  const tool = new IntersectionObserver((e) => { toolIn = !!e[e.length - 1]?.isIntersecting; syncFloats(); });
   tool.observe(root);
   observers.push(tool);
   narrow.addEventListener('change', syncFloats, { signal });
@@ -149,7 +150,10 @@ async function loadSample(a: App, opener: Element | null): Promise<void> {
   a.alignStep.sampleJaw = sample.jaw;
   a.say.say(a.c.say.sample);
   a.root.querySelector<HTMLElement>('[data-next="1"]')?.focus({ preventScroll: true });
-  document.dispatchEvent(new CustomEvent('scroll-to', { detail: a.root }));
+  // beside the panel (≥ 960 px) the whole stage comes into view, views widget included: it is as tall as the viewport
+  // under the nav, so scrolled to the workspace top (stepper above it) its bottom fell below the fold. One column: the top
+  const stage = matchMedia('(min-width: 960px)').matches && a.root.querySelector<HTMLElement>('.xch__stage');
+  document.dispatchEvent(new CustomEvent('scroll-to', { detail: stage || a.root }));
 }
 
 function wireSmallCard(section: Element, signal: AbortSignal): void {

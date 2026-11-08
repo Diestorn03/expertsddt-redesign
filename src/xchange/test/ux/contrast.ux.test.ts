@@ -149,6 +149,24 @@ describe('text on the indigo stage and its chrome (the stage is dark in both the
   }
 });
 
+describe('section cut faces (slice B): --xch-cut on the indigo stage (WCAG 1.4.11) and apart from the jaw tone', () => {
+  /** OKLab lightness of an sRGB color. */
+  const oklabL = (c: RGBA): number => {
+    const f = (x: number): number => { x /= 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+    const [r, g, b] = [f(c.r), f(c.g), f(c.b)];
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b), s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+  };
+  for (const theme of ['light', 'dark'] as const) {
+    const t = tokens(theme);
+    const cut = color(resolve('var(--xch-cut)', t));
+    const r = Math.min(...layer(resolve('var(--xch-stage)', t)).map((s) => ratio(cut, s)));
+    it(`${theme}: --xch-cut reaches 3:1 against every stage stop (computed ${r.toFixed(2)}:1)`, () => expect(r).toBeGreaterThanOrEqual(3));
+    const dL = Math.abs(oklabL(color(resolve('var(--xch-jaw)', t))) - oklabL(cut));
+    it(`${theme}: --xch-cut differs from the stone jaw tone by OKLab ΔL ≥ .2 (computed ${dL.toFixed(3)})`, () => expect(dL).toBeGreaterThanOrEqual(0.2));
+  }
+});
+
 describe('3D view toolbar (glass over the stage gradient)', () => {
   for (const theme of ['light', 'dark'] as const) {
     const t = tokens(theme);
