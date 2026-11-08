@@ -80,8 +80,8 @@ const schema = {
       // Theme before first paint; re-applied after view transitions. `js` class lets CSS pre-position animated elements.
       (function () {
         window.__t0 = performance.now();
-        document.documentElement.classList.add('js');
-        function apply() { var t = null; try { t = localStorage.getItem('theme'); } catch (e) {} if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = t; }
+        // a ClientRouter swap replaces every <html> attribute: re-add `js` with the theme
+        function apply() { document.documentElement.classList.add('js'); var t = null; try { t = localStorage.getItem('theme'); } catch (e) {} if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = t; }
         apply(); document.addEventListener('astro:after-swap', apply);
       })();
     </script>

@@ -88,7 +88,10 @@ const hook = import.meta.env.PUBLIC_N8N_FORM_WEBHOOK || '';
 </script>
 
 <style>
-  .lib-dialog { border: 0; padding: 0; border-radius: 24px; width: min(480px, 100% - 2rem); background: var(--surface); color: var(--ink); box-shadow: 0 40px 100px -30px rgba(0,0,0,.6); }
+  .lib-dialog { border: 0; padding: 0; border-radius: 24px; width: min(480px, 100% - 2rem); background: var(--surface); color: var(--ink); box-shadow: 0 40px 100px -30px rgba(0,0,0,.6); overscroll-behavior: contain; }
+  /* the page must not scroll behind the modal: Lenis ignores the dialog (data-lenis-prevent), wheel on the ::backdrop scrolls the root natively */
+  :global(html:has(.lib-dialog[open])) { overflow: hidden; }
+  .lib-form h2 { padding-right: 2.75rem; } /* clear the × button */
   .lib-dialog::backdrop { background: rgba(10,26,58,.62); backdrop-filter: blur(4px); }
   .lib-form { position: relative; display: grid; gap: 1rem; padding: clamp(1.4rem, 4vw, 2rem); }
   .lib-form p { margin: 0; color: var(--slate); }
