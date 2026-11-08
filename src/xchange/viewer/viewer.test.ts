@@ -1,0 +1,35 @@
+import { describe, expect, it } from 'vitest';
+import { buildLut, LUT_SIZE, MAP_STOPS, srgbToOklab } from './colormap';
+import { presetView, type Preset } from './presets';
+
+describe('color map', () => {
+  const { srgb } = buildLut();
+  const at = (i: number): string => '#' + [0, 1, 2].map((c) => srgb[3 * i + c]!.toString(16).padStart(2, '0')).join('');
+  it('LUT endpoints and midpoint equal the three stops', () => {
+    expect(at(0)).toBe(MAP_STOPS[0]);
+    expect(at(LUT_SIZE - 1)).toBe(MAP_STOPS[2]);
+    expect(at((LUT_SIZE - 1) / 2 | 0).slice(0, 3)).toBe(MAP_STOPS[1].slice(0, 3));
+  });
+  it('OKLab lightness strictly decreases from 0 to 100 µm', () => {
+    let last = Infinity;
+    for (let i = 0; i < LUT_SIZE; i += 8) {
+      const L = srgbToOklab([srgb[3 * i]! / 255, srgb[3 * i + 1]! / 255, srgb[3 * i + 2]! / 255])[0];
+      expect(L).toBeLessThan(last);
+      last = L;
+    }
+  });
+});
+
+describe('view presets', () => {
+  const all: Preset[] = ['occlusal', 'front', 'back', 'left', 'right', 'top'];
+  it('up is perpendicular to the view direction', () => {
+    for (const p of all) for (const arch of ['upper', 'lower'] as const) {
+      const { from, up } = presetView(p, arch);
+      expect(from[0] * up[0] + from[1] * up[1] + from[2] * up[2]).toBe(0);
+    }
+  });
+  it('occlusal flips with the arch', () => {
+    expect(presetView('occlusal', 'lower').from[2]).toBe(1);
+    expect(presetView('occlusal', 'upper').from[2]).toBe(-1);
+  });
+});

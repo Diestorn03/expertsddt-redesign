@@ -1,0 +1,759 @@
+/**
+ * Step 3 · Jaw scan and step 4 · Align and export (UI-DESIGN §5.5, §5.6, §6.6, §6.7, §8, §9).
+ * Loading the jaw starts auto align. Every pose change is re-measured 250 ms after the gesture; a re-measure of
+ * an unmoved pose keeps the original method (state/case mergeMeasured). With a jaw, export waits for an
+ * applied alignment. The email is asked once, before the first export, and never blocks the download.
+ */
+import * as THREE from 'three';
+import { identity, maxAbsDiff } from '../core/mat4';
+import { computeBounds, countTriangles } from '../core/mesh';
+import type { AlignmentResult, ExportRequest, ImplantSite, LandmarkPair, Mat4, Vec3 } from '../core/types';
+import { guidePoint, orderSitesAlongArch } from '../align/landmarks';
+import { DEFAULT_QUALITY } from '../align/metrics';
+import type { AlignStage } from '../align/multistart';
+import { activeSites, canMatchCapture, exportBlocker, guidedTargets, mergeMeasured, missingGeometry, pushUndo, siteStatus } from '../state/case';
+import type { ExportResult, JawResult } from '../state/jobs-handler';
+import { markSent, needsEmail, retryPending, submitLead, type LeadEnv, type StorageLike } from '../state/lead';
+import { rotatePose, translatePose, type ControlCallbacks } from '../viewer/controls';
+import { toEngine } from '../viewer/viewer';
+import type { App } from './app';
+import { fill, h, icon, pickFiles, q, qa, radiogroup, setChecked } from './dom';
+import { bringIntoView, noteCard, openModal } from './feedback';
+import { ACCEPT, buffersOf, download, readFiles } from './files';
+import { dropZone } from './step-capture';
+import { fmt, mb, num, warningMessage } from './i18n/format';
+
+export const XCHANGE_VERSION = '1.0.0';
+const STAGE_SPAN: Readonly<Record<AlignStage, [number, number]>> = { prepare: [0, 0.1], coarse: [0.1, 0.55], fine: [0.55, 0.9], metrics: [0.9, 1] };
+const TONE = { good: ['ok', 'check'], acceptable: ['info', 'info'], weak: ['warn', 'warn'], ambiguous: ['warn', 'warn'], failed: ['bad', 'bad'] } as const;
+
+interface Guided {
+  targets: ImplantSite[];
+  pairs: (LandmarkPair | null)[];
+  skipped: Set<number>;
+  order: number[];
+  idx: number;
+}
+
+const storage = (): StorageLike | null => { try { return window.localStorage; } catch { return null; } };
+
+export class AlignStep {
+  private readonly pane3: HTMLElement;
+  private readonly pane4: HTMLElement;
+  private alignJob: AbortController | null = null;
+  private jawJob: AbortController | null = null;
+  private measureJob: AbortController | null = null;
+  private measureTimer = 0;
+  private poseMoved = false;
+  private alignedResult: AlignmentResult | null = null;
+  private mapShown = false;
+  guided: Guided | null = null;
+  private exportUrl: string | null = null;
+  private exportLine = '';
+  private resultKey: unknown = null;
+  private jawWarnings: HTMLElement[] = [];
+  /** Sample jaw bytes (STL), set by the sample case. */
+  sampleJaw: Uint8Array | null = null;
+
+  constructor(private readonly app: App) {
+    const { root, signal } = app;
+    this.pane3 = q(root, '[data-pane="3"]');
+    this.pane4 = q(root, '[data-pane="4"]');
+    for (const b of this.pane3.querySelectorAll<HTMLButtonElement>('[data-pick="jaw"]')) {
+      b.addEventListener('click', async () => { const [f] = await pickFiles(ACCEPT.jaw, false); if (f) void this.loadJaw(f); }, { signal });
+    }
+    dropZone(q(this.pane3, '[data-drop="jaw"]'), (files) => void this.loadJaw(files[0]!), signal);
+    q(this.pane3, '[data-sample-jaw]').addEventListener('click', () => { if (this.sampleJaw) void this.loadJaw(null, this.sampleJaw.slice()); }, { signal });
+    q(this.pane3, '[data-jaw-remove]').addEventListener('click', () => this.removeJaw(), { signal });
+    q(this.pane3, '[data-skip]').addEventListener('click', () => { app.store.set({ jawSkipped: true }); app.go(4); }, { signal });
+    q(this.pane4, '[data-align="auto"]').addEventListener('click', () => void this.autoAlign(), { signal });
+    q(this.pane4, '[data-align="refine"]').addEventListener('click', () => void this.autoAlign(app.s.assembly), { signal });
+    q(this.pane4, '[data-align="guided"]').addEventListener('click', () => this.startGuided(), { signal });
+    radiogroup(q(this.pane4, '[data-surf-group]'), (b) => this.setSurfaces(b.dataset.surf as 'replacement' | 'capture'), signal);
+    for (const b of qa<HTMLButtonElement>(this.pane4, '[data-gp]')) b.addEventListener('click', () => this.guidedAction(b.dataset.gp!), { signal });
+    q(this.pane4, '[data-manual="jaw"]').addEventListener('click', () => this.moveToJaw(), { signal });
+    q(this.pane4, '[data-manual="undo"]').addEventListener('click', () => this.undo(), { signal });
+    q(this.pane4, '[data-manual="reset"]').addEventListener('click', () => this.reset(), { signal });
+    const exportBtn = q<HTMLButtonElement>(this.pane4, '[data-export]');
+    exportBtn.addEventListener('click', () => void this.onExport(exportBtn), { signal });
+    q(this.pane4, '[data-ex-again]').addEventListener('click', () => this.downloadAgain(), { signal });
+    root.addEventListener('keydown', (e) => {
+      const t = e.target as HTMLElement;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && app.s.undo.length) { e.preventDefault(); this.undo(); }
+    }, { signal });
+    this.wireEmail();
+    void retryPending(this.leadEnv());
+  }
+
+  /* ---------------- viewer input ---------------- */
+
+  mode(): 'camera' | 'set' | 'guided' {
+    if (this.guided) return 'guided';
+    return this.app.shown === 4 && this.app.s.jaw ? 'set' : 'camera';
+  }
+
+  controlCallbacks(): ControlCallbacks {
+    const app = this.app;
+    let before: Mat4 | null = null;
+    return {
+      mode: () => this.mode(),
+      onSelect: (id) => { if (app.shown !== 4 || !app.s.jaw) app.select(id, false); },
+      onGuidedPoint: (p) => this.place(p),
+      onSetChange: (pose, phase) => {
+        if (phase === 'start') before = Float64Array.from(app.s.assembly);
+        if (phase === 'end' && before) {
+          app.store.set({ assembly: toEngine(pose), undo: pushUndo(app.s.undo, before), exportedSinceChange: false });
+          before = null;
+          this.scheduleMeasure(true);
+        }
+      },
+      onHover: (hit) => app.stage.readout(hit),
+      onPreset: (p) => app.stage.preset(p),
+      onToggleJawOpacity: () => app.stage.toggleJawOpacity(),
+      onToggleMap: () => app.stage.toggleMap(),
+      onShortcuts: () => app.stage.openKeys(),
+      onGuidedKey: (k) => (k === 'Escape' ? this.leaveGuided(true) : this.guidedAction('back')),
+      onCtrl: (down) => app.stage.ctrlChip(down && this.mode() === 'set'),
+    };
+  }
+
+  /* ---------------- step 3: jaw ---------------- */
+
+  async loadJaw(file: File | null, bytes?: Uint8Array): Promise<void> {
+    const app = this.app, c = app.c;
+    app.clearAlerts(3);
+    this.jawJob?.abort();
+    const job = (this.jawJob = new AbortController());
+    const busy = app.busy('3', c.s3.reading, () => job.abort());
+    try {
+      const [input] = file ? await readFiles([file]) : [{ bytes: bytes!, extension: 'stl' }];
+      const r = await app.jobs.run<JawResult>({ type: 'readJaw', file: input! }, buffersOf([input!]), job.signal);
+      busy.set(null, c.s3.preparing);
+      await app.align.setJaw(r.mesh, { signal: job.signal });
+      this.cancelAll();
+      this.alignedResult = null;
+      app.jawNormals = r.normals;
+      this.jawWarnings = r.warnings.map((w) => noteCard(warningMessage(c, app.lang, w, 'jaw')));
+      app.store.set({ jaw: { mesh: r.mesh, originalBytes: r.originalBytes, format: r.format }, jawColors: !!r.mesh.colors, jawSkipped: false, assembly: identity(), alignment: null, lastAttempt: null, lastAlignedPose: null, undo: [], deviation: null, exportedSinceChange: false });
+      app.viewer?.setJaw(r.mesh, r.normals);
+      app.viewer?.setAssembly(identity());
+      app.viewer?.setDeviation(null, app.s.surfaces, () => undefined);
+      app.stage.update();
+      app.viewer?.fit();
+      app.say.say(c.say.jawReady);
+      busy.done();
+      app.go(4);
+      void this.autoAlign();
+    } catch (e) {
+      app.error(3, e, 'jaw');
+    } finally {
+      busy.done();
+    }
+  }
+
+  private removeJaw(): void {
+    const app = this.app;
+    this.cancelAll();
+    this.alignedResult = null;
+    this.jawWarnings = [];
+    app.jawNormals = null;
+    app.store.set({ jaw: null, jawColors: false, assembly: identity(), alignment: null, lastAttempt: null, lastAlignedPose: null, undo: [], deviation: null, exportedSinceChange: false });
+    app.viewer?.setJaw(null, null);
+    app.viewer?.setAssembly(identity());
+    this.applyDeviation();
+    app.stage.update();
+  }
+
+  /* ---------------- step 4: alignment ---------------- */
+
+  onEnter(): void {
+    const s = this.app.s;
+    if (s.jaw && s.deviation === null && s.alignment && !this.measureJob) this.scheduleMeasure(false);
+  }
+
+  private progress(): { busy: ReturnType<App['busy']>; onProgress: (stage: AlignStage, f: number) => void } {
+    const app = this.app, c = app.c;
+    const job = this.alignJob!;
+    const busy = app.busy('align', c.al.stage.prepare, () => job.abort());
+    let lastStage: AlignStage | null = null;
+    return {
+      busy,
+      onProgress: (stage, f) => {
+        const [a, b] = STAGE_SPAN[stage];
+        const frac = a + (b - a) * f;
+        busy.set(frac, fmt(app.lang, c.al.progress, { stage: c.al.stage[stage], pct: Math.round(frac * 100) }));
+        if (stage !== lastStage) { lastStage = stage; app.say.say(fmt(app.lang, c.say.aligning, { stage: c.al.stage[stage] })); }
+      },
+    };
+  }
+
+  async autoAlign(initial?: Mat4): Promise<void> {
+    const app = this.app;
+    if (!app.s.jaw) return;
+    app.clearAlerts(4);
+    this.stopMeasure();
+    this.alignJob?.abort();
+    const job = (this.alignJob = new AbortController());
+    const { busy, onProgress } = this.progress();
+    try {
+      const r = await app.align.autoAlign(app.parts(), initial ? { initial } : {}, { signal: job.signal, onProgress });
+      await this.applyResult(r);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'CANCELLED') app.say.say(app.c.say.alignCancelled);
+      else app.error(4, e, 'jaw');
+    } finally {
+      busy.done();
+      if (this.alignJob === job) this.alignJob = null;
+      app.render();
+    }
+  }
+
+  private async applyResult(r: AlignmentResult): Promise<void> {
+    const app = this.app, c = app.c;
+    if (r.status === 'failed') {
+      app.store.set({ lastAttempt: r });
+      app.say.say(c.say.alignFailed);
+      return;
+    }
+    this.alignedResult = r;
+    app.store.set({ assembly: r.transform, alignment: r, lastAttempt: null, lastAlignedPose: r.transform, undo: [], deviation: null, exportedSinceChange: false });
+    app.viewer?.setAssembly(r.transform, 'align');
+    app.say.say(fmt(app.lang, c.say.aligned, { status: c.al.status[r.status], rms: num(app.lang, r.rmsMm * 1000) }));
+    await this.computeDeviation();
+  }
+
+  private async computeDeviation(signal?: AbortSignal): Promise<void> {
+    const app = this.app;
+    const parts = app.parts();
+    if (!parts.length || !app.s.jaw) return;
+    const dev = await app.align.deviation(parts, app.s.assembly, { signal });
+    app.store.set({ deviation: dev });
+    this.applyDeviation();
+    if (!this.mapShown) { this.mapShown = true; app.stage.setDisplay({ map: true }); }
+  }
+
+  applyDeviation(): void {
+    const app = this.app;
+    app.viewer?.setDeviation(app.s.deviation, app.s.surfaces, (id) => app.s.sites.find((x) => x.id === id)?.componentIndex);
+  }
+
+  private setSurfaces(surfaces: 'replacement' | 'capture'): void {
+    const app = this.app;
+    if (surfaces === app.s.surfaces) return;
+    app.store.set({ surfaces, deviation: null });
+    this.applyDeviation();
+    app.stage.setDisplay({ capture: surfaces === 'capture', parts: true });
+    if (app.s.alignment) this.scheduleMeasure(false);
+  }
+
+  onGeometryChanged(): void {
+    const app = this.app;
+    if (app.s.surfaces !== 'replacement') return;
+    if (app.s.deviation) { app.store.set({ deviation: null }); this.applyDeviation(); }
+    if (app.s.jaw && app.s.alignment) this.scheduleMeasure(false);
+  }
+
+  private stopMeasure(): void {
+    clearTimeout(this.measureTimer);
+    this.measureJob?.abort();
+    this.measureJob = null;
+    if (this.app.s.measuring) this.app.store.set({ measuring: false });
+  }
+
+  /** Re-measure 250 ms after the last change, cancelling one still running. */
+  scheduleMeasure(moved: boolean): void {
+    const app = this.app;
+    if (!app.s.jaw) return;
+    this.poseMoved ||= moved;
+    clearTimeout(this.measureTimer);
+    this.measureJob?.abort();
+    if (!app.s.measuring) app.store.set({ measuring: true });
+    this.measureTimer = window.setTimeout(() => void this.runMeasure(), 250);
+  }
+
+  private async runMeasure(): Promise<void> {
+    const app = this.app;
+    const job = (this.measureJob = new AbortController());
+    const parts = app.parts();
+    if (!parts.length) { app.store.set({ measuring: false }); return; }
+    try {
+      const pose = app.s.assembly;
+      const r = await app.align.measure(parts, pose, {}, { signal: job.signal });
+      const merged = mergeMeasured(app.s.alignment, r, this.poseMoved);
+      this.poseMoved = false;
+      app.store.set({ alignment: merged, lastAttempt: null, measuring: false });
+      app.say.say(fmt(app.lang, app.c.say.measured, { status: app.c.al.status[merged.status], rms: num(app.lang, merged.rmsMm * 1000) }));
+      await this.computeDeviation(job.signal);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'CANCELLED') return;
+      app.store.set({ measuring: false });
+      app.error(4, e, 'jaw');
+    } finally {
+      if (this.measureJob === job) this.measureJob = null;
+    }
+  }
+
+  /* ---------------- manual adjustment ---------------- */
+
+  private commitPose(m: Mat4, tween: 'step' | 'align' = 'step', moved = true): void {
+    const app = this.app;
+    app.store.set({ assembly: m, undo: pushUndo(app.s.undo, app.s.assembly), exportedSinceChange: false });
+    app.viewer?.setAssembly(m, tween);
+    this.scheduleMeasure(moved);
+  }
+
+  /** Adjust pad: 30° / 1 mm per click, 5° / 0.1 mm with Shift, in screen axes about the set's center. */
+  pad(op: string, dir: number, shift: boolean): void {
+    const v = this.app.viewer;
+    if (!v || !this.app.s.jaw) return;
+    const pose = v.assembly.matrix.clone();
+    const pivot = v.setCenter();
+    const { right, up, view } = v.axes();
+    const angle = ((shift ? 5 : 30) * Math.PI) / 180 * dir, step = (shift ? 0.1 : 1) * dir;
+    let next: THREE.Matrix4;
+    switch (op) {
+      case 'rx': next = rotatePose(pose, right, angle, pivot); break;
+      case 'ry': next = rotatePose(pose, up, angle, pivot); break;
+      case 'rz': next = rotatePose(pose, view, angle, pivot); break;
+      case 'tx': next = translatePose(pose, right.multiplyScalar(step)); break;
+      case 'ty': next = translatePose(pose, up.multiplyScalar(step)); break;
+      case 'fx': next = rotatePose(pose, right, Math.PI, pivot); break;
+      default: next = rotatePose(pose, up, Math.PI, pivot);
+    }
+    this.commitPose(toEngine(next));
+  }
+
+  private moveToJaw(): void {
+    const v = this.app.viewer;
+    const jaw = v?.jawCenter();
+    if (!v || !jaw) return;
+    this.commitPose(toEngine(translatePose(v.assembly.matrix.clone(), jaw.sub(v.setCenter()))));
+  }
+
+  undo(): void {
+    const app = this.app;
+    const stack = [...app.s.undo];
+    const prev = stack.pop();
+    if (!prev) return;
+    const atAligned = !!app.s.lastAlignedPose && maxAbsDiff(prev, app.s.lastAlignedPose) < 1e-12;
+    app.store.set({ assembly: prev, undo: stack, exportedSinceChange: false, ...(atAligned && this.alignedResult ? { alignment: this.alignedResult } : {}) });
+    app.viewer?.setAssembly(prev, 'step');
+    this.scheduleMeasure(!atAligned);
+    app.say.say(app.c.say.undone);
+  }
+
+  private reset(): void {
+    const app = this.app, pose = app.s.lastAlignedPose;
+    if (!pose || !this.alignedResult) return;
+    app.store.set({ assembly: pose, undo: pushUndo(app.s.undo, app.s.assembly), alignment: this.alignedResult, exportedSinceChange: false });
+    app.viewer?.setAssembly(pose, 'step');
+    this.scheduleMeasure(false);
+  }
+
+  /* ---------------- guided points ---------------- */
+
+  private startGuided(): void {
+    const app = this.app;
+    if (!app.s.jaw) return;
+    this.stopMeasure();
+    const targets = guidedTargets(activeSites(app.s));
+    this.guided = { targets, pairs: targets.map(() => null), skipped: new Set(), order: [], idx: 0 };
+    app.stage.setGuided(true);
+    this.syncGuided();
+    app.viewer?.fit();
+    app.render();
+    q<HTMLElement>(this.pane4, '[data-sec="guided"] .xch__subtitle').scrollIntoView({ block: 'nearest' });
+  }
+
+  private syncGuided(): void {
+    const g = this.guided, v = this.app.viewer;
+    if (!v) return;
+    v.setGuided(g ? { current: g.targets[g.idx]?.id ?? null, dim: true } : null);
+    v.setPins(g ? g.order.map((i) => g.pairs[i]!.target) : []);
+  }
+
+  private nextIndex(g: Guided, from: number): number {
+    const n = g.targets.length;
+    for (let k = 1; k <= n; k++) {
+      const i = (from + k) % n;
+      if (!g.pairs[i] && !g.skipped.has(i)) return i;
+    }
+    return -1;
+  }
+
+  private place(p: Vec3): void {
+    const app = this.app, g = this.guided;
+    if (!g || g.idx < 0) return;
+    const site = g.targets[g.idx]!;
+    const body = app.bodyInImplantFrame(site);
+    if (!body) return;
+    g.pairs[g.idx] = { source: guidePoint(site, body), target: p };
+    g.order.push(g.idx);
+    const n = g.order.length;
+    const next = this.nextIndex(g, g.idx);
+    g.idx = next;
+    this.syncGuided();
+    if (next < 0) {
+      app.say.say(fmt(app.lang, app.c.gp.announceLast, { n }));
+      void this.runGuided();
+    } else app.say.say(fmt(app.lang, app.c.gp.announce, { n, label: g.targets[next]!.label }));
+    app.render();
+  }
+
+  private guidedAction(action: string): void {
+    const g = this.guided;
+    if (!g) return;
+    if (action === 'cancel') return this.leaveGuided(true);
+    if (action === 'align') { if (this.canAlignGuided()) void this.runGuided(); return; }
+    if (action === 'back') {
+      const last = g.order.pop();
+      if (last === undefined) return;
+      g.pairs[last] = null;
+      g.idx = last;
+    } else if (action === 'skip') {
+      if (g.idx < 0) return;
+      g.skipped.add(g.idx);
+      g.idx = this.nextIndex(g, g.idx);
+    } else if (action === 'restart') {
+      g.pairs = g.targets.map(() => null);
+      g.skipped.clear();
+      g.order = [];
+      g.idx = 0;
+    } else if (action.startsWith('redo:')) {
+      const i = Number(action.slice(5));
+      g.pairs[i] = null;
+      g.order = g.order.filter((x) => x !== i);
+      g.skipped.delete(i);
+      g.idx = i;
+    }
+    this.syncGuided();
+    this.app.render();
+  }
+
+  private canAlignGuided(): boolean {
+    const g = this.guided;
+    return !!g && g.order.length >= Math.min(3, g.targets.length) && g.order.length > 0;
+  }
+
+  private async runGuided(): Promise<void> {
+    const app = this.app, g = this.guided;
+    if (!g) return;
+    const pairs = g.order.map((i) => g.pairs[i]!);
+    this.leaveGuided(false);
+    app.clearAlerts(4);
+    this.alignJob?.abort();
+    const job = (this.alignJob = new AbortController());
+    const { busy, onProgress } = this.progress();
+    try {
+      const r = await app.align.alignFromLandmarks(app.parts(), pairs, {}, { signal: job.signal, onProgress });
+      await this.applyResult(r);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'CANCELLED') app.say.say(app.c.say.alignCancelled);
+      else app.error(4, e, 'jaw');
+    } finally {
+      busy.done();
+      if (this.alignJob === job) this.alignJob = null;
+      app.render();
+    }
+  }
+
+  leaveGuided(render = true): void {
+    if (!this.guided) return;
+    this.guided = null;
+    this.app.stage.setGuided(false);
+    this.syncGuided();
+    if (render) this.app.render();
+  }
+
+  /* ---------------- export + email gate ---------------- */
+
+  private leadEnv(): LeadEnv {
+    return { storage: storage(), hook: this.app.hook, lang: this.app.lang, page: location.origin + location.pathname };
+  }
+
+  private wireEmail(): void {
+    const app = this.app, dlg = q<HTMLDialogElement>(app.section, '#xch-email');
+    const form = q<HTMLFormElement>(dlg, 'form');
+    const input = q<HTMLInputElement>(form, 'input[name="email"]');
+    for (const b of qa(dlg, '[data-close]')) b.addEventListener('click', () => dlg.close(), { signal: app.signal });
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }, { signal: app.signal });
+    input.addEventListener('input', () => input.setCustomValidity(''), { signal: app.signal });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      input.setCustomValidity('');
+      if (!input.checkValidity()) { input.setCustomValidity(input.dataset.invalid ?? ''); input.reportValidity(); input.focus(); return; }
+      const honeypot = (form.elements.namedItem('website') as HTMLInputElement).value;
+      if (honeypot) markSent(storage());
+      else void submitLead(input.value.trim(), this.leadEnv());
+      dlg.close();
+      form.reset();
+      void this.doExport();
+    }, { signal: app.signal });
+  }
+
+  private async onExport(btn: HTMLButtonElement): Promise<void> {
+    const app = this.app;
+    const blocker = exportBlocker(app.s);
+    if (blocker) { app.say.say(q(this.pane4, '[data-reason="4"]').textContent ?? ''); return; }
+    if (needsEmail(storage())) {
+      const dlg = q<HTMLDialogElement>(app.section, '#xch-email');
+      openModal(dlg, btn);
+      q<HTMLInputElement>(dlg, 'input[name="email"]').focus();
+      return;
+    }
+    void retryPending(this.leadEnv());
+    await this.doExport();
+  }
+
+  private async doExport(): Promise<void> {
+    const app = this.app, s = app.s, c = app.c;
+    app.clearAlerts(4);
+    const btn = q<HTMLButtonElement>(this.pane4, '[data-export]');
+    btn.classList.add('is-busy');
+    btn.setAttribute('aria-disabled', 'true');
+    const busy = app.busy('export', c.ex.building);
+    try {
+      const sites = activeSites(s);
+      const geometryBySite: Record<string, NonNullable<ReturnType<App['replacement']>>> = {};
+      for (const site of sites) {
+        const gid = s.geometryBySite[site.id];
+        const g = gid ? (await app.loadGeometry(gid), app.replacement(gid)) : null;
+        if (g) geometryBySite[site.id] = g;
+      }
+      const request: ExportRequest = {
+        arch: s.arch ?? 'lower', captureFormat: s.format ?? 'demo', sites, geometryBySite,
+        assemblyTransform: s.jaw ? s.assembly : identity(), jaw: s.jaw ?? undefined, alignment: s.jaw ? s.alignment ?? undefined : undefined,
+        createdAt: new Date().toISOString(), appVersion: XCHANGE_VERSION,
+      };
+      const r = await app.jobs.run<ExportResult>({ type: 'export', request });
+      const old = this.exportUrl;
+      if (old) app.later(() => URL.revokeObjectURL(old), 60_000);
+      this.exportUrl = download(r.zip, r.zipName, 'application/zip');
+      this.exportName = r.zipName;
+      const size = mb(app.lang, r.zip.byteLength);
+      this.exportLine = fmt(app.lang, c.ex.last, { time: new Intl.DateTimeFormat(app.lang, { timeStyle: 'short' }).format(new Date()), size });
+      app.store.set({ exportedSinceChange: true });
+      const text = fmt(app.lang, c.say.exportReady, { size });
+      app.toasts.show(text, { label: c.ex.again, run: () => this.downloadAgain() });
+      app.say.say(text);
+    } catch (e) {
+      app.error(4, e, 'jaw');
+    } finally {
+      busy.done();
+      btn.classList.remove('is-busy');
+      app.render();
+    }
+  }
+
+  private exportName = '';
+  private downloadAgain(): void {
+    if (!this.exportUrl) return;
+    const a = h('a', '', { href: this.exportUrl, download: this.exportName, hidden: true });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  }
+
+  /* ---------------- render ---------------- */
+
+  render(): void {
+    this.renderJaw();
+    this.renderAlign();
+    this.renderExport();
+  }
+
+  private renderJaw(): void {
+    const app = this.app, s = app.s, c = app.c;
+    const jaw = s.jaw;
+    q(this.pane3, '[data-drop="jaw"]').hidden = !!jaw;
+    q(this.pane3, '[data-sample-jaw]').hidden = !s.sample || !!jaw;
+    q(this.pane3, '[data-jawcard]').hidden = !jaw;
+    q(this.pane3, '[data-next="3"]').hidden = !jaw && !s.jawSkipped;
+    if (jaw) {
+      const chip = q(this.pane3, '[data-jaw-chip]');
+      chip.replaceChildren(icon('check', 14), c.s3.ready);
+      const b = computeBoundsCached(jaw.mesh);
+      q(this.pane3, '[data-jaw-meta]').textContent = fmt(app.lang, c.s3.meta, {
+        format: jaw.format.toUpperCase(), color: s.jawColors ? c.s3.withColor : '', triangles: num(app.lang, countTriangles(jaw.mesh)), size: num(app.lang, b, 0),
+      });
+    }
+    fill(q(this.pane3, '[data-notes="3"]'), this.jawWarnings);
+  }
+
+  private renderAlign(): void {
+    const app = this.app, s = app.s, c = app.c, g = this.guided;
+    const jaw = !!s.jaw;
+    q(this.pane4, '[data-s4-title]').textContent = jaw ? c.s4.titleAlign : c.s4.titleReview;
+    q(this.pane4, '[data-s4-text]').textContent = jaw ? c.s4.textAlign : c.s4.noJaw;
+    q(this.pane4, '[data-sec="align"]').hidden = !jaw || !!g;
+    q(this.pane4, '[data-sec="guided"]').hidden = !g;
+    q(this.pane4, '[data-sec="manual"]').hidden = !jaw || !!g;
+    q(this.pane4, '[data-sec="review"]').hidden = jaw;
+    if (!jaw) fill(q(this.pane4, '[data-list="implants4"]'), app.implantRows(4));
+    const running = !!this.alignJob;
+    for (const b of qa(this.pane4, '[data-align]')) b.setAttribute('aria-disabled', String(running));
+    q(this.pane4, '[data-align="refine"]').hidden = !s.alignment;
+    const captureOk = canMatchCapture(activeSites(s), s.components);
+    const surf = q(this.pane4, '[data-surf-group]');
+    setChecked(surf, s.surfaces, 'data-surf');
+    q(surf, '[data-surf="capture"]').setAttribute('aria-disabled', String(!captureOk));
+    q(this.pane4, '[data-surf-off]').hidden = captureOk;
+    q(this.pane4, '[data-not-yet]').hidden = !!(s.alignment || s.lastAttempt) || running;
+    for (const b of qa(this.pane4, '[data-manual]')) {
+      const kind = b.dataset.manual;
+      b.setAttribute('aria-disabled', String(kind === 'undo' ? !s.undo.length : kind === 'reset' ? !s.lastAlignedPose : false));
+    }
+    this.renderResult();
+    if (g) this.renderGuided(g);
+  }
+
+  private renderResult(): void {
+    const app = this.app, s = app.s, c = app.c;
+    const box = q(this.pane4, '[data-result]');
+    const r = s.alignment ?? s.lastAttempt;
+    const key = s.measuring ? 'measuring' : r;
+    if (key === this.resultKey) return;
+    this.resultKey = key;
+    box.hidden = !r && !s.measuring;
+    if (!r && !s.measuring) { box.replaceChildren(); return; }
+    if (s.measuring || !r) {
+      box.classList.remove('is-attempt');
+      box.replaceChildren(app.chip('', c.al.measuring, 'info'));
+      return;
+    }
+    const failed = !s.alignment;
+    box.classList.toggle('is-attempt', failed);
+    const status = failed ? 'failed' : r.status;
+    const [tone, ico] = TONE[status];
+    const chip = app.chip(tone, c.al.status[status], ico);
+    chip.classList.add('xch-chip--big');
+    const q0 = DEFAULT_QUALITY, tol = Math.round(r.toleranceMm * 1000);
+    const explain = fmt(app.lang, c.al.explain[!failed && status === 'failed' ? 'weak' : status], { goodRms: q0.goodRmsMm * 1000, goodCov: q0.goodCoverage * 100, accRms: q0.acceptableRmsMm * 1000, accCov: q0.acceptableCoverage * 100, tol });
+    const metric = (value: number, label: string, help: string, unit: string, digits = 0): HTMLElement => {
+      const b = h('b', '', { text: '0' });
+      app.motion.count(b, value, (v) => `${num(app.lang, v, digits)} ${unit}`);
+      return h('div', 'xch__metric', { title: help }, b, h('span', '', { text: label }));
+    };
+    const metrics = h('div', 'xch__metrics', {},
+      metric(r.rmsMm * 1000, c.al.rms, c.al.rmsHelp, 'µm'),
+      metric(r.p95Mm * 1000, c.al.p95, c.al.p95Help, 'µm'),
+      metric(r.coverage * 100, fmt(app.lang, c.al.coverage, { tol }), fmt(app.lang, c.al.coverageHelp, { tol }), '%'));
+    const flags = r.flags.filter((f) => f !== 'visualCheckRequired').map((f) => h('li', '', { text: c.al.flags[f] }));
+    const order = orderSitesAlongArch(activeSites(s));
+    const fitOf = new Map(r.perSite.map((p) => [p.siteId, p]));
+    const rows = order.filter((x) => fitOf.has(x.id)).map((site) => {
+      const fit = fitOf.get(site.id)!;
+      const st = siteStatus(fit);
+      const show = h('button', '', { type: 'button', text: site.label, 'aria-label': fmt(app.lang, c.al.table.show, { label: site.label }) });
+      show.addEventListener('click', () => { app.viewer?.fit([site.id]); app.viewer?.pulseSites([site.id]); });
+      const stTone = st === 'good' ? ['ok', 'check'] : st === 'acceptable' ? ['info', 'info'] : st === 'weak' ? ['warn', 'warn'] : ['bad', 'bad'];
+      return h('tr', '', {}, h('th', '', { scope: 'row' }, show), h('td', 'n', { text: num(app.lang, fit.rmsMm * 1000) }), h('td', 'n', { text: `${num(app.lang, fit.coverage * 100)} %` }), h('td', '', {}, app.chip(stTone[0] as 'ok', c.al.site[st], stTone[1]!)));
+    });
+    const table = h('div', 'xch__tablewrap', { 'data-lenis-prevent': true }, h('table', 'xch__table', {},
+      h('caption', '', { text: c.al.table.caption }),
+      h('thead', '', {}, h('tr', '', {}, h('th', '', { scope: 'col', text: c.al.table.implant }), h('th', 'n', { scope: 'col', text: c.al.table.rms }), h('th', 'n', { scope: 'col', text: fmt(app.lang, c.al.table.within, { tol }) }), h('th', '', { scope: 'col', text: c.al.table.status }))),
+      h('tbody', '', {}, ...rows)));
+    box.replaceChildren(...([
+      h('div', 'xch__row', {}, chip),
+      h('p', 'xch__small', { text: explain }),
+      failed ? h('p', 'xch__label', { text: c.al.lastAttempt }) : null,
+      metrics,
+      h('p', 'xch__small', { text: `${c.al.method}: ${c.al.methods[r.method]}` }),
+      flags.length ? h('ul', 'xch__flags', {}, ...flags) : null,
+      table,
+    ].filter(Boolean) as Node[]));
+    app.motion.chip(chip);
+    app.motion.rows(rows);
+    const guided = q<HTMLElement>(this.pane4, '[data-align="guided"]');
+    guided.classList.toggle('btn--primary', failed);
+    guided.classList.toggle('btn--outline', !failed);
+  }
+
+  private renderGuided(g: Guided): void {
+    const app = this.app, c = app.c;
+    const list = q(this.pane4, '[data-list="guided"]');
+    fill(list, g.targets.map((site, i) => {
+      const placed = !!g.pairs[i], now = i === g.idx, skipped = g.skipped.has(i);
+      const li = h('li', placed ? 'is-placed' : now ? 'is-now' : '', {}, h('span', 'xch__gpnum', { text: String(i + 1) }), h('span', 'xch__rowlabel', { text: site.label }),
+        h('span', 'xch__gpstate', { text: placed ? `✓ ${c.gp.placed}` : now ? `● ${c.gp.now}` : skipped ? c.gp.skipped : `○ ${c.gp.next}` }));
+      if (placed) {
+        const redo = h('button', 'xch__textbtn', { type: 'button', text: c.gp.redo });
+        redo.addEventListener('click', () => this.guidedAction(`redo:${i}`));
+        li.append(redo);
+      }
+      return li;
+    }));
+    const alignBtn = q(this.pane4, '[data-gp="align"]');
+    alignBtn.textContent = app.plural(c.gp.align, g.order.length);
+    alignBtn.setAttribute('aria-disabled', String(!this.canAlignGuided()));
+    q(this.pane4, '[data-gp="back"]').setAttribute('aria-disabled', String(!g.order.length));
+    const note = q(this.pane4, '[data-gp-note]');
+    const n = g.order.length;
+    note.hidden = !(n > 0 && n < 3);
+    note.textContent = n === 1 ? c.gp.one : n === 2 ? c.gp.two : '';
+  }
+
+  private renderExport(): void {
+    const app = this.app, s = app.s, c = app.c;
+    const jaw = !!s.jaw;
+    q(this.pane4, '[data-ex-text]').textContent = jaw ? c.ex.textJaw : c.ex.textCapture;
+    const files = [jaw ? c.ex.files.combined : c.ex.files.combinedNoJaw, c.ex.files.replacements, c.ex.files.single, ...(jaw ? [c.ex.files.jaw] : []), c.ex.files.report, c.ex.files.readme];
+    fill(q(this.pane4, '[data-ex-files]'), files.map((t) => h('li', '', { text: t })));
+    const sites = activeSites(s);
+    q(this.pane4, '[data-sum="coords"]').textContent = jaw ? c.ex.sum.jaw : c.ex.sum.capture;
+    q(this.pane4, '[data-sum="implants"]').textContent = num(app.lang, sites.length);
+    const a = jaw ? s.alignment : null;
+    q(this.pane4, '[data-sum="alignment"]').textContent = a ? fmt(app.lang, c.ex.sum.alignmentValue, { status: c.al.status[a.status], method: c.al.methods[a.method], rms: num(app.lang, a.rmsMm * 1000) }) : c.ex.sum.none;
+    const warns: string[] = [];
+    if (a?.status === 'weak' || a?.status === 'failed') warns.push(c.ex.warnWeak);
+    if (a?.status === 'ambiguous') warns.push(c.ex.warnAmbiguous);
+    if (a?.method === 'manual') warns.push(c.ex.warnManual);
+    const prov = sites.filter((x) => x.flags.provisional).length;
+    if (prov) warns.push(app.plural(c.ex.warnProvisional, prov));
+    if (sites.some((x) => x.flags.indexAmbiguous)) warns.push(c.ex.warnRotation);
+    fill(q(this.pane4, '[data-ex-warn]'), warns.map((t) => h('li', '', {}, icon('warn', 16), t)));
+    const blocker = exportBlocker(s);
+    const reason = blocker === 'geometry' ? app.plural(c.s2.need, missingGeometry(s)) : blocker === 'notAligned' ? `${c.ui.notAligned.t} ${c.ui.notAligned.b}` : blocker === 'measuring' ? c.al.measuring : '';
+    q(this.pane4, '[data-reason="4"]').textContent = reason;
+    const btn = q(this.pane4, '[data-export]');
+    if (!btn.classList.contains('is-busy')) btn.setAttribute('aria-disabled', String(!!blocker));
+    if (!s.exportedSinceChange && this.exportUrl) { const u = this.exportUrl; this.exportUrl = null; app.later(() => URL.revokeObjectURL(u), 1000); this.exportLine = ''; }
+    const last = q(this.pane4, '[data-ex-last]');
+    last.hidden = !this.exportLine;
+    q(last, 'span').textContent = this.exportLine;
+  }
+
+  /** Cancels every running alignment or measurement (new case, dispose). */
+  cancelAll(): void {
+    this.alignJob?.abort();
+    this.alignJob = null;
+    this.jawJob?.abort();
+    this.stopMeasure();
+    this.leaveGuided(false);
+  }
+
+  dispose(): void {
+    this.cancelAll();
+    clearTimeout(this.measureTimer);
+    if (this.exportUrl) URL.revokeObjectURL(this.exportUrl);
+    this.exportUrl = null;
+  }
+
+  /** Brings the export section into view (skip link). */
+  focusExport(): void {
+    const el = q(this.pane4, '#xch-export');
+    bringIntoView(el);
+    el.focus({ preventScroll: true });
+  }
+}
+
+const boundsCache = new WeakMap<object, number>();
+function computeBoundsCached(mesh: { positions: Float32Array }): number {
+  let d = boundsCache.get(mesh);
+  if (d === undefined) {
+    const b = computeBounds(mesh as never);
+    d = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
+    boundsCache.set(mesh, d);
+  }
+  return d;
+}

@@ -32,6 +32,19 @@ const l = t.pages.libraries;
     </div>
   </section>
 
+  <section class="section xch-band" data-scene>
+    <div class="wrap">
+      <div class="card card--grad xch-band__box" data-reveal="up">
+        <div class="stack">
+          <span class="pill">{l.xchange.pill}</span>
+          <h2 class="h-lg">{l.xchange.title}</h2>
+          <p>{l.xchange.text}</p>
+        </div>
+        <a class="btn btn--white" href={href('/ddt-xchange/')} data-magnetic>{l.xchange.cta} <span class="arrow">→</span></a>
+      </div>
+    </div>
+  </section>
+
   <Cta title={l.ctaTitle} text={l.ctaText} />
   <LibraryDownload />
 </Base>
@@ -46,5 +59,10 @@ const l = t.pages.libraries;
   .step { display: grid; gap: .6rem; align-content: start; }
   .step b { font-size: 2.4rem; font-weight: 800; color: transparent; -webkit-text-stroke: 1.5px rgba(4,107,210,.5); line-height: 1; }
   .step h3 { font-size: 1.15rem; }
+  .xch-band { padding-top: 0; }
+  .xch-band__box { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem 2rem; }
+  .xch-band h2 { color: #fff; }
+  .xch-band .stack { max-width: 60ch; }
+  .xch-band .pill { background: rgba(255,255,255,.14); color: #fff; }
   @media (max-width: 960px) { .lib { order: -1; } .lib__disc { width: min(240px, 60vw); } .lib__disc b { font-size: 1.4rem; } }
 </style>

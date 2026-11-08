@@ -17,4 +17,6 @@ export default defineConfig({
   },
   integrations: [sitemap({ i18n: { defaultLocale: 'en', locales: { en: 'en-US', es: 'es' } } })],
   build: { inlineStylesheets: 'auto' },
+  // DDT Xchange workers are ES modules (new Worker(new URL(...), { type: 'module' })), emitted under /_astro/
+  vite: { worker: { format: 'es' } },
 });

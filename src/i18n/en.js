@@ -19,6 +19,8 @@ export default {
     termsDesc: 'Terms and conditions of sale of equipment and physical products by Fernando Polanco DDT LLC.',
     refundDesc: 'Returns, refunds and course cancellation policy for Experts DDT products and services.',
     privacyDesc: 'How Fernando Polanco DDT LLC collects, uses and protects personal information on expertsddt.com.',
+    xchange: 'DDT Xchange: free implant geometry exchange',
+    xchangeDesc: 'Free browser tool for labs and clinics: put library geometry on implant positions, align to the jaw scan and export for Exocad. Files never leave your computer.',
   },
   nav: {
     skip: 'Skip to content',
@@ -118,7 +120,7 @@ export default {
   footer: {
     blurb: 'Fernando Polanco DDT LLC. High-level design services, digital dentistry implementations, hands-on training and comprehensive clinical & technical support since 2019.',
     navigate: 'Navigate', portal: 'Doctor portal', contact: 'Get to know more about us',
-    signup: 'Sign up as doctor', login: 'Log in', libraries: 'Free Exocad libraries', support: 'Technical support',
+    signup: 'Sign up as doctor', login: 'Log in', libraries: 'Free Exocad libraries', xchange: 'DDT Xchange (free tool)', support: 'Technical support',
     location: 'Florida, United States', languages: 'Available in English and Spanish',
     legal: { terms: 'Terms & conditions', refund: 'Refund policy', privacy: 'Privacy policy' },
     rights: 'All rights reserved.',
@@ -184,6 +186,12 @@ export default {
       ],
       ctaTitle: 'Missing a system? <span class="cta__accent">Tell us.</span>',
       ctaText: 'We keep expanding the library. Send us the manufacturer and component you need and our team will get back to you.',
+      xchange: {
+        pill: 'Free tool',
+        title: 'Positions and jaw scan that won’t line up?',
+        text: 'DDT Xchange puts your library geometry on every implant position, aligns it to the jaw scan and exports a ZIP for Exocad. Free, in your browser.',
+        cta: 'Open DDT Xchange',
+      },
     },
     contact: {
       eyebrow: 'Contact', title: 'Let’s talk about your workflow.',

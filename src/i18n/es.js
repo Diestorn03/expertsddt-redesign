@@ -18,6 +18,8 @@ export default {
     termsDesc: 'Términos y condiciones de venta de equipos y productos físicos de Fernando Polanco DDT LLC.',
     refundDesc: 'Política de devoluciones, reembolsos y cancelación de cursos de Experts DDT.',
     privacyDesc: 'Cómo Fernando Polanco DDT LLC recopila, usa y protege la información personal en expertsddt.com.',
+    xchange: 'DDT Xchange: geometrías de implantes, gratis',
+    xchangeDesc: 'Herramienta gratis para laboratorios y clínicas: geometría de librería en las posiciones de implantes, alineada al escaneo y lista para Exocad. Sin subir archivos.',
   },
   nav: {
     skip: 'Ir al contenido',
@@ -117,7 +119,7 @@ export default {
   footer: {
     blurb: 'Fernando Polanco DDT LLC. Servicios de diseño de alto nivel, implementaciones de odontología digital, capacitación práctica y soporte clínico y técnico integral desde 2019.',
     navigate: 'Navegación', portal: 'Doctor Portal', contact: 'Conoce más sobre nosotros',
-    signup: 'Regístrate como doctor', login: 'Iniciar sesión', libraries: 'Librerías gratis para Exocad', support: 'Soporte técnico',
+    signup: 'Regístrate como doctor', login: 'Iniciar sesión', libraries: 'Librerías gratis para Exocad', xchange: 'DDT Xchange (herramienta gratis)', support: 'Soporte técnico',
     location: 'Florida, Estados Unidos', languages: 'Disponible en inglés y español',
     legal: { terms: 'Términos y condiciones', refund: 'Política de reembolso', privacy: 'Política de privacidad' },
     rights: 'Todos los derechos reservados.',
@@ -183,6 +185,12 @@ export default {
       ],
       ctaTitle: '¿Te falta un sistema? <span class="cta__accent">Cuéntanos.</span>',
       ctaText: 'Seguimos ampliando la librería. Envíanos el fabricante y el componente que necesitas y nuestro equipo te responderá.',
+      xchange: {
+        pill: 'Herramienta gratis',
+        title: '¿Posiciones y escaneo que no coinciden?',
+        text: 'DDT Xchange coloca la geometría de tu librería en cada posición de implante, la alinea con el escaneo de la arcada y exporta un ZIP para Exocad. Gratis y en tu navegador.',
+        cta: 'Abrir DDT Xchange',
+      },
     },
     contact: {
       eyebrow: 'Contacto', title: 'Hablemos de tu flujo de trabajo.',

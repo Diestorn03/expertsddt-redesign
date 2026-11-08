@@ -445,6 +445,9 @@ function boot() {
 }
 
 initLenis();
+// app-like pages (DDT Xchange) pause or drive the shared smooth scroll through events: the Lenis instance is private
+document.addEventListener('scroll-lock', (e) => (lenis ? (e.detail ? lenis.stop() : lenis.start()) : (document.body.style.overflow = e.detail ? 'hidden' : '')));
+document.addEventListener('scroll-to', (e) => (lenis ? lenis.scrollTo(e.detail, { offset: -90 }) : e.detail.scrollIntoView()));
 document.addEventListener('astro:page-load', boot);
 let bpTimer;
 window.matchMedia('(max-width: 1180px)').addEventListener('change', () => { clearTimeout(bpTimer); bpTimer = setTimeout(() => { window.scrollTo(0, 0); lenis?.scrollTo(0, { immediate: true }); boot(); }, 150); });
