@@ -36,6 +36,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
+/* a #fragment jump (direct load, Back, links handled natively without Lenis) lands below the fixed nav, like the Lenis jumps */
+:target { scroll-margin-top: var(--nav-h); }
 html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto; }
 .lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }

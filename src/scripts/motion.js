@@ -69,7 +69,8 @@ document.addEventListener('click', (e) => {
   try { el = document.getElementById(decodeURIComponent(a.hash.slice(1))); } catch {}
   if (!el) return;
   e.preventDefault();
-  lenis.scrollTo(el, { offset: -navOffset() });
+  // Lenis already subtracts the target's scroll-margin (global.css gives :target the nav height): never count it twice
+  lenis.scrollTo(el, { offset: (parseFloat(getComputedStyle(el).scrollMarginTop) || 0) - navOffset() });
   // what a native fragment jump does for keyboard users (skip link): move focus to the target
   if (!el.matches('a, button, input, select, textarea, [tabindex]')) el.setAttribute('tabindex', '-1');
   el.focus({ preventScroll: true });
@@ -182,7 +183,12 @@ function whenSeen(el, start, fn) {
   io.observe(el);
   cleanups.push(() => io.disconnect());
 }
-const playWhenSeen = (el, start, tween, onSeen) => { tween.pause(); whenSeen(el, start, () => { onSeen?.(); tween.play(); }); };
+// Once per element: a layout rebuild (crossing 1180 px) must not hide and replay what the reader has already seen.
+const played = new WeakSet();
+const playWhenSeen = (el, start, tween, onSeen) => {
+  if (played.has(el)) { onSeen?.(); tween.progress(1); return; }
+  tween.pause(); whenSeen(el, start, () => { played.add(el); onSeen?.(); tween.play(); });
+};
 
 const REVEALS = {
   up:    { y: 56, opacity: 0 },
@@ -309,6 +315,7 @@ function initHero() {
 }
 
 /* ---------------- Pillars: horizontal scroll ---------------- */
+let pillarsPin = null; // { yOf(panel), current() } while the horizontal chapter is pinned
 function initPillars() {
   const wrap = document.querySelector('#pillars');
   if (!wrap) return;
@@ -332,6 +339,11 @@ function initPillars() {
       },
     },
   });
+  const st = tween.scrollTrigger;
+  // page position at which a panel fills the screen (keyboard focus, and the reader's place across a 1180 px rebuild)
+  const yOf = (p) => st.start + Math.min(1, p.offsetLeft / Math.max(1, scroll())) * (st.end - st.start);
+  pillarsPin = { yOf, current: () => (window.scrollY >= st.start && window.scrollY <= st.end ? panels[Math.round(st.progress * (panels.length - 1))] : null) };
+  cleanups.push(() => { pillarsPin = null; });
   const reveals = new Map();
   panels.forEach((p) => {
     if (p.classList.contains('pillar--intro')) return; // its heading/lead/hint already reveal with data-split / data-reveal on the vertical scroll
@@ -343,8 +355,7 @@ function initPillars() {
   on(wrap, 'focusin', (e) => {
     const p = e.target.closest('.pillar');
     if (!p || !e.target.matches(':focus-visible')) return;
-    const st = tween.scrollTrigger;
-    jump(st.start + Math.min(1, p.offsetLeft / Math.max(1, scroll())) * (st.end - st.start));
+    jump(yOf(p));
     st.getTween?.()?.progress(1); // skip the scrub lag
     const r = reveals.get(p);
     if (r && r.progress() < 1) { r.scrollTrigger?.kill(); r.progress(1); }
@@ -522,6 +533,8 @@ const outer = (s) => (s.parentElement?.classList.contains('pin-spacer') ? s.pare
 // element at that line and how far into it (survives reflow better than a fraction of a whole section).
 function scenePoint() {
   const line = navOffset() + 1;
+  const panel = pillarsPin?.current(); // pinned pillars: the panel on screen, not a fraction of the (differently sized) chapter
+  if (panel) return { el: panel, f: 0 };
   const scenes = [...document.querySelectorAll('[data-scene]')];
   const i = scenes.findIndex((s) => { const o = outer(s); if (o === s) return false; const r = o.getBoundingClientRect(); return r.top <= line && r.bottom > line; });
   if (i >= 0) { const r = outer(scenes[i]).getBoundingClientRect(); return { i, f: (line - r.top) / r.height }; }
@@ -541,6 +554,8 @@ function restore() {
     try { el = document.getElementById(decodeURIComponent(p.hash.slice(1))); } catch {}
     if (!el) return;
     y = el.getBoundingClientRect().top + window.scrollY - navOffset();
+  } else if (pillarsPin && p.el?.closest?.('.pillar')) {
+    y = pillarsPin.yOf(p.el.closest('.pillar'));
   } else if (p.i != null || p.el) {
     const o = p.el || outer(document.querySelectorAll('[data-scene]')[p.i] || document.body);
     if (!o.isConnected) return;
@@ -592,7 +607,7 @@ initLenis();
 let swapped = false;
 boot();
 document.addEventListener('astro:page-load', () => { if (!swapped) return; swapped = false; boot(); });
-document.addEventListener('astro:before-swap', (e) => { navType = e.navigationType; teardown(); });
+document.addEventListener('astro:before-swap', (e) => { navType = e.navigationType; lastPoint = null; teardown(); });
 document.addEventListener('astro:after-swap', () => {
   swapped = true;
   document.documentElement.classList.add('motion'); // the swap replaced every <html> attribute
@@ -603,12 +618,15 @@ document.addEventListener('astro:after-swap', () => {
 });
 
 // Crossing 1180 px rebuilds the home scenes (pinned ↔ stacked). Other pages have nothing layout-specific to rebuild.
-let bpTimer;
+// The reader's place is noted whenever scrolling stops, in the layout they were reading: by the time the media query
+// fires, the page has already reflowed at the new width and scroll anchoring does not survive the pinned ↔ stacked switch.
+let bpTimer, lastPoint = null;
+ScrollTrigger.addEventListener('scrollEnd', () => { lastPoint = scenePoint(); });
 window.matchMedia('(max-width: 1180px)').addEventListener('change', () => {
   clearTimeout(bpTimer);
   bpTimer = setTimeout(() => {
     if (!document.querySelector('#hero, #pillars')) return;
-    pending = scenePoint(); // same section, same progress through it, after the rebuild
+    pending = (lastPoint?.el && !lastPoint.el.isConnected ? null : lastPoint) || scenePoint(); // same place, after the rebuild
     teardown();
     window.scrollTo(0, 0); lenis?.reset(); // the pins are built from the top, then the reader is put back
     boot();
