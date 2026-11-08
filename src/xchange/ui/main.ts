@@ -66,10 +66,10 @@ export function mount(root: HTMLElement): Mounted {
     if (!app) {
       wantSample = true;
       void start();
-    } else void loadSample(app, b);
+    } else void start().then((a) => { if (a) void loadSample(a, b); }); // `app` is set before its init() ends
   }, { signal });
   section.querySelector('[data-new-case]')?.addEventListener('click', async (e) => {
-    const a = app ?? (await start());
+    const a = await start(); // resolves once init() has ended (`app` is set before)
     if (!a) return;
     if (a.hasUnsaved() && !(await a.confirm('new', e.target as Element))) return;
     a.resetCase(null);

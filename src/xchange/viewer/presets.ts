@@ -6,7 +6,22 @@
 import type { Arch, Vec3 } from '../core/types';
 
 export type Preset = 'occlusal' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
-export const PRESET_KEYS: Readonly<Record<string, Preset>> = { '1': 'occlusal', '2': 'front', '3': 'back', '4': 'left', '5': 'right', '6': 'top' };
+
+/** exocad's numpad views, on the keypad and the number row; 0 is the Default view (occlusal for the arch), 7 and 9 nothing. */
+export const VIEW_KEYS: Readonly<Record<string, Preset | 'fit'>> = { '1': 'front', '2': 'bottom', '3': 'back', '4': 'left', '5': 'fit', '6': 'right', '8': 'top', '0': 'occlusal' };
+
+/**
+ * The view a key asks for. The number row goes by `code`, whatever the layout types there (AZERTY: & é " ' …); the keypad
+ * only with NumLock on (`key` is its digit; with NumLock off it sends Home, End, the arrows and PageUp/PageDown, which keep
+ * their own meaning). A symbol wins (Swiss and Czech layouts type + on the 1 key). An event without a `code` (some virtual
+ * keyboards) goes by its digit.
+ */
+export function viewForKey(code: string, key: string): Preset | 'fit' | null {
+  if (['+', '-', '=', '_', '?'].includes(key)) return null;
+  const row = /^Digit(\d)$/.exec(code)?.[1], pad = /^Numpad(\d)$/.exec(code)?.[1];
+  const digit = row ?? (pad !== undefined ? (pad === key ? pad : null) : !code && /^\d$/.test(key) ? key : null);
+  return (digit !== null && VIEW_KEYS[digit]) || null;
+}
 
 /** `from`: unit direction from the target to the camera; `up`: camera up. */
 export function presetView(preset: Preset, arch: Arch | null): { from: Vec3; up: Vec3 } {

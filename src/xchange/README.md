@@ -57,6 +57,11 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 - Aspecto del visor: el look A "Fiel a exocad" (fondo índigo, encía con los colores del escáner, piezas beige-dorado,
   aro de selección), con barra de iconos, dial de vistas, barra de escala y leyenda con las marcas en su valor
   (`VIEWER-POLISH.md` §3.5).
+- Navegación como en exocad (`VIEWER-POLISH.md` §4.14): vistas con el teclado numérico o la fila de números (1 frontal,
+  2 inferior, 3 posterior, 4 izquierda, 5 encuadrar, 6 derecha, 8 superior, 0 vista inicial), flechas para desplazar,
+  Shift + flechas y Re Pág/Av Pág para girar, Inicio fija el centro de giro, Ctrl + arrastrar en cualquier parte gira
+  el conjunto (paso 4), mantener presionado en tablet fija el centro de giro, Shift / Ctrl + clic central sobre un
+  objeto cambia su transparencia o lo oculta, y S lo vuelve a mostrar.
 
 **Cómo probar la demo:** `npm run build` y `npx astro preview`, abrir `/ddt-xchange/` y pulsar "Try a sample case"
 (o "Probar un caso de ejemplo"). Se genera en el navegador un caso sintético (`sample/`: arcada superior desdentada
@@ -64,7 +69,7 @@ All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángul
 el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
 solo (Good fit, unos 4 µm) y exporta el ZIP.
 
-**Probado:** 403 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 446 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones

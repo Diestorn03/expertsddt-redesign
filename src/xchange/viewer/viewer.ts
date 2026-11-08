@@ -114,6 +114,9 @@ export interface PartHit {
   um: number | null;
 }
 
+/** What a modified middle click acts on: the jaw scan, a replacement or a captured scan body. */
+export type SceneObject = 'jaw' | 'part' | 'capture';
+
 interface Implant {
   site: SiteVisual;
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial>;
@@ -837,6 +840,24 @@ export class Viewer {
     if (!jawOnly) for (const i of this.implants.values()) if (i.mesh.visible) targets.push(i.mesh);
     const hit = this.raycaster.intersectObjects(targets, false)[0];
     return hit ? [hit.point.x, hit.point.y, hit.point.z] : null;
+  }
+
+  /**
+   * The object drawn under (x, y): visible, at least 10 % opaque; a part or captured body within DEPTH_BIAS_MM behind the
+   * scan counts as on top, as it is drawn. ponytail: three raycast, linear in triangles (≈ 0.4 s on a 3 M-triangle jaw),
+   * fine for a rare modified middle click; slice B's GPU pick replaces it.
+   */
+  pickObject(x: number, y: number): SceneObject | null {
+    this.updateCamera();
+    this.raycaster.setFromCamera(this.ndc(x, y), this.camera);
+    const kind = new Map<THREE.Object3D, SceneObject>();
+    const add = (m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>, k: SceneObject): void => { if (m.visible && m.material.opacity >= 0.1) kind.set(m, k); };
+    if (this.jaw) add(this.jaw, 'jaw');
+    for (const i of this.implants.values()) add(i.mesh, 'part');
+    for (const g of this.ghosts) add(g, 'capture');
+    const hits = this.raycaster.intersectObjects([...kind.keys()], false);
+    const top = hits.find((h) => kind.get(h.object) !== 'jaw' && h.distance <= hits[0]!.distance + DEPTH_BIAS_MM) ?? hits[0];
+    return top ? kind.get(top.object)! : null;
   }
 
   /* ---------------- labels ---------------- */

@@ -741,7 +741,9 @@ roving tabindex (one Tab stop each, arrow keys move):
   legend follows; `aria-disabled` before a measurement or a jaw scan.
 - Views dial, bottom right: Fit in the hub; Top, Back, Right, Bottom, Front, Left at the ends of three faint view axes
   (screen up/down and left/right, Front/Back on the depth diagonal); below, the default view button "Occlusal"
-  (tooltip "Initial view (occlusal)"). `aria-pressed` on the last preset used; tooltips carry the key. 32 px discs on a
+  (tooltip "Initial view (occlusal)"). `aria-pressed` on the last preset used, cleared as soon as a drag, the wheel, a
+  pinch or a camera key moves the camera off it; tooltips (`view.tip`, "Front · 1") and `aria-keyshortcuts` carry the key
+  from `VIEW_KEYS` (§6.3). Enter or Space on a view button announces `say.view`; a mouse click does not. 32 px discs on a
   50 px radius, at least 6 px apart; 44 px on a 66 px radius on touch. Discs carry a tint and a hairline.
 - Before the toolbar, a skip link visible on focus, "Skip the 3D view", jumps to the Export section (step 4) or to
   `#help`.
@@ -755,14 +757,19 @@ in `viewer/presets.ts`.
 
 | Preset | Key | Camera from | Up |
 |---|---|---|---|
-| Fit | 0, Home | keeps the direction, frames everything visible | — |
-| Occlusal | 1 | lower: +Z · upper: −Z | −Y (anterior at the top) |
-| Front | 2 | −Y | +Z |
+| Occlusal (the default view) | 0 | lower: +Z · upper: −Z | −Y (anterior at the top) |
+| Front | 1 | −Y | +Z |
+| Bottom | 2 | −Z | −Y |
 | Back | 3 | +Y | +Z |
 | Left (patient's) | 4 | +X | +Z |
-| Right (patient's) | 5 | −X | +Z |
-| Top | 6 | +Z | −Y |
-| Bottom | — (A2) | −Z | −Y |
+| Fit | 5 | keeps the direction, frames everything visible | — |
+| Right (patient's) | 6 | −X | +Z |
+| Top | 8 | +Z | −Y |
+
+Keys follow exocad's numpad (`VIEW_KEYS` and `viewForKey(code, key)` in `viewer/presets.ts`): the number row by
+`event.code` whatever the layout types there (an AZERTY row types `& é " '`), the keypad only with NumLock on (with it
+off the keypad sends Home, End, the arrows and PageUp/PageDown, which keep their meaning), a typed `+ - = _ ?` keeps its
+meaning (Swiss and Czech layouts type `+` on the 1 key), 7 and 9 do nothing. Home is no longer Fit (§6.7).
 
 Framing (Default view, presets, Fit): the bounding box of what is shown (jaw, replacements, captured bodies that are
 visible), every corner checked in camera space, fills `LOOK.frame` = 80 % of the stage on its limiting side, a margin
@@ -782,8 +789,12 @@ to the button).
   0–100 %; Perspective (field of view) 1–60°, default 1° (near-orthographic, exocad-like); Rotation speed 1–5, default
   3 (scales orbit and set-rotation gain).
 - Field of view and rotation speed persist in `localStorage['ddt-xchange:view']` (wrapped in try/catch).
-- Shortcuts: T toggles jaw opacity 100 % ↔ 30 % (also Ctrl/Shift + middle click and the icon bar); C toggles the color
-  map (also the icon bar). The legend shows exactly while the map is on and measured, whichever control changed it.
+- Shortcuts: T toggles jaw opacity 100 % ↔ 30 % (also Shift + middle click on the jaw and the icon bar); Shift + middle
+  click on a replacement toggles geometry opacity 100 % ↔ 30 %; C toggles the color map (also the icon bar). The legend
+  shows exactly while the map is on and measured, whichever control changed it.
+- Ctrl/⌘ + middle click hides what is under the pointer by turning its switch off (Jaw scan, Replacements or Captured
+  scan bodies) and announces `say.hidden`; S or Ctrl/⌘ + Shift + middle click turns back on what was hidden that way
+  (`say.shown`). The set is kept across a viewer restart and shown again, silently, when a new case starts.
 
 ### 6.5 Color map and legend
 
@@ -813,6 +824,13 @@ to the button).
   keyboard until the crosshair sits on the top of the scan body, then Enter raycasts from the center. Backspace removes
   the last point, Esc cancels. The instructions are in the panel and in the stage's `aria-describedby`; each placement
   is announced.
+- **Rotation center** (any step): a middle click on a surface, Home (under the mouse when it is over the canvas, else at
+  the stage center, where the crosshair is; a hit announces `say.pivot`, a miss `say.pivotMiss`), or on a tablet a touch
+  and hold: one finger still within 8 px for 500 ms. A 32 px `--xch-active` ring with the crosshair's dark halo shows
+  under the finger from 150 ms and grows to full size at 500 ms (CSS `scale` on `var(--ease-out)`; with reduced motion
+  it appears at 500 ms, full size); the center moves there (.35 s) and the ring stays until the finger lifts. Lifting is
+  no tap; moving on turns the view; moving more than 8 px or a second finger before 500 ms cancels the hold. Over
+  nothing the ring goes and the center stays. `.xch__stage` has `-webkit-touch-callout: none`.
 
 ### 6.7 Camera and implant-set controls (exocad mapping)
 
@@ -825,26 +843,33 @@ Trackball rotation about the orbit target with quaternions.
 | Right-drag | rotate | — |
 | Left-drag on empty space or on the jaw | rotate | — |
 | Left-drag on an implant | — | move the whole set in the camera plane |
-| Ctrl or ⌘ + left-drag on an implant | — | rotate the set (arcball about its bounding-box center); + Shift: only the dominant axis |
+| Ctrl or ⌘ + left-drag anywhere on the canvas | rotate (outside step 4) | rotate the set (arcball about its bounding-box center); + Shift (before or during the drag): only the dominant axis |
 | Middle-drag, Shift + drag, left + right drag | pan | — |
 | Wheel, trackpad pinch | zoom toward the pointer (dolly along the cursor ray to the target plane) | — |
 | Middle click on a surface | rotation center there (.35 s tween) | — |
-| Ctrl or Shift + middle click | jaw opacity 100 % ↔ 30 % | — |
+| Shift + middle click | jaw opacity 100 % ↔ last value (on the jaw), geometry opacity 100 % ↔ 30 % (on a replacement) | — |
+| Ctrl or ⌘ + middle click · + Shift | hide what is under the pointer (§6.4) · show what was hidden | — |
 | Double-click | Fit | — |
-| Touch: one finger · two fingers · double tap | rotate · pinch zoom + pan · Fit | pad only (no touch drags on the set) |
-| Arrow keys | rotate 10° | — |
-| Shift + arrow keys | pan 5 % of the view height | — |
-| + / − | zoom 15 % | — |
-| 0, Home · 1–6 | Fit · presets | — |
-| T · C · ? | jaw transparency · color map · shortcuts | — |
+| Touch: one finger · two fingers · double tap · touch and hold | rotate · pinch zoom + pan · Fit · rotation center (§6.6) | pad only (no touch drags on the set) |
+| Arrow keys | pan 5 % of the view height (exocad: the cursor keys move the view) | — |
+| Shift + arrow keys · PageUp / PageDown | rotate 10° about the screen axes · about the screen's vertical axis (PageUp = Shift + ←) | — |
+| + / − (also = and _) | zoom 15 % at the center | — |
+| 1 · 2 · 3 · 4 · 5 · 6 · 8 · 0 | Front · Bottom · Back · Left · Fit · Right · Top · Occlusal (§6.3) | — |
+| Home | rotation center under the mouse, else at the stage center (§6.6) | — |
+| T · C · S · ? | jaw transparency · color map · show what was hidden · shortcuts | — |
 | Ctrl or ⌘ + Z | — | undo the last set move |
 
-Single-key shortcuts act only while focus is inside the stage (WCAG 2.1.4); Ctrl/⌘+Z acts while focus is inside the
-workspace but not in a text field. The context menu is suppressed on the canvas (right-drag rotates). Cursors: `grab` /
-`grabbing` over implants in step 4, `crosshair` in guided mode. Holding Ctrl/⌘ over the stage in step 4 shows the chip
-"Drag to rotate · Shift: one axis" (`--xch-active` fill, `#1e293b` text). Shift + drag always pans the camera, even
-over an implant; only Ctrl/⌘ turns a drag on an implant into a rotation. Gains: camera rotation 0.25°/px and set rotation 0.3°/px, both ×
-speed/3; pan maps pixels at the target depth; wheel step 12 %.
+Single-key shortcuts act only while focus is inside the stage (WCAG 2.1.4), with no Ctrl, ⌘ or Alt held (Shift is
+allowed); every handled key calls `preventDefault()`, so PageUp/PageDown never scroll the page from the stage. Held
+camera keys repeat one step per OS repeat; a view key, Home, a toggle or Enter acts once however long it is held. Keys
+that start a camera tween (views, Fit, Home) never stop it; keys that move the camera themselves stop a running tween
+first, as every drag, wheel and pinch does (interrupt, never queue). Camera keys never move the implant set. Ctrl/⌘+Z acts while focus is inside the workspace but not in a text field. The context menu
+is suppressed on the canvas (right-drag rotates). Cursors: `grab` / `grabbing` over implants in step 4, `crosshair` in
+guided mode. Holding Ctrl/⌘ over the stage in step 4 shows the chip "Drag to rotate · Shift: one axis" (`--xch-active`
+fill, `#1e293b` text): it holds anywhere on the canvas. Shift + drag pans the camera, even over an implant, unless Ctrl/⌘
+is held in step 4. Gains: camera rotation 0.25°/px and set rotation 0.3°/px, both × speed/3; pan maps pixels at the
+target depth; wheel step 12 %. Modified middle clicks pick with a three raycast over the visible meshes (opacity ≥ 10 %;
+a part within 20 µm behind the scan counts as on top, as drawn), linear in triangles: slice B makes it a GPU pick.
 
 **Adjust pad** (step 4 with a jaw): a glass toolbar at the stage's top left, three columns of 36 px icon buttons (44 px
 on touch): Rotate one column per axis (tilt, turn, roll), Move as an arrow-key cluster, Flip; groups separated by a
@@ -1273,7 +1298,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 |---|---|---|
 | `view.label` | 3D view of the case | Vista 3D del caso |
 | `view.role` | 3D viewer | visor 3D |
-| `view.help` | Drag or use the arrow keys to turn the view, Shift to pan, the wheel or + and − to zoom. Press ? for every shortcut. | Arrastra o usa las flechas para girar la vista, Shift para desplazarla, la rueda o + y − para acercar. Pulsa ? para ver todos los atajos. |
+| `view.help` | Drag or use Shift + the arrow keys to turn the view; the arrow keys or Shift + drag pan; the wheel or + and − zoom. Press ? for every shortcut. | Arrastra o usa Shift + flechas para girar la vista; las flechas o Shift + arrastrar la desplazan; la rueda o + y − acercan. Pulsa ? para ver todos los atajos. |
 | `view.empty` | Your case will appear here | Tu caso aparecerá aquí |
 | `view.emptyText` | Drop files anywhere in the workspace, or try the sample case. | Suelta archivos en cualquier parte del área de trabajo o prueba el caso de ejemplo. |
 | `view.skip` | Skip the 3D view | Saltar el visor 3D |
@@ -1287,6 +1312,10 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `view.left` | Left | Izquierda |
 | `view.right` | Right | Derecha |
 | `view.top` | Top | Superior |
+| `view.bottom` | Bottom | Inferior |
+| `view.defaultView` | Initial view (occlusal) (the Occlusal pill's tooltip) | Vista inicial (oclusal) |
+| `view.xray` | Jaw transparency | Transparencia del escaneo |
+| `view.tip` | {name} · {key} | {name} · {key} |
 | `view.display` | Display | Visualización |
 | `view.shortcuts` | Shortcuts | Atajos |
 | `view.fullscreen` | Full screen | Pantalla completa |
@@ -1340,29 +1369,32 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `keys.colAction` | Action | Acción |
 | `keys.colMouse` | Mouse | Mouse |
 | `keys.colKeys` | Keyboard (3D view focused) | Teclado (con el visor activo) |
-| `keys.touch` | On a tablet: one finger turns the view, two fingers zoom and pan, a double tap fits everything; move the implant set with the adjust panel. | En una tablet: un dedo gira la vista, dos dedos acercan y desplazan, un doble toque encuadra todo; mueve el conjunto con el panel de ajuste. |
+| `keys.touch` | On a tablet: one finger turns the view, two fingers zoom and pan, a double tap fits everything, touch and hold sets the rotation center; move the implant set with the adjust panel. | En una tablet: un dedo gira la vista, dos dedos acercan y desplazan, un doble toque encuadra todo y mantener presionado fija el centro de giro; mueve el conjunto con el panel de ajuste. |
 | `keys.close` | Close | Cerrar |
 
 `keys.rows` (action · mouse · keyboard; "—" = none):
 
 | # | EN | ES |
 |---|---|---|
-| 1 | Turn the view · Right-drag, or left-drag on empty space · Arrow keys | Girar la vista · Arrastrar con el botón derecho, o con el izquierdo sobre un espacio vacío · Flechas |
-| 2 | Pan · Middle-drag, or Shift + drag · Shift + arrow keys | Desplazar · Arrastrar con el botón central, o Shift + arrastrar · Shift + flechas |
+| 1 | Turn the view · Right-drag, or left-drag on empty space · Shift + arrow keys, Page Up / Page Down | Girar la vista · Arrastrar con el botón derecho, o con el izquierdo sobre un espacio vacío · Shift + flechas, Re Pág / Av Pág |
+| 2 | Pan · Middle-drag, Shift + drag, or both buttons · Arrow keys | Desplazar · Arrastrar con el botón central, Shift + arrastrar, o con ambos botones · Flechas |
 | 3 | Zoom · Wheel (toward the pointer) · + and − | Acercar o alejar · Rueda (hacia el puntero) · + y − |
-| 4 | Fit everything · Double-click · 0 or Home | Encuadrar todo · Doble clic · 0 o Inicio |
-| 5 | Views · View buttons, bottom right of the view · 1 Occlusal, 2 Front, 3 Back, 4 Left, 5 Right, 6 Top | Vistas · Botones de vista, abajo a la derecha del visor · 1 Oclusal, 2 Frontal, 3 Posterior, 4 Izquierda, 5 Derecha, 6 Superior |
-| 6 | Rotation center · Middle-click on a surface · — | Centro de giro · Clic central sobre una superficie · — |
-| 7 | Jaw transparency · Ctrl or Shift + middle-click · T | Transparencia del escaneo · Ctrl o Shift + clic central · T |
-| 8 | Color map · Display menu · C | Mapa de color · Menú Visualización · C |
-| 9 | Select an implant (step 2) · Click it · Implant list | Seleccionar un implante (paso 2) · Clic sobre él · Lista de implantes |
-| 10 | Move the implant set (step 4) · Drag an implant · Adjust panel | Mover el conjunto (paso 4) · Arrastrar un implante · Panel de ajuste |
-| 11 | Rotate the implant set (step 4) · Ctrl or ⌘ + drag (Shift: one axis) · Adjust panel (Shift: 5°) | Girar el conjunto (paso 4) · Ctrl o ⌘ + arrastrar (Shift: un eje) · Panel de ajuste (Shift: 5°) |
-| 12 | Undo a move · — · Ctrl or ⌘ + Z | Deshacer un movimiento · — · Ctrl o ⌘ + Z |
-| 13 | Place a guided point · Click on the jaw · Enter at the crosshair | Colocar un punto guiado · Clic en el escaneo · Enter sobre la mira |
-| 14 | Remove the last point · — · Backspace | Quitar el último punto · — · Retroceso |
-| 15 | Cancel guided points, close menus · — · Esc | Cancelar los puntos guiados, cerrar menús · — · Esc |
-| 16 | Show this list · — · ? | Mostrar esta lista · — · ? |
+| 4 | Fit everything · Double-click · 5 | Encuadrar todo · Doble clic · 5 |
+| 5 | Views · View buttons · 1 Front, 2 Bottom, 3 Back, 4 Left, 6 Right, 8 Top (number row or keypad, as in Exocad) | Vistas · Botones de vista · 1 Frontal, 2 Inferior, 3 Posterior, 4 Izquierda, 6 Derecha, 8 Superior (fila de números o teclado numérico, como en Exocad) |
+| 6 | Initial view (occlusal) · View buttons · 0 | Vista inicial (oclusal) · Botones de vista · 0 |
+| 7 | Rotation center · Middle-click on a surface; on a tablet, touch and hold · Home (under the pointer, or at the center) | Centro de giro · Clic central sobre una superficie; en una tablet, mantener presionado · Inicio (bajo el puntero o en el centro) |
+| 8 | Transparency of what is under the pointer · Shift + middle-click; the toolbar (jaw scan) · T (jaw scan) | Transparencia de lo que está bajo el puntero · Shift + clic central; la barra de herramientas (escaneo) · T (escaneo) |
+| 9 | Hide what is under the pointer · Ctrl or ⌘ + middle-click · Display menu | Ocultar lo que está bajo el puntero · Ctrl o ⌘ + clic central · Menú Visualización |
+| 10 | Show what you hid · Ctrl or ⌘ + Shift + middle-click · S | Mostrar lo que ocultaste · Ctrl o ⌘ + Shift + clic central · S |
+| 11 | Color map · Toolbar or Display menu · C | Mapa de color · Barra de herramientas o menú Visualización · C |
+| 12 | Select an implant (step 2) · Click it · Implant list | Seleccionar un implante (paso 2) · Clic sobre él · Lista de implantes |
+| 13 | Move the implant set (step 4) · Drag an implant · Adjust panel | Mover el conjunto (paso 4) · Arrastrar un implante · Panel de ajuste |
+| 14 | Rotate the implant set (step 4) · Ctrl or ⌘ + drag anywhere (Shift: one axis) · Adjust panel (Shift: 5°) | Girar el conjunto (paso 4) · Ctrl o ⌘ + arrastrar en cualquier parte (Shift: un eje) · Panel de ajuste (Shift: 5°) |
+| 15 | Undo a move · — · Ctrl or ⌘ + Z | Deshacer un movimiento · — · Ctrl o ⌘ + Z |
+| 16 | Place a guided point · Click on the jaw · Enter at the crosshair | Colocar un punto guiado · Clic en el escaneo · Enter sobre la mira |
+| 17 | Remove the last point · — · Backspace | Quitar el último punto · — · Retroceso |
+| 18 | Cancel guided points, close menus · — · Esc | Cancelar los puntos guiados, cerrar menús · — · Esc |
+| 19 | Show this list · — · ? | Mostrar esta lista · — · ? |
 
 ### 12.4 Your geometries
 
@@ -1464,7 +1496,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `al.site.poor` | No match | No coincide |
 | `gp.title` | Guided points | Puntos guiados |
 | `gp.text` | Click on the jaw scan where each highlighted implant sits, aiming at the top center of its scan body. Follow the order 1–2–3–4. | Haz clic en el escaneo donde está cada implante resaltado, apuntando al centro superior de su scan body. Sigue el orden 1–2–3–4. |
-| `gp.keyboard` | Keyboard: turn the view with the arrow keys, pan with Shift + arrows, zoom with + and −, then press Enter to place the point under the crosshair. | Con teclado: gira la vista con las flechas, desplázala con Shift + flechas, acerca con + y −, y pulsa Enter para colocar el punto bajo la mira. |
+| `gp.keyboard` | Keyboard: turn the view with Shift + arrows, pan with the arrow keys, zoom with + and −, then press Enter to place the point under the crosshair. | Con teclado: gira la vista con Shift + flechas, desplázala con las flechas, acerca con + y −, y pulsa Enter para colocar el punto bajo la mira. |
 | `gp.placed` | Placed | Colocado |
 | `gp.now` | Now | Ahora |
 | `gp.next` | Next | Siguiente |
@@ -1479,6 +1511,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `gp.two` | With two points, the turn around their line stays free. | Con dos puntos, el giro alrededor de su línea queda libre. |
 | `gp.announce` | Point {n} placed. Next: implant {label}. | Punto {n} colocado. Siguiente: implante {label}. |
 | `gp.announceLast` | Point {n} placed. Aligning… | Punto {n} colocado. Alineando… |
+| `gp.miss` | Nothing under the crosshair. Pan (arrow keys) or turn (Shift + arrows) the view until it sits on the top of the scan body, then press Enter. | No hay nada bajo la mira. Desplaza (flechas) o gira (Shift + flechas) la vista hasta que quede sobre la parte superior del scan body y pulsa Enter. |
 
 ### 12.6 Export and email gate
 
@@ -1556,6 +1589,11 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `say.sampleHint` | Pick it to apply it to all implants | Elígela para aplicarla a todos los implantes |
 | `say.newCase` | New case: start with the arch and the capture. | Caso nuevo: empieza por la arcada y la captura. |
 | `say.selected` | Implant {label} selected. | Implante {label} seleccionado. |
+| `say.pivot` | Rotation center set. (Home) | Centro de giro fijado. |
+| `say.pivotMiss` | No surface there. The rotation center did not change. | No hay ninguna superficie ahí. El centro de giro no cambió. |
+| `say.hidden` | {name} hidden. Press S to show everything again. ({name} = the Display switch label) | Se ocultó: {name}. Pulsa S para volver a mostrar todo. |
+| `say.shown` | Everything you hid is visible again. | Lo que ocultaste vuelve a estar visible. |
+| `say.view` | View: {name}. (a view from the keyboard; {name} = the view button's label) | Vista: {name}. |
 | `say.working` | Working… | Procesando… |
 | `say.dismiss` | Dismiss | Cerrar |
 
@@ -1851,7 +1889,13 @@ format, warnings }` · `export { request }` → `ExportBundle` (zip transferred)
   `DEFAULT_QUALITY`; export gating.
 - `state/lead`: state machine (none → pending → sent; failure keeps pending; unset webhook → sent; honeypot).
 - `viewer/colormap`: LUT endpoints equal the three stops; OKLab lightness strictly decreasing from 0 to 100 µm.
-- `viewer/presets`: each preset's up vector is perpendicular to its view direction; Occlusal flips with the arch.
+- `viewer/presets`: each preset's up vector is perpendicular to its view direction; Occlusal flips with the arch; Bottom
+  is the upper arch's occlusal view; `viewForKey` (number row by code, keypad with NumLock only, symbols win, 7 and 9
+  nothing, one key per view).
+- `test/ux/controls-keys.ux.test.ts` (controls on stand-ins): view keys never stop their tween; arrows pan, Shift +
+  arrows and PageUp/PageDown turn; Ctrl/⌘ + drag anywhere turns the set in step 4; Home at the pointer or the center;
+  touch & hold with fake timers; every modified middle click; camera input clears the pressed view; Stage hide/show
+  all and the keyboard view announcement.
 
 DOM, WebGL and workers are verified by hand with the checklist above (Playwright would be a new dev dependency; not
 needed for v1).

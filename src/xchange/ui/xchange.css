@@ -255,7 +255,11 @@
 .xch__stagewrap { position: sticky; top: calc(var(--nav-h) + 1rem); display: grid; }
 .xch__skiplink { position: absolute; left: 1rem; top: -3rem; z-index: 6; padding: .5rem .9rem; border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 600; font-size: .85rem; box-shadow: 0 10px 30px -12px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
 .xch__skiplink:focus { top: 4rem; opacity: 1; pointer-events: auto; }
-.xch__stage { --xch-btn: 40px; --dial-b: 32px; --dial-r: 50px; position: relative; height: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); border-radius: calc(var(--radius) - 6px); overflow: hidden; background: var(--xch-stage); touch-action: none; user-select: none; -webkit-user-select: none; outline: none; isolation: isolate; transition: background .3s; }
+.xch__stage { --xch-btn: 40px; --dial-b: 32px; --dial-r: 50px; position: relative; height: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); border-radius: calc(var(--radius) - 6px); overflow: hidden; background: var(--xch-stage); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none; isolation: isolate; transition: background .3s; }
+/* touch & hold (controls.ts): a 32 px ring at the finger, the crosshair recipe; it shows at 150 ms and grows until the
+   rotation center is set at 500 ms (is-held), then stays until the finger lifts */
+.xch__stage::after { content: ''; position: absolute; left: var(--hold-x, 50%); top: var(--hold-y, 50%); z-index: 2; width: 32px; height: 32px; margin: -16px 0 0 -16px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--xch-active); box-shadow: 0 0 0 1px #1e293b, inset 0 0 0 1px #1e293b; pointer-events: none; opacity: 0; scale: .6; }
+.xch__stage.is-hold::after { opacity: 1; scale: 1; transition: scale .35s var(--ease-out); }
 /* on the indigo stage in both themes: the light focus blue (5:1 there) */
 .xch__stage:focus-visible { outline: 3px solid #8fc1ff; outline-offset: -3px; }
 .xch__canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
@@ -443,4 +447,7 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
   .xch-progress.is-indet i, .xch__bar i { animation: none; width: 100%; opacity: .5; }
   .xch__tag.is-target::after { animation: none; }
   .xch__stage [data-tip]::after { transition-duration: 0s; }
+  /* the hold ring appears at 500 ms, full size */
+  .xch__stage.is-hold::after { transition: none; }
+  .xch__stage.is-hold:not(.is-held)::after { opacity: 0; }
 }

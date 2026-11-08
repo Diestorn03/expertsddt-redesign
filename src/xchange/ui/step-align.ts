@@ -122,12 +122,18 @@ export class AlignStep {
         }
       },
       onHover: (hit) => app.stage.readout(hit),
-      onPreset: (p) => app.stage.preset(p),
+      onPreset: (p, keyboard) => app.stage.preset(p, keyboard),
       onToggleJawOpacity: () => app.stage.toggleJawOpacity(),
       onToggleMap: () => app.stage.toggleMap(),
       onShortcuts: () => app.stage.openKeys(),
       onGuidedKey: (k) => (k === 'Escape' ? this.leaveGuided() : this.guidedAction('back')),
       onCtrl: (down) => app.stage.ctrlChip(down && this.mode() === 'set'),
+      onPivot: () => app.say.say(app.c.say.pivot),
+      onPivotMiss: () => app.say.say(app.c.say.pivotMiss),
+      onToggleOpacity: () => app.stage.togglePartOpacity(),
+      onHide: (o) => app.stage.hide(o),
+      onShowAll: () => app.stage.showAll(),
+      onCameraInput: () => app.stage.cameraMoved(),
     };
   }
 

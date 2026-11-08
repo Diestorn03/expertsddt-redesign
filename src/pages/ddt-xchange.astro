@@ -8,7 +8,7 @@ import en from '../xchange/ui/i18n/en';
 import es from '../xchange/ui/i18n/es';
 import { fmt, num } from '../xchange/ui/i18n/format';
 import { LIMITS } from '../xchange/core/limits';
-import { PRESET_KEYS } from '../xchange/viewer/presets';
+import { VIEW_KEYS } from '../xchange/viewer/presets';
 import '../xchange/ui/xchange.css';
 
 const { t, lang, href } = useI18n(Astro);
@@ -61,8 +61,8 @@ const ICO = {
   turnAround: ['~M12 3.5v17', 'M9.5 8l-5 4 5 4z', 'M14.5 8l5 4-5 4z'],
 } as const;
 const paths = (n: keyof typeof ICO): string => ICO[n].map((d) => (d[0] === '~' ? `<path class="xch__ico-faint" d="${d.slice(1)}"/>` : `<path d="${d}"/>`)).join('');
-// views dial: Fit in the hub, six directions around it (screen up = Top, the depth diagonal = Front/Back); keys from PRESET_KEYS
-const keyOf = (p: string): string | undefined => (p === 'fit' ? '0' : Object.entries(PRESET_KEYS).find(([, v]) => v === p)?.[0]);
+// views dial: Fit in the hub, six directions around it (screen up = Top, the depth diagonal = Front/Back); keys from VIEW_KEYS
+const keyOf = (p: string): string | undefined => Object.entries(VIEW_KEYS).find(([, v]) => v === p)?.[0];
 const tip = (p: string, name: string): string => (keyOf(p) ? fmt(L, c.view.tip, { name, key: keyOf(p)! }) : name);
 const dial = [['fit', c.view.fit], ['top', c.view.top], ['back', c.view.back], ['right', c.view.right], ['bottom', c.view.bottom], ['front', c.view.front], ['left', c.view.left]] as const;
 const pad = [

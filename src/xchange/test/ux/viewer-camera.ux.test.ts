@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { makeScanBodyCad } from '../../sample';
 import { attachControls, type ControlCallbacks } from '../../viewer/controls';
-import { PRESET_KEYS, presetView } from '../../viewer/presets';
+import { presetView, type Preset } from '../../viewer/presets';
 import { DEPTH_BIAS_MM, LOOK, Viewer } from '../../viewer/viewer';
 import type { Mat4, TriMesh } from '../../core/types';
 import { fakeElement, installFakeDom, keyEvent } from '../adversarial/fake-dom';
@@ -56,29 +56,59 @@ function callbacks(v: Viewer): ControlCallbacks {
 }
 
 describe('view keys with motion on (the visitors’ default)', () => {
-  it('1-6, 0 and Home move the camera: the key does not stop the tween it starts', () => {
+  // exocad's numpad map (VIEWER-POLISH A2): 5 Fit, 0 the Default view (occlusal for the arch)
+  const exocad: Record<string, Preset | 'fit'> = { '1': 'front', '2': 'bottom', '3': 'back', '4': 'left', '5': 'fit', '6': 'right', '8': 'top', '0': 'occlusal' };
+  const start = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.4, -0.7, 0.2));
+  const setup = (): { v: Viewer; stage: ReturnType<typeof fakeElement>; ac: AbortController } => {
     const stage = fakeElement();
     const v = new Viewer(stage as unknown as HTMLElement, fakeElement() as unknown as HTMLElement, { reducedMotion: false, onContextLost() {} });
     v.arch = 'upper';
     v.setJaw(box(), null);
     const ac = new AbortController();
     attachControls(v, stage as unknown as HTMLElement, callbacks(v), ac.signal);
-    const start = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.4, -0.7, 0.2));
-    for (const key of ['1', '2', '3', '4', '5', '6', '0', 'Home']) {
+    v.q.copy(start);
+    v.target.set(3, -4, 5);
+    v.dist = 50_000;
+    return { v, stage, ac };
+  };
+
+  it('0-6 and 8 move the camera, on the number row and the keypad: the key does not stop the tween it starts', () => {
+    const { v, stage, ac } = setup();
+    for (const [digit, view] of Object.entries(exocad)) for (const code of [`Digit${digit}`, `Numpad${digit}`]) {
       v.q.copy(start);
       v.target.set(3, -4, 5);
       v.dist = 50_000;
-      stage.dispatchEvent(keyEvent('keydown', key));
+      stage.dispatchEvent(keyEvent('keydown', digit, { code }));
       const tween = tweenOf(v);
-      expect(tween, `key ${key} keeps its camera tween`).not.toBeNull();
+      expect(tween, `${code} keeps its camera tween`).not.toBeNull();
       tween!.progress(1);
-      const preset = PRESET_KEYS[key];
-      const { from, up } = presetView(preset ?? 'occlusal', 'upper');
-      const want = preset ? new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(...from), new THREE.Vector3(), new THREE.Vector3(...up))) : start;
-      expect(v.q.angleTo(want), `key ${key} orientation`).toBeLessThan(1e-6);
-      expect(v.dist, `key ${key} frames the case`).toBeLessThan(10_000);
-      expect(v.target.distanceTo(new THREE.Vector3(3, -4, 5)), `key ${key} recenters`).toBeGreaterThan(1);
+      const want = view === 'fit' ? start : (() => {
+        const { from, up } = presetView(view, 'upper');
+        return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(...from), new THREE.Vector3(), new THREE.Vector3(...up)));
+      })();
+      expect(v.q.angleTo(want), `${code} orientation`).toBeLessThan(1e-6);
+      expect(v.dist, `${code} frames the case`).toBeLessThan(10_000);
+      expect(v.target.distanceTo(new THREE.Vector3(3, -4, 5)), `${code} recenters`).toBeGreaterThan(1);
     }
+    ac.abort();
+    v.dispose();
+  });
+
+  it('Home moves the rotation center onto the surface at the stage center (.35 s), keeping the eye and the direction', () => {
+    const { v, stage, ac } = setup();
+    const eye = (): THREE.Vector3 => new THREE.Vector3(0, 0, v.dist).applyQuaternion(v.q).add(v.target);
+    const eye0 = eye(), before = new THREE.Vector3(3, -4, 5);
+    stage.dispatchEvent(keyEvent('keydown', 'Home', { code: 'Home' }));
+    const tween = tweenOf(v);
+    expect(tween, 'Home keeps its camera tween').not.toBeNull();
+    expect(tween!.duration()).toBeCloseTo(0.35);
+    tween!.progress(1);
+    expect(v.q.angleTo(start)).toBeLessThan(1e-9);
+    expect(eye().distanceTo(eye0)).toBeLessThan(1e-6);
+    // the new center is where the ray through the old one enters the 60 × 50 × 12 mm box
+    const t = v.target;
+    expect(Math.max(Math.abs(t.x) / 30, Math.abs(t.y) / 25, Math.abs(t.z) / 6)).toBeCloseTo(1, 6);
+    expect(t.clone().sub(eye0).normalize().angleTo(before.clone().sub(eye0).normalize())).toBeLessThan(1e-6);
     ac.abort();
     v.dispose();
   });

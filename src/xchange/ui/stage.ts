@@ -1,7 +1,7 @@
 /** Stage chrome (UI-DESIGN §6.2-§6.8): toolbar, display popover, adjust pad, legend, readout, drop overlay. */
 import type { Step } from '../state/case';
 import type { Preset } from '../viewer/presets';
-import { DEFAULT_DISPLAY, type DisplayOptions, type PartHit } from '../viewer/viewer';
+import { DEFAULT_DISPLAY, type DisplayOptions, type PartHit, type SceneObject } from '../viewer/viewer';
 import type { App } from './app';
 import { q, qa, roving } from './dom';
 import { openModal } from './feedback';
@@ -28,6 +28,7 @@ export class Stage {
   private readonly popBtn: HTMLElement;
   private lastJawOpacity = 0.3;
   private pressed: string | null = null;
+  private readonly hidden = new Set<'jaw' | 'parts' | 'capture'>();
 
   constructor(private readonly app: App) {
     const { root, signal } = app;
@@ -36,7 +37,8 @@ export class Stage {
     this.popBtn = q(this.el, '[data-display-btn]');
     roving(q(this.el, '.xch__toolbar'), signal);
     roving(q(this.el, '.xch__views'), signal);
-    for (const b of qa<HTMLButtonElement>(this.el, '[data-view]')) b.addEventListener('click', () => this.preset(b.dataset.view as Preset | 'fit'), { signal });
+    // Enter or Space on a view button (a click with detail 0) is announced, as a view key is; a mouse click is not
+    for (const b of qa<HTMLButtonElement>(this.el, '[data-view]')) b.addEventListener('click', (e) => this.preset(b.dataset.view as Preset | 'fit', e.detail === 0), { signal });
     // the icon bar's direct toggles take the keys' path (C, T), so the legend follows the map
     const enabled = (e: Event): boolean => (e.currentTarget as Element).getAttribute('aria-disabled') !== 'true';
     q(this.el, '[data-map-btn]').addEventListener('click', (e) => { if (enabled(e)) this.toggleMap(); }, { signal });
@@ -201,20 +203,57 @@ export class Stage {
     this.ctrlChip(false);
   }
 
-  preset(p: Preset | 'fit'): void {
-    const v = this.app.viewer;
+  /** A view or Fit; `announce` (keyboard): "View: Front." */
+  preset(p: Preset | 'fit', announce = false): void {
+    const app = this.app, v = app.viewer;
     if (!v) return;
-    v.arch = this.app.s.arch;
+    v.arch = app.s.arch;
     if (p === 'fit') v.fit();
     else v.view(p);
+    this.press(p);
+    if (announce) app.say.say(fmt(app.lang, app.c.say.view, { name: app.c.view[p] }));
+  }
+
+  /** The camera left the last view (drag, wheel, pinch, arrows): no view button claims it. */
+  cameraMoved(): void {
+    if (this.pressed !== null) this.press(null);
+  }
+
+  private press(p: string | null): void {
     this.pressed = p;
-    for (const b of qa(this.el, '[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === this.pressed));
+    for (const b of qa(this.el, '[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === p));
   }
 
   toggleJawOpacity(): void {
     const cur = this.display.jawOpacity;
     if (cur < 1) { this.lastJawOpacity = cur; this.setDisplay({ jawOpacity: 1 }); }
     else this.setDisplay({ jawOpacity: this.lastJawOpacity < 1 ? this.lastJawOpacity : 0.3 });
+  }
+
+  /** Shift + middle click on a replacement: geometry opacity 100 % ↔ 30 %. */
+  togglePartOpacity(): void {
+    this.setDisplay({ partOpacity: this.display.partOpacity < 1 ? 1 : 0.3 });
+  }
+
+  /** Ctrl/⌘ + middle click: the object's Display switch goes off, remembered until S (or a new case) shows it again. */
+  hide(o: SceneObject): void {
+    const key = o === 'part' ? 'parts' : o;
+    if (!this.display[key]) return;
+    this.hidden.add(key);
+    const patch: Partial<DisplayOptions> = {};
+    patch[key] = false;
+    this.setDisplay(patch);
+    this.app.say.say(fmt(this.app.lang, this.app.c.say.hidden, { name: this.app.c.display[key] }));
+  }
+
+  /** S, Ctrl/⌘ + Shift + middle click: everything hidden by `hide` comes back (silently on a new case). */
+  showAll(announce = true): void {
+    if (!this.hidden.size) return;
+    const patch: Partial<DisplayOptions> = {};
+    for (const key of this.hidden) patch[key] = true;
+    this.hidden.clear();
+    this.setDisplay(patch);
+    if (announce) this.app.say.say(this.app.c.say.shown);
   }
 
   toggleMap(): void {
