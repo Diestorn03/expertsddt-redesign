@@ -456,6 +456,7 @@ export class App {
     this.store.set(freshCase(arch));
     for (const n of [1, 2, 3, 4] as Step[]) { this.clearAlerts(n); this.notes(n, []); }
     this.capture?.clearWarnings();
+    this.geometry?.clearCaseNotes();
     this.stage?.showAll(false); // what a middle click hid comes back with the new case
     this.rebuildViewer();
   }

@@ -26,7 +26,8 @@ export function positionLabels(n: number): string[] {
 /** Same labels without spaces (iCam names cannot contain one). */
 export const compactLabels = (n: number): string[] => positionLabels(n).map((label) => label.replaceAll(' ', '_'));
 
-export const micronMapperMarkers = (prefix: 'AXO' | 'AHY', n: number): string[] =>
+/** Marker labels of one family: AXO01, AXO02... (MicronMapper writes AXO, AHY, BTH and other families). */
+export const micronMapperMarkers = (prefix: string, n: number): string[] =>
   Array.from({ length: n }, (_, i) => `${prefix}${String(i + 1).padStart(2, '0')}`);
 
 const num = (v: number): string => String(v);
@@ -52,6 +53,24 @@ export function encodeMicronMapperCSV(frames: readonly Mat4[], options: MicronMa
   );
   rows.push(line(['Camera:', 'SN-0000']), line(['Max divergence angle:', '0.25']), line(['Application:', `MicronMapper V${version}.2.7`]));
   return rows.join(options.crlf ? '\r\n' : '\n') + '\n';
+}
+
+/**
+ * The layout of a real MicronMapper V1.6 export, with synthetic values: a UTF-8 BOM, marker rows written
+ * `BTH01, x, y, z, ...` (a space after each comma), a blank line, `Max divergence angle: BTH01-BTH02 12.3 deg` as
+ * one field, a blank line, then the `Application:` row with its build and date fields and the `Camera:` row.
+ */
+export function encodeMicronMapperExport(frames: readonly Mat4[], prefix = 'BTH'): string {
+  const markers = micronMapperMarkers(prefix, frames.length);
+  const rows = frames.map((m, i) => [markers[i]!, ...[...getColumn(m, 3), ...getColumn(m, 2), ...getColumn(m, 0)].map((v) => v.toFixed(6))].join(', '));
+  const footer = [
+    '',
+    `Max divergence angle: ${markers[0]}-${markers[1] ?? markers[0]} 12.3 deg`,
+    '',
+    'Application:, MicronMapper V1.6.0.12345, built 1/2/2026,   now Monday, January 5, 2026 9:30:00 AM',
+    'Camera:, 12345678',
+  ];
+  return `\uFEFF${[...rows, ...footer].join('\n')}\n`;
 }
 
 export function encodeScanAdaptorXML(frames: readonly Mat4[], labels: readonly string[], options: { units?: string } = {}): string {

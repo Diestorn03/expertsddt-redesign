@@ -4,7 +4,7 @@ import { countTriangles, mergeMeshes, transformMesh } from '../core/mesh';
 import { createRng } from '../core/sampling';
 import type { ImplantSite, Mat4, TriMesh } from '../core/types';
 import { makeFrames, makeRevolutionBody, makeScanBody, placeBodies } from '../test/fixtures';
-import { speck } from '../test/fixtures/detect';
+import { capWithInsert, speck } from '../test/fixtures/detect';
 import { assign, planAssembly, verifyAssemblyLayout } from './assembly';
 
 const body = makeScanBody();
@@ -69,6 +69,16 @@ describe('planAssembly', () => {
     if (plan.kind !== 'fixed') throw new Error(plan.kind);
     expect(countTriangles(plan.meshBySite['site-2']!)).toBe(countTriangles(tall) + countTriangles(speck));
     expect(countTriangles(plan.meshBySite['site-1']!)).toBe(countTriangles(body));
+  });
+
+  it('keeps each insert with its cap: one body per implant, nothing dropped', () => {
+    const { body: capped } = capWithInsert();
+    const frames = makeFrames(4, 'lower', 5);
+    const plan = planAssembly(placeBodies(frames, capped), toSites(frames));
+    if (plan.kind !== 'normalized') throw new Error(plan.kind); // before inner pieces were folded in: countMismatch, 8 bodies
+    expect(countTriangles(plan.mesh)).toBe(countTriangles(capped));
+    expect(plan.maxDeviationMm).toBeLessThan(1e-4);
+    expect(planAssembly(capped, toSites(frames))).toEqual({ kind: 'single' });
   });
 
   it('recognises two neighbouring implants that the spread rule alone misses', () => {

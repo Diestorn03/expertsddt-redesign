@@ -43,7 +43,7 @@ const en = {
     import: {
       title: 'What you can import',
       items: [
-        'Implant positions: MicronMapper CSV (V1.4 AXO, V1.6 AHY), ScanAdaptor XML, iCam TXT, matrix tables in CSV or TXT, JSON and ImplantPositions XML.',
+        'Implant positions: MicronMapper CSV (V1.4 and V1.6, any marker family: AXO, AHY, BTH…), ScanAdaptor XML, iCam TXT, matrix tables in CSV or TXT, JSON and ImplantPositions XML.',
         'Capture mesh: STL, PLY or OBJ of the scan bodies, alone or with a position file.',
         'Geometry: STL, PLY or OBJ in the implant frame (origin at the connection, +Z along the axis, +X toward the index).',
         'Jaw scan: STL or PLY; the color is kept.',
@@ -152,6 +152,8 @@ const en = {
     needReference: 'Choose the capture scan body.',
     needConfirm: 'Confirm or leave out the provisional positions.',
     fileOf: 'File {n} of {total}:',
+    framesDiffer: "The {positions} file and the {mesh} file are in different coordinate systems: the positions don't fall on the bodies, so they weren't matched. Keep one of the two.",
+    useOnly: 'Use only the {kind} file',
   },
   s2: {
     title: 'Replacement geometry',
@@ -166,6 +168,9 @@ const en = {
     assemblyFixed: 'This file holds a different body at each implant, already in place. Each implant keeps its own body, for this case only.',
     assemblyAll: 'A positioned assembly always applies to all implants.',
     layoutMismatch: "The bodies in this file don't sit where the captured bodies are; they may come from another coordinate system.",
+    framesDiffer: "The bodies in this file aren't on the implant positions of the capture: the two are in different coordinate systems, so the file wasn't applied. Use only this file to take the positions from it (it replaces the capture), or keep the capture and pick a single body.",
+    useOnly: 'Use only this {kind} file',
+    keepCapture: "Keep the capture's positions",
   },
   s3: {
     title: 'Jaw scan',
@@ -488,6 +493,7 @@ const en = {
     step: 'Step {n} of 4: {name}.',
     captureOk: { one: 'Capture imported: 1 implant.', other: 'Capture imported: {count} implants.' },
     captureReplaced: 'Capture replaced.',
+    usingOnly: 'Using only the {kind} file.',
     detected: { found: 'Positions found: {found}.', provisional: 'Provisional: {provisional}.', unresolved: 'Not recognized: {unresolved}.' },
     applied: '{name} applied to {target}.',
     undo: 'Undo',
@@ -571,7 +577,7 @@ const en = {
         freeform: { t: 'Curved surfaces in the OBJ.', b: 'This OBJ uses freeform curves or surfaces{loc}. Export it as a triangle mesh; STL is the safest choice.' },
         columnMajor: { t: 'Matrices stored by columns.', b: 'This file writes its matrices column by column. DDT Xchange only accepts row-major matrices, so it never has to guess. Export them row-major (or transposed) and try again.' },
         quaternion: { t: 'Rotations as quaternions.', b: "Rotations written as quaternions aren't supported. Use 4×4 matrices." },
-        unknownVersion: { t: 'MicronMapper version not supported.', b: 'Only MicronMapper V1.4 (AXO markers) and V1.6 (AHY markers) are read, and the marker prefix must match the version.' },
+        unknownVersion: { t: 'MicronMapper version not supported.', b: 'Only MicronMapper V1.4 and V1.6 files are read.' },
       },
     },
     TEXT_ENCODING: {
@@ -605,6 +611,7 @@ const en = {
         json: { t: "The JSON can't be read.", b: 'It has a syntax error. Export it again.' },
         applicationMissing: { t: 'MicronMapper header problem.', b: 'The "Application:" line must appear exactly once.' },
         applicationRepeated: { t: 'MicronMapper header problem.', b: 'The "Application:" line must appear exactly once.' },
+        markerFamily: { t: 'Mixed MicronMapper markers.', b: 'A marker uses another prefix than the first one{loc}. All the markers of one file share one prefix, like BTH01, BTH02.' },
         matrixOrderMissing: { t: 'Matrix order not stated.', b: 'The file must say that its matrices are row-major (for example matrixOrder = "row-major").' },
         matrixOrder: { t: 'Matrix order not stated.', b: 'The file must say that its matrices are row-major (for example matrixOrder = "row-major").' },
         endpointMissing: { t: 'Incomplete iCam point.', b: 'Each implant needs exactly one _Origin, _X, _Y and _Z line{loc}.' },

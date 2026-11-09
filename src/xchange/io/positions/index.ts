@@ -84,7 +84,7 @@ export function parsePositions(input: Uint8Array | string, options: PositionPars
 }
 
 const ICAM_RECORD = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,39}_(?:Origin|X|Y|Z)\s+[+.\d-]/u;
-const MARKER_ROW = /^"?(?:AXO|AHY)\d+"?[ \t]*[,;\t]/;
+const MARKER_ROW = /^"?[A-Z]{3}\d+"?[ \t]*[,;\t]/; // a MicronMapper marker of any family (micronmapper.ts MARKER)
 const APPLICATION_ROW = /^"?Application:"?[ \t]*[,;\t]/;
 const TABLE_IDENTITY = /\b(?:name|label|position|toothnumber|marker)\b/i;
 const TABLE_MATRIX = /\b(?:mat[0-3]|m[0-3][0-3]|origin[xyz]|axis[xyz]|indexed[xyz])\b/i;

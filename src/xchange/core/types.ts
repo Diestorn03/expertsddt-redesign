@@ -39,7 +39,7 @@ export type MeshFormat = 'stl' | 'ply' | 'obj';
 export type MeshPurpose = 'jaw' | 'capture' | 'geometry';
 
 export type PositionFormat =
-  | 'micronmapper-csv' // MicronMapper V1.4 (AXO#) / V1.6 (AHY#) native CSV
+  | 'micronmapper-csv' // MicronMapper V1.4 / V1.6 native CSV, marker rows of one family (AXO#, AHY#, BTH#...)
   | 'scanadaptor-xml' // <ScanAdaptor><ToothNumber/><Mat0..Mat3/></ScanAdaptor>
   | 'matrix-table' // generic CSV/TXT table: Mat0..Mat3, m00..m33 or marker+origin/axis/indexed
   | 'positions-json' // named row-major mm matrices in JSON

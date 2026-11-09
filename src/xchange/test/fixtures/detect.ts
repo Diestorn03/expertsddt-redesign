@@ -1,9 +1,11 @@
 /** Test helpers for detect/ (synthetic only). */
 import { expect } from 'vitest';
-import { getColumn, rotationAngleBetween, validateRigid } from '../../core/mat4';
+import { fromTranslation, getColumn, rotationAngleBetween, validateRigid } from '../../core/mat4';
+import { mergeMeshes, transformMesh } from '../../core/mesh';
 import type { Mat4, TriMesh } from '../../core/types';
 import { distance, dot } from '../../core/vec3';
 import type { RecoverResult } from '../../detect/sites';
+import { makeRevolutionBody } from './index';
 
 /** A tiny closed tetrahedron (a noise shell, 0.05 mm). */
 export const speck: TriMesh = {
@@ -32,4 +34,18 @@ export function expectFrames(result: RecoverResult, frames: readonly Mat4[], ori
     if (checkClocking) expect(rotationAngleBetween(site.matrix, truth)).toBeLessThan(angleRad);
     expect(() => validateRigid(site.matrix, 1e-9)).not.toThrow();
   });
+}
+
+/**
+ * A round cap with an insert inside, the way some positions STLs carry each scan body (synthetic): an open-base
+ * cap (r 2.5, h 6.6, top chamfer) plus, on its axis, a flange flush with the wall that pokes 0.05 mm below the base
+ * and a shaft (r 1.25) on it. The flange and the shaft share one vertex, so the insert is one shell.
+ */
+export function capWithInsert(): { cap: TriMesh; insert: TriMesh; body: TriMesh } {
+  const closed = makeRevolutionBody();
+  const cap = withoutTrianglesAt(closed, closed.positions.length / 3 - 2); // no bottom disk: open base
+  const flange = transformMesh(makeRevolutionBody({ height: 0.4, chamfer: 0 }), fromTranslation([0, 0, -0.05]));
+  const shaft = transformMesh(makeRevolutionBody({ radius: 1.25, height: 4.65, chamfer: 0.3 }), fromTranslation([0, 0, 0.35]));
+  const insert = mergeMeshes([flange, shaft]);
+  return { cap, insert, body: mergeMeshes([cap, insert]) };
 }

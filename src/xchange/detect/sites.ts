@@ -37,6 +37,7 @@ import { icp, measure, poseDifference, surfaceTarget, type FitStats, type IcpSet
 
 export interface MeshComponent {
   index: number;
+  /** The shell. For a body with inner pieces, its outer shell: the surface that is fitted, linked and aligned. */
   mesh: TriMesh;
   areaMm2: number;
   bounds: Bounds;
@@ -44,12 +45,17 @@ export interface MeshComponent {
   centroid: Vec3;
   /** area < 0.5 % of the largest AND diagonal < 20 % of the largest (spec 4.1.2): kept, flagged. */
   fragment: boolean;
+  /** Shells that sit inside this one (coaxial, within its box), such as the insert of a cap: one body with it, never counted, fitted or linked alone. */
+  inner: TriMesh[];
 }
 
 /** Hard cap on all shells (fragments included), checked before any per-shell allocation. */
 const MAX_SHELLS = 10_000; // ponytail: fixed cap against noise clouds; move to LIMITS if real captures need more
 
-/** weld + connectedComponents + extractComponents, fragments flagged; no limit on non-fragment shells. */
+/**
+ * weld + connectedComponents + extractComponents, fragments flagged, inner pieces folded into the body they sit in
+ * (renumbered: index = position in the list, in order of the lowest triangle index); no limit on non-fragment shells.
+ */
 export function describeComponents(mesh: TriMesh, weldToleranceMm = 1e-5): MeshComponent[] {
   const welded = weld(mesh, weldToleranceMm);
   if (welded.indices.length === 0) throw new XchangeError('MESH_EMPTY');
@@ -58,7 +64,7 @@ export function describeComponents(mesh: TriMesh, weldToleranceMm = 1e-5): MeshC
   const components = extractComponents(welded, labels).map((part, index): MeshComponent => {
     const bounds = computeBounds(part);
     const { area, centroid } = surfaceCentroid(part, bounds);
-    return { index, mesh: part, areaMm2: area, bounds, centroid, fragment: false };
+    return { index, mesh: part, areaMm2: area, bounds, centroid, fragment: false, inner: [] };
   });
   let largestArea = 0, largestDiagonal = 0;
   for (const c of components) {
@@ -66,7 +72,92 @@ export function describeComponents(mesh: TriMesh, weldToleranceMm = 1e-5): MeshC
     largestDiagonal = Math.max(largestDiagonal, diagonal(c.bounds));
   }
   for (const c of components) c.fragment = c.areaMm2 < 0.005 * largestArea && diagonal(c.bounds) < 0.2 * largestDiagonal;
-  return components;
+  const outer = outerShells(components);
+  const kept = components.filter((c, i) => {
+    if (outer[i]! < 0) return true;
+    components[outer[i]!]!.inner.push(c.mesh);
+    return false;
+  });
+  kept.forEach((c, i) => (c.index = i));
+  return kept;
+}
+
+/** The inner piece's box may stick out of the outer shell's, and its centroid sit off that shell's axis, by this fraction of the outer shell's diagonal. */
+const NESTED_TOLERANCE = 0.02; // ponytail: real inserts sit within 1 µm of the cap's axis and 0.1 mm of its box; loosen only for scanned inner shells
+/** Above this many non-fragment shells the pair test is skipped (noise; a capture is refused at 64 bodies anyway). */
+const NESTED_MAX_SHELLS = 1024;
+
+interface ShellFrame {
+  centroid: Vec3;
+  /** Principal axes of the surface; `axis` is the one whose variance stands apart (a cap's own axis). */
+  axes: [Vec3, Vec3, Vec3];
+  axis: Vec3;
+  /** Extent of the shell's vertices along each principal axis: [lo0, hi0, lo1, hi1, lo2, hi2]. */
+  extent: Float64Array;
+}
+
+/** lo/hi of the vertices of `mesh` along three axes through `origin`. */
+function extentAlong(mesh: TriMesh, origin: Readonly<Vec3>, axes: readonly Vec3[]): Float64Array {
+  const out = Float64Array.of(Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity);
+  const p = mesh.positions;
+  for (let i = 0; i < p.length; i += 3) {
+    const x = p[i]! - origin[0], y = p[i + 1]! - origin[1], z = p[i + 2]! - origin[2];
+    for (let k = 0; k < 3; k++) {
+      const a = axes[k]!, t = x * a[0] + y * a[1] + z * a[2];
+      if (t < out[2 * k]!) out[2 * k] = t;
+      if (t > out[2 * k + 1]!) out[2 * k + 1] = t;
+    }
+  }
+  return out;
+}
+
+/**
+ * For each component, the index of the outermost non-fragment shell it sits in (-1: none). B sits in A when A is
+ * the bigger one (diagonal, then the lower index for twins), B's centroid lies on A's axis (the principal axis whose
+ * variance stands apart, through A's centroid) and B lies inside A's box, axis-aligned and in A's principal frame,
+ * all within NESTED_TOLERANCE. A neighbouring body sticks out of the box of the body beside it, and a body standing
+ * on an arch strip is far from the strip's axis, so neither is folded in.
+ */
+function outerShells(components: readonly MeshComponent[]): Int32Array {
+  const parent = new Int32Array(components.length).fill(-1);
+  const bodies = components.filter((c) => !c.fragment);
+  if (bodies.length < 2 || bodies.length > NESTED_MAX_SHELLS) return parent;
+  const size = new Map(bodies.map((c) => [c, diagonal(c.bounds)]));
+  const frames = new Map<MeshComponent, ShellFrame>();
+  const frameOf = (c: MeshComponent): ShellFrame => {
+    let f = frames.get(c);
+    if (!f) {
+      const { centroid, axes, variances: [l0, l1, l2] } = pcaOfSurface(c.mesh);
+      f = { centroid, axes, axis: l0 - l1 > l1 - l2 ? axes[0] : axes[2], extent: extentAlong(c.mesh, centroid, axes) };
+      frames.set(c, f);
+    }
+    return f;
+  };
+  for (const b of bodies) {
+    let best: MeshComponent | null = null;
+    for (const a of bodies) {
+      const da = size.get(a)!, db = size.get(b)!;
+      if (a === b || db > da || (db === da && a.index > b.index) || (best && size.get(best)! >= da)) continue;
+      const tol = NESTED_TOLERANCE * da;
+      let inside = true;
+      for (let k = 0; k < 3 && inside; k++) inside = b.bounds.min[k]! >= a.bounds.min[k]! - tol && b.bounds.max[k]! <= a.bounds.max[k]! + tol;
+      if (!inside) continue;
+      const f = frameOf(a);
+      const d = sub(b.centroid, f.centroid);
+      if (distance(d, scale(f.axis, dot(d, f.axis))) > tol) continue;
+      const e = extentAlong(b.mesh, f.centroid, f.axes);
+      for (let k = 0; k < 3 && inside; k++) inside = e[2 * k]! >= f.extent[2 * k]! - tol && e[2 * k + 1]! <= f.extent[2 * k + 1]! + tol;
+      if (inside) best = a;
+    }
+    if (best) parent[b.index] = best.index;
+  }
+  // An inner piece of an inner piece belongs to the outermost shell (diagonals only grow along a chain: no cycles).
+  for (let i = 0; i < parent.length; i++) {
+    let root = parent[i]!;
+    while (root >= 0 && parent[root]! >= 0) root = parent[root]!;
+    parent[i] = root;
+  }
+  return parent;
 }
 
 /** Order = lowest triangle index, so body i of placeBodies is component i. */
@@ -414,17 +505,24 @@ function perpendicular(v: Readonly<Vec3>): Vec3 {
 }
 
 const LINK_MAX_COST_MM = 10;
+/** A centroid this far along a site's axis is not that implant's body (the tallest library parts are 19 mm). */
+const SITE_MAX_HEIGHT_MM = 20;
 
-/** Distance-like cost of a point in a site's frame: off-axis distance plus a tenth of the height. */
+/**
+ * Distance-like cost of a point in a site's frame: off-axis distance plus a tenth of the height, plus, beyond
+ * SITE_MAX_HEIGHT_MM along the axis, every millimetre in full. Without that last term a body 47 mm along the axis
+ * of a position in another coordinate system cost under 10 mm and was linked to it.
+ */
 export function siteCost(siteInverse: Mat4, point: Readonly<Vec3>): number {
   const p = transformPoint(siteInverse, point);
-  return Math.hypot(p[0], p[1]) + 0.1 * Math.abs(p[2]);
+  const height = Math.abs(p[2]);
+  return Math.hypot(p[0], p[1]) + 0.1 * height + Math.max(0, height - SITE_MAX_HEIGHT_MM);
 }
 
 /**
  * Position file + capture mesh: gives each site the nearest unused non-fragment component
- * (cost hypot(x, y) + 0.1·|z| of the component centroid in the site frame, globally greedy,
- * at most 10 mm). Returns new site objects; unmatched sites carry no componentIndex.
+ * (siteCost of the component centroid, globally greedy, at most 10 mm). Returns new site objects;
+ * unmatched sites carry no componentIndex.
  */
 export function linkSitesToComponents(sites: readonly ImplantSite[], components: readonly MeshComponent[]): ImplantSite[] {
   const pairs: { site: number; component: number; cost: number }[] = [];

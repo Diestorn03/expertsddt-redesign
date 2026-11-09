@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { isXchangeError } from '../core/errors';
 import { identity } from '../core/mat4';
+import { transformMesh } from '../core/mesh';
 import { writeBinarySTL } from '../core/stl-writer';
 import type { AlignmentResult, ImplantSite } from '../core/types';
-import { makeFrames, makeScanBody, makeSyntheticCase } from '../test/fixtures';
-import { encodeMicronMapperCSV, encodeScanAdaptorXML, utf8 } from '../test/fixtures/positions';
+import { makeFrames, makeScanBody, makeSyntheticCase, placeBodies, randomRigid } from '../test/fixtures';
+import { capWithInsert } from '../test/fixtures/detect';
+import { encodeMicronMapperCSV, encodeMicronMapperExport, encodeScanAdaptorXML, utf8 } from '../test/fixtures/positions';
 import type { WorkerLike } from '../align/client';
 import {
   alignmentParts, canMatchCapture, exportBlocker, freshCase, guidedTargets, mergeMeasured, mergePositionFiles, missingGeometry,
   pushUndo, reachable, siteStatus, step1Blocker, UNDO_LIMIT,
 } from './case';
-import { createJobsHandler, readCapture, UiError, type JobRequest } from './jobs-handler';
+import { captureOnly, createJobsHandler, readCapture, readGeometry, UiError, type JobRequest } from './jobs-handler';
 import { JobsClient } from './jobs';
 import { LEAD_KEY, needsEmail, readLead, retryPending, submitLead, type StorageLike } from './lead';
 import { cleanName, Library, LIBRARY_LIMIT, matchesQuery, uniqueName } from './library';
@@ -194,6 +196,32 @@ describe('jobs', () => {
     expect(r.sources.map((s) => `${s.kind}:${s.count}`)).toEqual(['positions:4', 'mesh:4']);
     expect(r.sites.map((s) => s.componentIndex)).toEqual([0, 1, 2, 3]);
     expect(r.components!.length).toBe(4);
+  });
+  it('a BTH export + an STL of caps with inserts: 4 bodies, each position on its cap (one frame)', () => {
+    const { body } = capWithInsert();
+    const files = [{ bytes: utf8(encodeMicronMapperExport(c.frames, 'BTH')), extension: 'csv' }, { bytes: writeBinarySTL(placeBodies(c.frames, body)), extension: 'stl' }];
+    const r = readCapture(files);
+    expect(r.sources.map((s) => `${s.kind}:${s.count}`)).toEqual(['positions:4', 'mesh:4']);
+    expect(r.sites.map((s) => [s.label, s.componentIndex])).toEqual([['BTH01', 0], ['BTH02', 1], ['BTH03', 2], ['BTH04', 3]]);
+    expect(r.framesDiffer).toBeUndefined();
+    // The same STL picked as the geometry: one body (cap + insert) at every position.
+    expect(readGeometry(files[1]!, r.sites).plan.kind).toBe('normalized');
+  });
+  it('files in different frames: no position is linked, framesDiffer, and the STL as geometry is not at the sites', () => {
+    const moved = transformMesh(c.captureMesh, randomRigid(3, Math.PI, 40));
+    const files = [{ bytes: csv, extension: 'csv' }, { bytes: writeBinarySTL(moved), extension: 'stl' }];
+    const r = readCapture(files);
+    expect(r.framesDiffer).toBe(true);
+    expect(r.sites.every((s) => s.componentIndex === undefined)).toBe(true);
+    const plan = readGeometry(files[1]!, r.sites).plan;
+    expect(plan.kind === 'fixed' && plan.atSites).toBe(false);
+    expect(plan.kind).toBe('fixed');
+    // Use only the CSV / only the STL.
+    const positions = captureOnly(r, 'positions');
+    expect([positions.format, positions.sources.map((s) => s.kind), positions.sites.length, positions.mesh, positions.components]).toEqual(['micronmapper-csv', ['positions'], 4, undefined, undefined]);
+    const mesh = captureOnly(r, 'mesh');
+    expect([mesh.format, mesh.sources.map((s) => s.kind), mesh.sites.length, mesh.mesh === r.mesh, mesh.components?.length]).toEqual(['stl', ['mesh'], 0, true, 4]);
+    expect(readCapture(files.slice(1)).framesDiffer).toBeUndefined(); // a mesh alone has nothing to disagree with
   });
   it('two meshes are refused; a bad second file reports its position', () => {
     expect(() => readCapture([{ bytes: stl, extension: 'stl' }, { bytes: stl, extension: 'stl' }])).toThrow(UiError);

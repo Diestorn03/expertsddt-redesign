@@ -11,6 +11,7 @@ import {
   encodeMatrixTable,
   encodeMatrixXML,
   encodeMicronMapperCSV,
+  encodeMicronMapperExport,
   encodePositionsJSON,
   encodeScanAdaptorXML,
   micronMapperMarkers,
@@ -370,15 +371,32 @@ describe('parsePositions: refusals (skipped, not guessed)', () => {
     expect(failure(() => parsePositions('Camera:,x\nApplication:,MicronMapper V1.4.2.7\n'))).toBe('POSITIONS_EMPTY:');
   });
 
-  it('MicronMapper: only V1.4/AXO and V1.6/AHY, one Application row, complete marker rows', () => {
+  it('MicronMapper: V1.4 or V1.6, one Application row, complete marker rows of one family', () => {
     const text = encodeMicronMapperCSV(frames);
     expect(failure(() => parsePositions(text.replace('V1.4.2.7', 'V1.5.0.1')))).toBe('FORMAT_UNSUPPORTED:unknownVersion');
-    expect(failure(() => parsePositions(text.replace('V1.4.2.7', 'V1.6.2.7')))).toBe('FORMAT_UNSUPPORTED:unknownVersion');
-    expect(failure(() => parsePositions(text.replace('AXO02', 'AHY02')))).toBe('FORMAT_UNSUPPORTED:unknownVersion');
+    // The marker family is not tied to the version: V1.6 with AXO markers, V1.4 with BTH ones.
+    expectSites(parsePositions(text.replace('V1.4.2.7', 'V1.6.2.7')), frames, micronMapperMarkers('AXO', 3), 'micronmapper-csv', 1e-5);
+    expectSites(parsePositions(text.replaceAll('AXO', 'BTH')), frames, micronMapperMarkers('BTH', 3), 'micronmapper-csv', 1e-5);
+    // One family per file; a marker is three capital letters plus digits.
+    expect(errorOf(() => parsePositions(text.replace('AXO02', 'AHY02')))).toMatchObject({ code: 'POSITIONS_MALFORMED', details: { reason: 'markerFamily', row: 2 } });
+    for (const bad of ['AXOX03', 'AX03', 'axo03', 'AXO']) expect(errorOf(() => parsePositions(text.replace('AXO03', bad)))).toMatchObject({ details: { reason: 'row', row: 3 } });
     expect(failure(() => parsePositions(text.replace(/Application:.*\n/, '')))).toBe('POSITIONS_MALFORMED:applicationMissing');
     expect(errorOf(() => parsePositions(`${text}Application:,MicronMapper V1.4.2.7\n`))).toMatchObject({ details: { reason: 'applicationRepeated', row: 7 } });
     expect(errorOf(() => parsePositions(text.replace(/^(AXO01(?:,[^,]+){8}),[^,\n]+/, '$1')))).toMatchObject({ details: { reason: 'row', row: 1 } });
     expect(errorOf(() => parsePositions(text.replace('Camera:', 'Header')))).toMatchObject({ details: { reason: 'row', row: 4 } });
+  });
+
+  it('MicronMapper exports as they arrive: BOM, spaced fields, blank lines, dated Application row, any family', () => {
+    const four = makeFrames(4, 'lower', 3);
+    for (const prefix of ['BTH', 'AHY', 'AXO', 'QRZ']) {
+      const text = encodeMicronMapperExport(four, prefix);
+      expect(text.charCodeAt(0)).toBe(0xfeff);
+      expect(detectPositionFormat(text)).toBe('micronmapper-csv');
+      for (const parsed of [parsePositions(utf8(text)), parsePositions(text), parseMicronMapperCSV(text)]) {
+        expectSites(parsed, four, micronMapperMarkers(prefix, 4), 'micronmapper-csv', 1e-5);
+        expect(parsed.warnings).toEqual([]);
+      }
+    }
   });
 
   it('XML families: structure errors', () => {

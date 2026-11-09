@@ -43,7 +43,7 @@ const es: Copy = {
     import: {
       title: 'Qué puedes importar',
       items: [
-        'Posiciones de implantes: CSV de MicronMapper (V1.4 AXO, V1.6 AHY), XML de ScanAdaptor, TXT de iCam, tablas de matrices en CSV o TXT, JSON y XML ImplantPositions.',
+        'Posiciones de implantes: CSV de MicronMapper (V1.4 y V1.6, cualquier familia de marcadores: AXO, AHY, BTH…), XML de ScanAdaptor, TXT de iCam, tablas de matrices en CSV o TXT, JSON y XML ImplantPositions.',
         'Malla de captura: STL, PLY u OBJ de los scan bodies, sola o con un archivo de posiciones.',
         'Geometría: STL, PLY u OBJ en el sistema del implante (origen en la conexión, +Z a lo largo del eje, +X hacia el índice).',
         'Escaneo de la arcada: STL o PLY; se conserva el color.',
@@ -152,6 +152,8 @@ const es: Copy = {
     needReference: 'Elige el scan body de la captura.',
     needConfirm: 'Confirma o excluye las posiciones provisionales.',
     fileOf: 'Archivo {n} de {total}:',
+    framesDiffer: 'El archivo {positions} y el archivo {mesh} están en sistemas de coordenadas distintos: las posiciones no caen sobre los cuerpos, así que no se emparejaron. Quédate con uno de los dos.',
+    useOnly: 'Usar solo el archivo {kind}',
   },
   s2: {
     title: 'Geometría de reemplazo',
@@ -166,6 +168,9 @@ const es: Copy = {
     assemblyFixed: 'Este archivo trae un cuerpo distinto en cada implante, ya en su lugar. Cada implante conserva su cuerpo, solo para este caso.',
     assemblyAll: 'Un ensamblaje posicionado siempre se aplica a todos los implantes.',
     layoutMismatch: 'Los cuerpos de este archivo no están donde están los cuerpos capturados; pueden venir de otro sistema de coordenadas.',
+    framesDiffer: 'Los cuerpos de este archivo no están en las posiciones de los implantes de la captura: los dos están en sistemas de coordenadas distintos, así que el archivo no se aplicó. Usa solo este archivo para tomar de él las posiciones (reemplaza la captura), o mantén la captura y elige un solo cuerpo.',
+    useOnly: 'Usar solo este archivo {kind}',
+    keepCapture: 'Mantener las posiciones de la captura',
   },
   s3: {
     title: 'Escaneo de la arcada',
@@ -488,6 +493,7 @@ const es: Copy = {
     step: 'Paso {n} de 4: {name}.',
     captureOk: { one: 'Captura importada: 1 implante.', other: 'Captura importada: {count} implantes.' },
     captureReplaced: 'Captura reemplazada.',
+    usingOnly: 'Se usa solo el archivo {kind}.',
     detected: { found: 'Posiciones encontradas: {found}.', provisional: 'Provisionales: {provisional}.', unresolved: 'No reconocidas: {unresolved}.' },
     applied: 'Se aplicó {name} a {target}.',
     undo: 'Deshacer',
@@ -571,7 +577,7 @@ const es: Copy = {
         freeform: { t: 'Superficies curvas en el OBJ.', b: 'Este OBJ usa curvas o superficies libres{loc}. Expórtalo como malla de triángulos; STL es lo más seguro.' },
         columnMajor: { t: 'Matrices guardadas por columnas.', b: 'Este archivo escribe sus matrices columna por columna. DDT Xchange solo acepta matrices por filas (row-major), para no tener que adivinar. Expórtalas por filas (o transpuestas) y vuelve a intentarlo.' },
         quaternion: { t: 'Rotaciones en cuaterniones.', b: 'No se admiten rotaciones escritas como cuaterniones. Usa matrices de 4×4.' },
-        unknownVersion: { t: 'Versión de MicronMapper no admitida.', b: 'Solo se leen MicronMapper V1.4 (marcadores AXO) y V1.6 (marcadores AHY), y el prefijo de los marcadores debe coincidir con la versión.' },
+        unknownVersion: { t: 'Versión de MicronMapper no admitida.', b: 'Solo se leen archivos de MicronMapper V1.4 y V1.6.' },
       },
     },
     TEXT_ENCODING: {
@@ -605,6 +611,7 @@ const es: Copy = {
         json: { t: 'No se puede leer el JSON.', b: 'Tiene un error de sintaxis. Expórtalo de nuevo.' },
         applicationMissing: { t: 'Problema en el encabezado de MicronMapper.', b: 'La línea "Application:" debe aparecer exactamente una vez.' },
         applicationRepeated: { t: 'Problema en el encabezado de MicronMapper.', b: 'La línea "Application:" debe aparecer exactamente una vez.' },
+        markerFamily: { t: 'Marcadores de MicronMapper mezclados.', b: 'Un marcador usa otro prefijo que el primero{loc}. Todos los marcadores de un archivo comparten un prefijo, como BTH01, BTH02.' },
         matrixOrderMissing: { t: 'Orden de matriz no indicado.', b: 'El archivo debe indicar que sus matrices son por filas (por ejemplo matrixOrder = "row-major").' },
         matrixOrder: { t: 'Orden de matriz no indicado.', b: 'El archivo debe indicar que sus matrices son por filas (por ejemplo matrixOrder = "row-major").' },
         endpointMissing: { t: 'Punto de iCam incompleto.', b: 'Cada implante necesita exactamente una línea _Origin, _X, _Y y _Z{loc}.' },

@@ -19,10 +19,14 @@ import { describeComponents, diagonal, siteCost, type MeshComponent } from './si
 export type AssemblyPlan =
   /** One body (possibly several shells of one part) in the implant frame: place it at every site as usual. */
   | { kind: 'single' }
-  /** Every body has the same shape at its site: `mesh` is that body in the implant frame (a normal library geometry). */
+  /** Every body has the same shape and sits at its site: `mesh` is that body in the implant frame (a normal library geometry). */
   | { kind: 'normalized'; mesh: TriMesh; maxDeviationMm: number }
-  /** Different bodies: each site gets its own body in its implant frame, so site.matrix · mesh reproduces the file's coordinates. */
-  | { kind: 'fixed'; meshBySite: Record<string, TriMesh> }
+  /**
+   * Different bodies: each site gets its own body in its implant frame, so site.matrix · mesh reproduces the file's
+   * coordinates. `atSites` false: one body per site, but they are not at the sites (another coordinate system, most
+   * likely): the UI does not apply it and offers to use only one of the two files.
+   */
+  | { kind: 'fixed'; meshBySite: Record<string, TriMesh>; atSites: boolean }
   /** Bodies laid out like an assembly, but not one per site. */
   | { kind: 'countMismatch'; bodies: number; sites: number };
 
@@ -39,10 +43,10 @@ const AT_SITE_COST_MM = 5;
 
 /**
  * Decides how a replacement mesh is used (spec 4.1.7). Positioned assembly = at least two bodies
- * (non-fragment shells) that are either spread out (centroids span more than 1.5 × the largest
- * body diagonal, the prototype's rule) or each sit at a distinct site (catches two neighbouring
- * implants, which the spread rule misses). Fragments travel with their nearest body, so no
- * geometry is ever dropped.
+ * (non-fragment shells, each with the inner pieces that sit in it) that are either spread out
+ * (centroids span more than 1.5 × the largest body diagonal, the prototype's rule) or each sit at a
+ * distinct site (catches two neighbouring implants, which the spread rule misses). Inner pieces and
+ * fragments travel with their body, so no geometry is ever dropped.
  */
 export function planAssembly(mesh: TriMesh, sites: readonly ImplantSite[], options: AssemblyOptions = {}): AssemblyPlan {
   const tolerance = options.toleranceMm ?? 0.03;
@@ -79,7 +83,7 @@ export function planAssembly(mesh: TriMesh, sites: readonly ImplantSite[], optio
   if (!(spread > 1.5 * largest) && !atSites) return { kind: 'single' };
   if (!siteOfBody) return { kind: 'countMismatch', bodies: n, sites: sites.length };
 
-  const parts = bodies.map((b) => [b.mesh]);
+  const parts = bodies.map((b) => [b.mesh, ...b.inner]);
   for (const f of components) if (f.fragment) parts[nearestBody(f, bodies)]!.push(f.mesh);
   const local: TriMesh[] = new Array<TriMesh>(n);
   bodies.forEach((_, i) => {
@@ -87,9 +91,9 @@ export function planAssembly(mesh: TriMesh, sites: readonly ImplantSite[], optio
     const group = parts[i]!;
     local[site] = transformMesh(group.length === 1 ? group[0]! : mergeMeshes(group), inverseRigid(sites[site]!.matrix));
   });
-  const deviation = congruence(local, tolerance, samples, seed);
+  const deviation = atSites ? congruence(local, tolerance, samples, seed) : null;
   if (deviation !== null) return { kind: 'normalized', mesh: local[0]!, maxDeviationMm: deviation };
-  return { kind: 'fixed', meshBySite: Object.fromEntries(sites.map((s, i) => [s.id, local[i]!])) };
+  return { kind: 'fixed', meshBySite: Object.fromEntries(sites.map((s, i) => [s.id, local[i]!])), atSites };
 }
 
 function nearestBody(fragment: MeshComponent, bodies: readonly MeshComponent[]): number {

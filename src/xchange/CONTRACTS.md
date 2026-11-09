@@ -168,7 +168,8 @@ export function parseXml(text: string): XmlElement; // returns the root element
   (`D0 CF 11 E0`) magic -> `FORMAT_UNSUPPORTED reason 'spreadsheet'` -> `decodeText` -> detect -> family parser.
   Excel 2003 XML (`urn:schemas-microsoft-com:office:spreadsheet`) is also `'spreadsheet'`.
 - **XLSX is out of scope for v1:** users export CSV (the UI says so). No SheetJS, no ZIP reader here.
-- **Families and exact rules:** spec 3.3 table (MicronMapper AXO/AHY with the single `Application:` row; ScanAdaptor
+- **Families and exact rules:** spec 3.3 table (MicronMapper marker rows of one family, three capital letters plus
+  digits: AXO, AHY, BTH… not tied to the version, with the single `Application:` row naming V1.4 or V1.6; ScanAdaptor
   `ToothNumber` + `Mat0..Mat3`; ImplantPositions / Matrix4x4 with `Order=row-major` or 16 `Entry` with `indexBase`;
   delimited tables with exactly one of `Mat0..Mat3` / `m00..m33` / marker + `originX..indexedZ`, identical data
   across the delimiters that parse; JSON `positions[]` / array / `{matrix}` with `units` and `matrixOrder`
@@ -181,7 +182,8 @@ export function parseXml(text: string): XmlElement; // returns the root element
 - **Units:** JSON and matrix XML must declare mm (`UNITS_MISSING` / `UNITS_NOT_MM`); tables may omit them
   (warning `UNITS_ASSUMED_MM`); ScanAdaptor units, if present, must be mm; MicronMapper and iCam are mm.
 - **Refused without guessing:** column-major (`FORMAT_UNSUPPORTED reason 'columnMajor'`), quaternions
-  (`'quaternion'`), other MicronMapper versions or mixed prefixes (`'unknownVersion'`), unnamed or extra columns
+  (`'quaternion'`), other MicronMapper versions (`'unknownVersion'`), two marker families in one MicronMapper file
+  (`POSITIONS_MALFORMED reason 'markerFamily' {row}`), unnamed or extra columns
   (`POSITIONS_MALFORMED reason 'columns'`), several delimiters giving different data (`POSITIONS_AMBIGUOUS`).
 - **XML reader:** XML declaration (first thing only), comments, elements, attributes with `'` or `"`, character
   data, CDATA, the 5 predefined entities and numeric character references. `<!DOCTYPE`, `<!ENTITY` and any other
@@ -246,14 +248,16 @@ export function raycast(bvh: Bvh, origin: Readonly<Vec3>, direction: Readonly<Ve
 // detect/sites.ts
 export interface MeshComponent {
   index: number;
-  mesh: TriMesh;
+  mesh: TriMesh;             // the shell; for a body with inner pieces, its outer shell (fitted, linked, aligned)
   areaMm2: number;
   bounds: Bounds;
   centroid: Vec3;
   /** area < 0.5 % of the largest AND diagonal < 20 % of the largest (spec 4.1.2): kept, flagged. */
   fragment: boolean;
+  /** Shells inside this body (an insert in a cap): never counted, fitted or linked alone; planAssembly keeps them. */
+  inner: TriMesh[];
 }
-/** weld + connectedComponents + extractComponents. Order = lowest triangle index, so body i of placeBodies is component i. */
+/** weld + connectedComponents + extractComponents, inner pieces folded into their body. Order = lowest triangle index, so body i of placeBodies is component i. */
 export function splitComponents(captureMesh: TriMesh, options?: { weldToleranceMm?: number }): MeshComponent[];
 
 export interface RecoverOptions {
@@ -271,7 +275,7 @@ export interface RecoverResult {
 }
 /** Fits `reference` (implant frame) to every non-fragment component: PCA starts + ICP with core/rigid and geometry/bvh. */
 export function recoverSitesFromMesh(captureMesh: TriMesh, reference: ReferenceBody, options?: RecoverOptions): RecoverResult;
-/** Position file + capture mesh: give each site the nearest unused component (cost hypot(x, y) + 0.1·|z| in the site frame, greedy, max 10 mm). Returns new site objects. */
+/** Position file + capture mesh: give each site the nearest unused component (siteCost: hypot(x, y) + 0.1·|z| + max(0, |z| − 20) in the site frame, greedy, max 10 mm). Returns new site objects. */
 export function linkSitesToComponents(sites: readonly ImplantSite[], components: readonly MeshComponent[]): ImplantSite[];
 ```
 
@@ -281,14 +285,30 @@ export function linkSitesToComponents(sites: readonly ImplantSite[], components:
   `SITE_INDEX_AMBIGUOUS {count}`. A fit within 3 × `maxRmsMm` but failing a check -> `flags.provisional` and
   `SITE_PROVISIONAL {count}`; worse -> `unresolved`. Fragments -> `COMPONENT_FRAGMENTS {count}`.
   A centroid alone is never a datum (spec 4.1.5).
+- **One body = the outer shell plus what sits inside it.** A non-fragment shell B is folded into A (`A.inner`, out of
+  the list, indices renumbered) when A is the bigger one (diagonal; the lower index for twins), B's centroid lies on
+  A's axis (the principal axis whose variance stands apart) and B lies inside A's box, axis-aligned and in A's
+  principal frame, all within 2 % of A's diagonal. So a positions STL whose caps each carry an insert counts one body
+  per implant, detection fits only the caps (no duplicate implants, no "wrong scan body"), linking never picks the
+  insert, and `planAssembly` exports each cap with its insert. Neighbours stick out of each other's box and a body on
+  an arch strip is far from the strip's axis, so neither is folded in. The pair test is skipped above 1,024 shells.
 - More than `LIMITS.capture.maxComponents` non-fragment components -> `TOO_MANY_COMPONENTS {limit}`.
+- **Different coordinate systems.** A centroid more than 20 mm along a site's axis is not that implant's body
+  (`siteCost` adds every millimetre beyond 20 in full), so a position file and a mesh in different frames no longer
+  link by chance. `state/jobs-handler.readCapture` keeps the links only when at least half of the positions that can
+  have a body (min(sites, bodies)) found one; otherwise no site is linked and the result carries `framesDiffer: true`
+  (the UI offers to use only one of the two files, `captureOnly`). `planAssembly` returns `normalized` only for bodies
+  at the sites; `fixed` carries `atSites` (false: one body per site, but elsewhere; the UI does not apply it).
 - **Errors:** `INVALID_ARGUMENT`, `MESH_EMPTY`, `DEGENERATE_GEOMETRY`, `TOO_MANY_COMPONENTS`, `INSUFFICIENT_DATA`,
   `REFERENCE_NO_MATCH` (reference unusable, e.g. zero area). Warnings: `COMPONENT_FRAGMENTS`,
   `SITE_INDEX_AMBIGUOUS`, `SITE_PROVISIONAL`.
 - **Tests (minimum):** `placeBodies(makeFrames(4..8), makeScanBody())` -> every frame recovered within 20 µm (origin)
   and 0.05° (`rotationAngleBetween`), also with `addNoise` 10 µm (looser: 30 µm / 0.3°); revolution body -> origin and
   axis recovered, `indexAmbiguous` true; the arch strip as an extra component -> `unresolved`; tiny fragment flagged;
-  `closestPoint` / `raycast` match brute force; `weld` merges a split mesh; `linkSitesToComponents` on shuffled sites.
+  `closestPoint` / `raycast` match brute force; `weld` merges a split mesh; `linkSitesToComponents` on shuffled sites;
+  caps with an insert (`test/fixtures/detect.capWithInsert`) -> one body each, found once with the cap or the cap and
+  insert as reference, linked to the cap; an off-axis shell inside the box stays apart; a body 47 mm along a site's
+  axis is never linked; files in different frames -> `framesDiffer`, the STL as geometry `fixed` with `atSites` false.
 
 ## 4. align (builder 4)
 

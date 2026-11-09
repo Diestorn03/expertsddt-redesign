@@ -1,8 +1,8 @@
 /** Step 1 · Arch and capture (UI-DESIGN §5.3): import pipeline, capture scan body, provisional positions. */
 import type { XchangeWarning } from '../core/errors';
-import type { Arch, ImplantSite } from '../core/types';
+import type { Arch, CaptureFormat, ImplantSite } from '../core/types';
 import { hasDownstreamWork, pendingProvisional, step1Blocker } from '../state/case';
-import type { CaptureResult, DetectResult } from '../state/jobs-handler';
+import { captureOnly, type CaptureResult, type DetectResult } from '../state/jobs-handler';
 import type { App } from './app';
 import { fillKeep, h, pickFiles, q, radiogroup, setChecked } from './dom';
 import { noteCard } from './feedback';
@@ -10,10 +10,16 @@ import { LIMITS } from '../core/limits';
 import { ACCEPT, buffersOf, readFiles } from './files';
 import { fmt, warningMessage } from './i18n/format';
 
+/** The kind of file a format comes in, for "Use only the CSV file" (a format token, the same in every language). */
+export const fileKind = (format: CaptureFormat): string =>
+  ({ 'micronmapper-csv': 'CSV', 'scanadaptor-xml': 'XML', 'matrix-table': 'CSV/TXT', 'positions-json': 'JSON', 'matrix-xml': 'XML', 'icam-txt': 'TXT' } as Partial<Record<CaptureFormat, string>>)[format] ?? format.toUpperCase();
+
 export class CaptureStep {
   private readonly pane: HTMLElement;
   /** Warnings of the last import / detection, shown until the next one. */
   private warnings: XchangeWarning[] = [];
+  /** A position file and a mesh in different coordinate systems, until the user keeps one of them. */
+  private mixed: CaptureResult | null = null;
   private rowsKey = '';
   private job: AbortController | null = null;
 
@@ -30,6 +36,7 @@ export class CaptureStep {
 
   clearWarnings(): void {
     this.warnings = [];
+    this.mixed = null;
   }
 
   setArch(arch: Arch): void {
@@ -62,6 +69,30 @@ export class CaptureStep {
     if (replaced) app.toasts.show(app.c.say.captureReplaced);
   }
 
+  /** "The CSV file and the STL file are in different coordinate systems" with [Use only the STL file] [Use only the CSV file]. */
+  framesNote(): HTMLElement | null {
+    const app = this.app, c = app.c, r = this.mixed;
+    if (!r) return null;
+    const kinds = { positions: fileKind(r.format), mesh: fileKind(r.sources.find((x) => x.kind === 'mesh')?.format ?? 'stl') };
+    const only = (keep: 'positions' | 'mesh'): HTMLElement => {
+      const b = h('button', 'btn btn--outline xch-btn-sm', { type: 'button', text: fmt(app.lang, c.s1.useOnly, { kind: kinds[keep] }) });
+      b.addEventListener('click', () => void this.useOnly(keep, b));
+      return b;
+    };
+    return noteCard(fmt(app.lang, c.s1.framesDiffer, kinds), 'warn', h('div', 'cta-row', {}, only('mesh'), only('positions')));
+  }
+
+  /** The way out of a position file and a mesh that don't share coordinates: keep only one of them. */
+  private async useOnly(keep: 'positions' | 'mesh', opener: Element): Promise<void> {
+    const app = this.app, r = this.mixed;
+    if (!r) return;
+    if (hasDownstreamWork(app.s) && !(await app.confirm('replace', opener))) return;
+    const only = captureOnly(r, keep);
+    this.apply(only, false);
+    app.toasts.show(fmt(app.lang, app.c.say.usingOnly, { kind: fileKind(only.format) }));
+    q<HTMLElement>(this.pane, '.xch__h').focus({ preventScroll: true }); // the button that had focus is gone with the note
+  }
+
   /** Installs a parsed capture as the new case. */
   apply(r: CaptureResult, sample: boolean): void {
     const app = this.app;
@@ -69,6 +100,7 @@ export class CaptureStep {
     app.componentData = (r.components ?? []).map((c) => ({ mesh: c.mesh, normals: c.normals }));
     const mesh = r.mesh ?? null;
     this.warnings = r.warnings;
+    this.mixed = r.framesDiffer ? r : null;
     app.store.set({
       sources: sample ? r.sources.map((s) => ({ ...s, kind: 'sample' as const })) : r.sources,
       format: sample ? 'demo' : r.format,
@@ -153,6 +185,8 @@ export class CaptureStep {
 
     // notes: warnings, unresolved bodies, round bodies, provisional banner
     const notes: HTMLElement[] = this.warnings.map((w) => noteCard(warningMessage(c, app.lang, w, s.captureMesh ? 'capture' : 'positions')));
+    const frames = this.framesNote();
+    if (frames) notes.unshift(frames);
     if (s.unresolved.length) notes.push(noteCard(app.plural(c.s1.unresolved, s.unresolved.length, { list: s.unresolved.map((i) => i + 1).join(', ') })));
     if (s.sites.some((x) => x.flags.indexAmbiguous)) notes.push(noteCard(c.s1.roundNote, 'info'));
     const prov = pendingProvisional(s);

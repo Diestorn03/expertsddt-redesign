@@ -199,7 +199,7 @@ describe('new case', () => {
     step.jawWarnings = [fakeElement({ textContent: 'Large jaw scan: 2,100,000 triangles.' })]; // loadJaw: r.warnings -> noteCard
     const app = Object.create(App.prototype) as App;
     Object.assign(app, {
-      store, alignStep: step, jobs: { cancelAll: vi.fn() }, meshCache: new Map(), geometry: { target: 'one' }, capture: { clearWarnings: vi.fn() },
+      store, alignStep: step, jobs: { cancelAll: vi.fn() }, meshCache: new Map(), geometry: { target: 'one', clearCaseNotes: vi.fn() }, capture: { clearWarnings: vi.fn() },
       viewer: null, root: fakeElement(), selected: null, jawNormals: null, componentData: [],
     });
     app.resetCase('lower'); // what [New case], loadSample and CaptureStep.apply call

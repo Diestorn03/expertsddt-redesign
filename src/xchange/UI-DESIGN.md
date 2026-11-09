@@ -542,8 +542,8 @@ Import pipeline, all of it inside the jobs worker:
 | More than one mesh | Refused with `ui.oneMesh`; the case is unchanged | — |
 | Position files | Parsed one by one, extension passed for the vendor/spreadsheet refusal | `parsePositions(bytes, { extension })` |
 | Several position files | Merged: a label present in two files is kept once when `maxAbsDiff(a.matrix, b.matrix) ≤ 1e-7`, otherwise `XchangeError('LABEL_DUPLICATE', { reason: 'crossFile' })`; ids re-numbered `site-1..n` (file order, then row order); merged count above `LIMITS.positions.maxPositions` → `TOO_MANY_POSITIONS { limit }` | `maxAbsDiff` (core/mat4) |
-| Mesh + position file(s) | The file positions are the authority; the mesh gives each implant its captured surface | `parseMesh(bytes, 'capture', hint)` → `splitComponents(mesh)` → `linkSitesToComponents(sites, components)` |
-| Mesh only | Bodies are counted at once; positions wait for a capture scan body | `parseMesh` → `splitComponents`; then `recoverSitesFromMesh(mesh, { mesh: reference })` |
+| Mesh + position file(s) | The file positions are the authority; the mesh gives each implant its captured surface. When fewer than half of the positions that can have a body find one (min(positions, bodies)), the two files are in different coordinate systems: nothing is linked and `framesDiffer` asks to keep one of them (states table) | `parseMesh(bytes, 'capture', hint)` → `splitComponents(mesh)` → `linkSitesToComponents(sites, components)` |
+| Mesh only | Bodies are counted at once (a shell inside another one, coaxial and within its box, is part of that body: a cap with its insert counts once); positions wait for a capture scan body | `parseMesh` → `splitComponents`; then `recoverSitesFromMesh(mesh, { mesh: reference })` |
 
 `capture.format` = the first position file's format, else the mesh format (each site keeps its own `source`). Any error
 leaves the case untouched; with several files the alert starts "File 2 of 3:".
@@ -559,6 +559,7 @@ leaves the case untouched; with several files the alert starts "File 2 of 3:".
 | Provisional positions | Banner with `[Show them]` (camera frames them, they pulse once) and `[Confirm positions]`; each provisional row has `[Leave out]`. Continue stays disabled until each one is confirmed or left out |
 | Not recognized bodies | Note "2 bodies weren't recognized and are left out (bodies 3, 6). Wrong scan body? Pick another one." |
 | Round bodies (index ambiguous) | Note `s1.roundNote`; rows show "Rotation unknown"; not blocking (the report records it) |
+| Position file and mesh in different coordinate systems (`framesDiffer`) | Amber note `s1.framesDiffer` on top, with `[Use only the STL file]` and `[Use only the CSV file]` (`s1.useOnly`, the file kinds from the formats). Each keeps one file as a new capture (`captureOnly`; the replace confirmation first when steps 2–4 hold work) and toasts `say.usingOnly`; the mesh alone then asks for its capture scan body. Until then the positions stand, unlinked; never blocking |
 | Error | Red alert (§12.9); the previous case untouched |
 
 **5.3.1 Replacing a case.** A valid new capture while steps 2–4 hold work opens `#xch-confirm` ("Replace the current
@@ -600,8 +601,9 @@ Body:
 | Plan | UI |
 |---|---|
 | `single` | Inline name field opens (default "Geometry n", focused and selected); Enter saves to the library and applies it to the target |
-| `normalized` | Note `s2.assemblyNormalized` (with `maxDeviationMm` in µm); named, saved, applied to all implants |
-| `fixed` | Note `s2.assemblyFixed`; a case-only entry applied to all implants; with a capture mesh also `verifyAssemblyLayout(captureMesh, mesh)`, `compatible: false` → warning `s2.layoutMismatch` |
+| `normalized` (bodies at the sites) | Note `s2.assemblyNormalized` (with `maxDeviationMm` in µm); named, saved, applied to all implants |
+| `fixed`, `atSites` | Note `s2.assemblyFixed`; a case-only entry applied to all implants; with a capture mesh also `verifyAssemblyLayout(captureMesh, mesh)`, `compatible: false` → warning `s2.layoutMismatch` |
+| `fixed`, not `atSites` | One body per implant, but not at the implants (a positions STL in another coordinate system). Nothing is applied: amber note `s2.framesDiffer` with `[Use only this STL file]` (`s2.useOnly`: step 1 opens and imports this file as the capture, replace confirmation included) and `[Keep the capture's positions]` (`s2.keepCapture`: closes the note, focus to Load geometry file). A new case clears the note |
 | `countMismatch` | Alert `ui.assemblyCount` |
 
 Continue is enabled when every implant not left out has a geometry; otherwise the reason line reads "2 implants still
@@ -1204,7 +1206,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `help.how[3].t` | Export | Exportar |
 | `help.how[3].d` | Check the fit on the color map and download one ZIP that opens in Exocad in a single coordinate system. | Revisa el ajuste en el mapa de color y descarga un ZIP que se abre en Exocad en un solo sistema de coordenadas. |
 | `help.import.title` | What you can import | Qué puedes importar |
-| `help.import.items[0]` | Implant positions: MicronMapper CSV (V1.4 AXO, V1.6 AHY), ScanAdaptor XML, iCam TXT, matrix tables in CSV or TXT, JSON and ImplantPositions XML. | Posiciones de implantes: CSV de MicronMapper (V1.4 AXO, V1.6 AHY), XML de ScanAdaptor, TXT de iCam, tablas de matrices en CSV o TXT, JSON y XML ImplantPositions. |
+| `help.import.items[0]` | Implant positions: MicronMapper CSV (V1.4 and V1.6, any marker family: AXO, AHY, BTH…), ScanAdaptor XML, iCam TXT, matrix tables in CSV or TXT, JSON and ImplantPositions XML. | Posiciones de implantes: CSV de MicronMapper (V1.4 y V1.6, cualquier familia de marcadores: AXO, AHY, BTH…), XML de ScanAdaptor, TXT de iCam, tablas de matrices en CSV o TXT, JSON y XML ImplantPositions. |
 | `help.import.items[1]` | Capture mesh: STL, PLY or OBJ of the scan bodies, alone or with a position file. | Malla de captura: STL, PLY u OBJ de los scan bodies, sola o con un archivo de posiciones. |
 | `help.import.items[2]` | Geometry: STL, PLY or OBJ in the implant frame (origin at the connection, +Z along the axis, +X toward the index). | Geometría: STL, PLY u OBJ en el sistema del implante (origen en la conexión, +Z a lo largo del eje, +X hacia el índice). |
 | `help.import.items[3]` | Jaw scan: STL or PLY; the color is kept. | Escaneo de la arcada: STL o PLY; se conserva el color. |
@@ -1309,6 +1311,8 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `s1.needReference` | Choose the capture scan body. | Elige el scan body de la captura. |
 | `s1.needConfirm` | Confirm or leave out the provisional positions. | Confirma o excluye las posiciones provisionales. |
 | `s1.fileOf` | File {n} of {total}: | Archivo {n} de {total}: |
+| `s1.framesDiffer` | The {positions} file and the {mesh} file are in different coordinate systems: the positions don't fall on the bodies, so they weren't matched. Keep one of the two. | El archivo {positions} y el archivo {mesh} están en sistemas de coordenadas distintos: las posiciones no caen sobre los cuerpos, así que no se emparejaron. Quédate con uno de los dos. |
+| `s1.useOnly` | Use only the {kind} file | Usar solo el archivo {kind} |
 | `s2.title` | Replacement geometry | Geometría de reemplazo |
 | `s2.text` | Pick what should sit on each implant in the export, usually the scan body or healing cap visible in your jaw scan. A geometry applies as soon as you pick it; picked for all implants, it also takes you to the next step. | Elige lo que irá sobre cada implante en la exportación, normalmente el scan body o pilar de cicatrización que se ve en tu escaneo. La geometría se aplica en cuanto la eliges; si es para todos los implantes, también te lleva al siguiente paso. |
 | `s2.applyTo` | Apply to | Aplicar a |
@@ -1321,6 +1325,9 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `s2.assemblyFixed` | This file holds a different body at each implant, already in place. Each implant keeps its own body, for this case only. | Este archivo trae un cuerpo distinto en cada implante, ya en su lugar. Cada implante conserva su cuerpo, solo para este caso. |
 | `s2.assemblyAll` | A positioned assembly always applies to all implants. | Un ensamblaje posicionado siempre se aplica a todos los implantes. |
 | `s2.layoutMismatch` | The bodies in this file don't sit where the captured bodies are; they may come from another coordinate system. | Los cuerpos de este archivo no están donde están los cuerpos capturados; pueden venir de otro sistema de coordenadas. |
+| `s2.framesDiffer` | The bodies in this file aren't on the implant positions of the capture: the two are in different coordinate systems, so the file wasn't applied. Use only this file to take the positions from it (it replaces the capture), or keep the capture and pick a single body. | Los cuerpos de este archivo no están en las posiciones de los implantes de la captura: los dos están en sistemas de coordenadas distintos, así que el archivo no se aplicó. Usa solo este archivo para tomar de él las posiciones (reemplaza la captura), o mantén la captura y elige un solo cuerpo. |
+| `s2.useOnly` | Use only this {kind} file | Usar solo este archivo {kind} |
+| `s2.keepCapture` | Keep the capture's positions | Mantener las posiciones de la captura |
 | `s3.title` | Jaw scan | Escaneo de la arcada |
 | `s3.text` | Add the tissue scan from the intraoral scanner, as STL or PLY, to align the implants to it. It is never changed: the export copies it byte for byte. | Agrega el escaneo de tejidos del escáner intraoral, en STL o PLY, para alinear los implantes con él. Nunca se modifica: la exportación lo copia byte a byte. |
 | `s3.drop` | Drop the jaw scan here | Suelta aquí el escaneo de la arcada |
@@ -1647,6 +1654,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `say.step` | Step {n} of 4: {name}. | Paso {n} de 4: {name}. |
 | `say.captureOk` | one: Capture imported: 1 implant. · other: Capture imported: {count} implants. | one: Captura importada: 1 implante. · other: Captura importada: {count} implantes. |
 | `say.captureReplaced` | Capture replaced. | Captura reemplazada. |
+| `say.usingOnly` | Using only the {kind} file. | Se usa solo el archivo {kind}. |
 | `say.detected` | Positions found: {found}. Provisional: {provisional}. Not recognized: {unresolved}. (parts with 0 are left out) | Posiciones encontradas: {found}. Provisionales: {provisional}. No reconocidas: {unresolved}. (se omiten las partes en 0) |
 | `say.applied` | {name} applied to {target}. | {name} aplicada a {target}. |
 | `say.undo` | Undo | Deshacer |
@@ -1724,7 +1732,7 @@ capitals. A reason row overrides the code row; an unknown reason falls back to t
 | ↳ `freeform` | **Curved surfaces in the OBJ.** This OBJ uses freeform curves or surfaces{loc}. Export it as a triangle mesh; STL is the safest choice. | **Superficies curvas en el OBJ.** Este OBJ usa curvas o superficies libres{loc}. Expórtalo como malla de triángulos; STL es lo más seguro. |
 | ↳ `columnMajor` | **Matrices stored by columns.** This file writes its matrices column by column. DDT Xchange only accepts row-major matrices, so it never has to guess. Export them row-major (or transposed) and try again. | **Matrices guardadas por columnas.** Este archivo escribe sus matrices columna por columna. DDT Xchange solo acepta matrices por filas (row-major), para no tener que adivinar. Expórtalas por filas (o transpuestas) y vuelve a intentarlo. |
 | ↳ `quaternion` | **Rotations as quaternions.** Rotations written as quaternions aren't supported. Use 4×4 matrices. | **Rotaciones en cuaterniones.** No se admiten rotaciones escritas como cuaterniones. Usa matrices de 4×4. |
-| ↳ `unknownVersion` | **MicronMapper version not supported.** Only MicronMapper V1.4 (AXO markers) and V1.6 (AHY markers) are read, and the marker prefix must match the version. | **Versión de MicronMapper no admitida.** Solo se leen MicronMapper V1.4 (marcadores AXO) y V1.6 (marcadores AHY), y el prefijo de los marcadores debe coincidir con la versión. |
+| ↳ `unknownVersion` | **MicronMapper version not supported.** Only MicronMapper V1.4 and V1.6 files are read. | **Versión de MicronMapper no admitida.** Solo se leen archivos de MicronMapper V1.4 y V1.6. |
 | ↳ other reason | **Variant not supported.** This file uses a variant DDT Xchange doesn't read. | **Variante no admitida.** Este archivo usa una variante que DDT Xchange no lee. |
 | `TEXT_ENCODING` · `invalid` | **Unreadable text.** The file isn't valid UTF-8 text (or UTF-16 with a byte-order mark). Save it again as UTF-8. | **Texto ilegible.** El archivo no es texto UTF-8 válido (ni UTF-16 con marca de orden de bytes). Guárdalo de nuevo como UTF-8. |
 | ↳ `nul` | **Binary data in a text file.** The file holds binary data where text was expected. It may be damaged or of another type. | **Datos binarios en un archivo de texto.** El archivo trae datos binarios donde se esperaba texto. Puede estar dañado o ser de otro tipo. |
@@ -1744,6 +1752,7 @@ capitals. A reason row overrides the code row; an unknown reason falls back to t
 | ↳ `columns` | **Columns not recognized.** Use one name column (name, label, position, toothnumber or marker) plus Mat0–Mat3, m00–m33, or origin, axis and indexed columns, and nothing else{loc}. | **Columnas no reconocidas.** Usa una columna de nombre (name, label, position, toothnumber o marker) más Mat0–Mat3, m00–m33, o columnas origin, axis e indexed, y nada más{loc}. |
 | ↳ `json` | **The JSON can't be read.** It has a syntax error. Export it again. | **No se puede leer el JSON.** Tiene un error de sintaxis. Expórtalo de nuevo. |
 | ↳ `applicationMissing`, `applicationRepeated` | **MicronMapper header problem.** The "Application:" line must appear exactly once. | **Problema en el encabezado de MicronMapper.** La línea "Application:" debe aparecer exactamente una vez. |
+| ↳ `markerFamily` {row} | **Mixed MicronMapper markers.** A marker uses another prefix than the first one{loc}. All the markers of one file share one prefix, like BTH01, BTH02. | **Marcadores de MicronMapper mezclados.** Un marcador usa otro prefijo que el primero{loc}. Todos los marcadores de un archivo comparten un prefijo, como BTH01, BTH02. |
 | ↳ `matrixOrderMissing`, `matrixOrder` | **Matrix order not stated.** The file must say that its matrices are row-major (for example matrixOrder = "row-major"). | **Orden de matriz no indicado.** El archivo debe indicar que sus matrices son por filas (por ejemplo matrixOrder = "row-major"). |
 | ↳ `endpointMissing`, `endpointRepeated` | **Incomplete iCam point.** Each implant needs exactly one _Origin, _X, _Y and _Z line{loc}. | **Punto de iCam incompleto.** Cada implante necesita exactamente una línea _Origin, _X, _Y y _Z{loc}. |
 | `POSITIONS_EMPTY` | **No positions found.** The file was read, but it holds no implant positions. | **No hay posiciones.** El archivo se leyó, pero no contiene posiciones de implantes. |
@@ -1920,7 +1929,8 @@ format, warnings }` · `export { request }` → `ExportBundle` (zip transferred)
 | Read any mesh (+ display normals) | jobs | `parseMesh(bytes, purpose, hint)`, `computeVertexNormals(mesh)` |
 | Split a capture mesh | jobs | `splitComponents(mesh)` |
 | Find positions in a capture mesh | jobs | `recoverSitesFromMesh(mesh, { mesh: reference })` |
-| Link a position file to a capture mesh | jobs | `linkSitesToComponents(sites, components)` |
+| Link a position file to a capture mesh | jobs | `linkSitesToComponents(sites, components)`; `framesDiffer` when fewer than half link |
+| Keep only the position file or only the mesh | UI | `captureOnly(capture, 'positions' \| 'mesh')`, then the usual apply |
 | Merge several position files | jobs | `maxAbsDiff(a, b) ≤ 1e-7` (core/mat4) |
 | Load a replacement geometry | jobs | `parseMesh(…, 'geometry')`, `planAssembly(mesh, sites)`, `verifyAssemblyLayout(captureMesh, mesh)` |
 | Build alignment parts | main | `transformMesh(geometry.mesh, site.matrix)` or `components[site.componentIndex].mesh` |

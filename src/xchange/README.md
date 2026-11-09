@@ -42,7 +42,11 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 **Funciona en la interfaz** (`/ddt-xchange/` y `/es/ddt-xchange/`, dentro del sitio, con su motion, Lenis y ClientRouter):
 - Paso 1: arcada superior/inferior e importación de la captura (malla de scan bodies o uno o varios archivos de
   posiciones; la misma etiqueta en dos archivos solo se acepta si las matrices coinciden en 1e-7). Posiciones
-  provisionales con confirmar o dejar fuera.
+  provisionales con confirmar o dejar fuera. CSV de MicronMapper con cualquier familia de marcadores (AXO, AHY, BTH…,
+  una por archivo). Una tapa con su inserto cuenta como un solo cuerpo, también al detectar y al exportar. Si el archivo
+  de posiciones y la malla no comparten sistema de coordenadas, no se emparejan y un aviso ofrece usar solo uno.
+  Un STL de posiciones elegido como geometría cuyos cuerpos no caen sobre los implantes no se aplica (paso 2, con el
+  mismo aviso).
 - Paso 2: geometría de reemplazo desde "Tus geometrías" (IndexedDB, 50 como máximo, favoritas, renombrar, eliminar
   con confirmación, copia de seguridad en JSON). Elegir una la aplica al instante a todos o al implante elegido en este
   paso, con Deshacer; aplicada a todos, pasa sola al paso 3.
@@ -79,7 +83,7 @@ All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángul
 el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
 solo (Good fit, unos 4 µm) y exporta el ZIP.
 
-**Probado:** 532 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 547 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones
@@ -98,13 +102,15 @@ cortados.
   un hash o a un archivo antes de quitarlo).
 - XLSX y los formatos nativos PIC, Tupel y BEB se rechazan. El ZIP se arma en memoria (pico de unas 2 veces el
   paquete, máximo 512 MB).
-- Todo se validó solo con datos sintéticos: una tira de encía y cilindros, sin dientes, paladar ni artefactos de escaneo.
+- Los tests del repositorio usan solo datos sintéticos. Los 5 casos reales de Fernando (8 arcadas) se corren aparte,
+  con el harness del análisis (`analysis/harness/xcase.mts --root <este repo>`), nunca desde el repositorio.
 
 **Necesita al cliente (Fernando)**, con casos anonimizados:
 - P5/P14: 3-5 casos con la alineación correcta hecha en exocad, para calibrar los umbrales, que hoy son heurísticos.
   Alineación: RMS 50/100 µm, cobertura 95/80 %, ambigüedad 1,1 veces o 5 µm. Detección: 30 µm y 98 %, cobertura de
   la referencia 50 %.
-- P1: exportaciones reales de MicronMapper, ScanAdaptor e iCam (los lectores siguen el prototipo y su guía).
+- P1: exportaciones reales de ScanAdaptor e iCam (los lectores siguen el prototipo y su guía). De MicronMapper ya hay
+  5 CSV reales y se leen todos.
 - P11: tamaños reales de mandíbulas y capturas para ajustar los límites (hoy 150 MB y 3 M triángulos; se avisa de
   unidades si una mandíbula mide menos de 15 mm).
 - P3/P4: el CAD de los cuerpos de escaneo de referencia, con su licencia, y qué hacer con el giro axial de los

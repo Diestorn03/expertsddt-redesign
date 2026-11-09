@@ -9,7 +9,7 @@ import { activeSites, missingGeometry, type CaseGeometry } from '../state/case';
 import { UiError, type GeometryResult } from '../state/jobs-handler';
 import { LibraryError, matchesQuery, type GeometryMeta } from '../state/library';
 import type { App } from './app';
-import { dropZone } from './step-capture';
+import { dropZone, fileKind } from './step-capture';
 import { fill, fillKeep, h, icon, pickFiles, q, radiogroup, setChecked } from './dom';
 import { noteCard } from './feedback';
 import { LIMITS } from '../core/limits';
@@ -79,6 +79,10 @@ export class GeometryStep {
       app.error(step, new UiError('assemblyCount'), 'geometry', { vars: { bodies: r.plan.bodies, sites: r.plan.sites } });
       return;
     }
+    if (r.plan.kind === 'fixed' && !r.plan.atSites) {
+      this.offSites(file, fileKind(r.format));
+      return;
+    }
     if (r.plan.kind === 'fixed') {
       const group = `asm-${++assemblies}`;
       const caseGeometries = new Map(app.s.caseGeometries);
@@ -105,6 +109,32 @@ export class GeometryStep {
       this.target = 'all';
     }
     this.askName(mode, mesh, r.plan.kind === 'normalized' ? undefined : r.normals);
+  }
+
+  /**
+   * One body per implant, but not at the implants: the file and the capture are in different coordinate systems.
+   * Nothing is applied; the note offers this file as the capture instead (imported in step 1), or keeping the capture.
+   */
+  private offSites(file: File, kind: string): void {
+    const app = this.app, c = app.c;
+    const asCapture = h('button', 'btn btn--outline xch-btn-sm', { type: 'button', text: fmt(app.lang, c.s2.useOnly, { kind }) });
+    const keep = h('button', 'btn btn--outline xch-btn-sm', { type: 'button', text: c.s2.keepCapture });
+    const note = noteCard(c.s2.framesDiffer, 'warn', h('div', 'cta-row', {}, asCapture, keep));
+    note.dataset.plan = '1';
+    // step 1 shows the import (busy row, errors); a new capture clears this note (clearCaseNotes), a "keep" answer leaves it
+    asCapture.addEventListener('click', () => { app.go(1); void app.capture.importFiles([file], null); });
+    keep.addEventListener('click', () => {
+      this.notes = this.notes.filter((n) => n !== note);
+      q<HTMLElement>(this.pane, '[data-pick="geometry"]').focus();
+      app.render();
+    });
+    this.notes = [...this.notes.filter((n) => !n.dataset.plan), note];
+    app.render();
+  }
+
+  /** A new case: the notes about the last geometry file go; the library ones stay. */
+  clearCaseNotes(): void {
+    this.notes = this.notes.filter((n) => !n.dataset.plan && !n.dataset.warn);
   }
 
   /** Inline name field (Enter saves, Esc cancels); the name never comes from the file. */

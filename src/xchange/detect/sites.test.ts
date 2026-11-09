@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { transformPoint } from '../core/mat4';
+import { fromTranslation, multiply, transformPoint } from '../core/mat4';
 import { countTriangles, mergeMeshes, surfaceArea, transformMesh } from '../core/mesh';
 import type { ImplantSite, TriMesh } from '../core/types';
 import { distance } from '../core/vec3';
 import { pcaOfSurface } from '../geometry/pca';
-import { addNoise, makeFrames, makeScanBody, placeBodies } from '../test/fixtures';
-import { expectFrames, speck } from '../test/fixtures/detect';
+import { addNoise, makeFrames, makeRevolutionBody, makeScanBody, placeBodies } from '../test/fixtures';
+import { capWithInsert, expectFrames, speck } from '../test/fixtures/detect';
 import { linkSitesToComponents, recoverSitesFromMesh, splitComponents } from './sites';
 
 const DEG = Math.PI / 180;
@@ -91,5 +91,51 @@ describe('linkSitesToComponents', () => {
     expect(linked[0]!.matrix).not.toBe(shuffled[0]!.matrix);
     expect(shuffled[1]!.componentIndex).toBe(3); // input untouched
     expect(linkSitesToComponents(sites, []).every((s) => s.componentIndex === undefined)).toBe(true);
+  });
+
+  it('never links a body that stands far along a site axis (another coordinate system)', () => {
+    const frames = makeFrames(4, 'lower', 11);
+    const sites: ImplantSite[] = frames.map((matrix, i) => ({ id: `site-${i + 1}`, label: `S${i + 1}`, matrix, source: 'micronmapper-csv', flags: {} }));
+    const along = (mm: number) => splitComponents(placeBodies(frames.map((f) => multiply(f, fromTranslation([0, 0, mm]))), body));
+    expect(linkSitesToComponents(sites, along(47)).map((s) => s.componentIndex)).toEqual([undefined, undefined, undefined, undefined]);
+    expect(linkSitesToComponents(sites, along(12)).map((s) => s.componentIndex)).toEqual([0, 1, 2, 3]); // a tall body: still its own
+  });
+});
+
+describe('one body = the outer shell plus the pieces inside it', () => {
+  const { cap, insert, body: capped } = capWithInsert();
+  const frames = makeFrames(4, 'lower', 6);
+  const capture = placeBodies(frames, capped);
+  const sites: ImplantSite[] = frames.map((matrix, i) => ({ id: `site-${i + 1}`, label: `S${i + 1}`, matrix, source: 'micronmapper-csv', flags: {} }));
+
+  it('counts one body per implant and keeps the insert with it (it pokes out of the box by 0.05 mm)', () => {
+    const components = splitComponents(capture);
+    expect(components).toHaveLength(4);
+    components.forEach((c, i) => {
+      expect([c.index, c.fragment, c.inner.length]).toEqual([i, false, 1]);
+      expect(countTriangles(c.mesh)).toBe(countTriangles(cap));
+      expect(countTriangles(c.inner[0]!)).toBe(countTriangles(insert));
+    });
+  });
+
+  it('finds each implant once, with the cap alone or the cap and its insert as the capture scan body', () => {
+    for (const reference of [cap, capped]) {
+      const r = recoverSitesFromMesh(capture, { mesh: reference });
+      expectFrames(r, frames, 0.02, 0.05 * DEG, false);
+      expect(r.unresolved).toEqual([]);
+      expect(r.fits.map((f) => f.status)).toEqual(['reliable', 'reliable', 'reliable', 'reliable']);
+    }
+  });
+
+  it('links each position to its body, never to the insert', () => {
+    expect(linkSitesToComponents(sites, splitComponents(capture)).map((s) => s.componentIndex)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('folds in only a shell that is on the axis and inside the box', () => {
+    const shaft = transformMesh(makeRevolutionBody({ radius: 1.25, height: 4.65 }), fromTranslation([1, 0, 0.35])); // inside the box, 1 mm off the axis
+    expect(splitComponents(mergeMeshes([cap, shaft])).map((c) => c.inner.length)).toEqual([0, 0]);
+    // The same body twice, 1 µm apart (beyond the weld): one body, the later copy folded into the first.
+    const twin = splitComponents(mergeMeshes([cap, transformMesh(cap, fromTranslation([0.001, 0, 0]))]));
+    expect(twin.map((c) => [c.index, c.inner.length])).toEqual([[0, 1]]);
   });
 });

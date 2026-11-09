@@ -35,6 +35,11 @@ export interface CaptureResult {
   mesh?: TriMesh;
   /** splitComponents(mesh), indexed like site.componentIndex; fragments flagged. */
   components?: (ShownMesh & { fragment: boolean })[];
+  /**
+   * Position file(s) and mesh in different coordinate systems: fewer than half of the positions that could have a
+   * body sit on one. The sites stay unlinked and the UI offers to keep only one of the two (captureOnly).
+   */
+  framesDiffer?: boolean;
 }
 
 export interface DetectResult {
@@ -126,11 +131,29 @@ export function readCapture(files: readonly InFile[]): CaptureResult {
     sources.push({ kind: 'mesh', format: meshFormat!, count: bodies });
     const fragments = components.length - bodies;
     if (fragments) warnings.push({ code: 'COMPONENT_FRAGMENTS', details: { count: fragments } });
-    if (sites.length) result.sites = linkSitesToComponents(sites, components);
+    if (sites.length) {
+      const linked = linkSitesToComponents(sites, components);
+      // The links are kept only when at least half of the positions that can have a body found one (UI-DESIGN §5.3).
+      if (2 * linked.filter((x) => x.componentIndex !== undefined).length >= Math.min(sites.length, bodies)) result.sites = linked;
+      else result.framesDiffer = true;
+    }
     result.mesh = mesh;
     result.components = components.map((c) => ({ ...shown(c.mesh), fragment: c.fragment }));
   }
   return result;
+}
+
+/** The capture without its mesh ('positions') or without its position files ('mesh'): the two ways out of framesDiffer. */
+export function captureOnly(r: CaptureResult, keep: 'positions' | 'mesh'): CaptureResult {
+  const sources = r.sources.filter((src) => src.kind === keep);
+  const fromPositions = (w: XchangeWarning): boolean => w.code === 'UNITS_ASSUMED_MM'; // every other warning is about the mesh
+  if (keep === 'positions') {
+    return { sites: r.sites.map(({ componentIndex: _, ...site }) => site), sources, format: r.format, warnings: r.warnings.filter(fromPositions) };
+  }
+  const only: CaptureResult = { sites: [], sources, format: sources[0]?.format ?? r.format, warnings: r.warnings.filter((w) => !fromPositions(w)) };
+  if (r.mesh) only.mesh = r.mesh;
+  if (r.components) only.components = r.components;
+  return only;
 }
 
 export function detect(mesh: TriMesh, reference: TriMesh): DetectResult {

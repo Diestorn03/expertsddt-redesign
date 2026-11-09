@@ -89,7 +89,7 @@ describe('a new case resets the tools silently (B2/B3, §5.10)', () => {
     said.length = 0;
     const app = {
       store, get s() { return store.state; }, alignStep: { resetCase(): void {} }, jobs: { cancelAll(): void {} }, selected: null, meshCache: new Map(),
-      jawNormals: null, componentData: [], geometry: { target: 'all' }, clearAlerts(): void {}, notes(): void {}, capture: { clearWarnings(): void {} },
+      jawNormals: null, componentData: [], geometry: { target: 'all', clearCaseNotes(): void {} }, clearAlerts(): void {}, notes(): void {}, capture: { clearWarnings(): void {} },
       stage: st, rebuildViewer(): void {},
     };
     App.prototype.resetCase.call(app as unknown as App, null); // main.ts: New case / Exit sample (the sample: resetCase(arch))
