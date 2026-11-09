@@ -20,6 +20,16 @@ import { SplitText } from 'gsap/SplitText';
 import Lenis from 'lenis';
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
+// ScrollTrigger refreshes everything on window 'load' by default. The first page now boots before 'load', so on a slow
+// device or network 'load' lands while the loader is lifting, and that full refresh (0.7 s at CPU x4) froze the hero intro.
+// Instead: refresh on 'load' only if late images changed the page height, and never while the curtain is lifting.
+ScrollTrigger.config({ autoRefreshEvents: 'visibilitychange,DOMContentLoaded,resize' });
+let refreshedH = -1;
+ScrollTrigger.addEventListener('refresh', () => { refreshedH = document.documentElement.scrollHeight; });
+addEventListener('load', function lateImages() {
+  if (document.querySelector('#loader.is-done')) return void setTimeout(lateImages, 250); // wiping: wait until it is removed
+  if (document.documentElement.scrollHeight !== refreshedH) ScrollTrigger.refresh();
+}, { once: true });
 
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const coarse = window.matchMedia('(pointer: coarse)').matches;
@@ -35,6 +45,7 @@ let lenis;
 let ctx;
 let bootId = 0;
 let gate = Promise.resolve(); // resolves when entrances may play (shortly after the loader starts lifting)
+let wipeAt = -1e9; // when the loader's wipe started (first load with motion); 0.7 s, uncovering the screen bottom to top
 let pending = location.hash ? { hash: location.hash } : null; // where to put the reader once the page's scenes exist
 let navType = 'push';
 const cleanups = []; // listeners/observers owned by the current page view
@@ -103,6 +114,7 @@ function initLoader() {
     restore();
     frames().then(() => { // the wipe starts on a fresh frame, not inside the refresh task
       el.classList.add('is-done');
+      if (!reduced) wipeAt = performance.now();
       document.dispatchEvent(new Event('loader:done'));
       setTimeout(open, reduced ? 0 : 200); // entrances start a little into the wipe, so they are seen and do not compete with its first frames
       const gone = () => el.remove();
@@ -178,7 +190,14 @@ function whenSeen(el, start, fn) {
   const io = new IntersectionObserver((es) => {
     if (!es.some((e) => e.isIntersecting)) return;
     io.disconnect();
-    gate.then(live(fn));
+    gate.then(live(() => {
+      // first load: wait for the wipe to uncover the element's middle, so a page-hero entrance plays in view, not behind the
+      // curtain (its cubic-bezier(.76,0,.24,1) edge reaches the fraction e of the screen at about t = .3 + .4e)
+      const r = el.getBoundingClientRect();
+      const e = 1 - Math.min(1, Math.max(0, (r.top + r.height / 2) / innerHeight));
+      const wait = wipeAt + 700 * (0.3 + 0.4 * e) - performance.now();
+      if (wait > 0) setTimeout(live(fn), wait); else fn();
+    }));
   }, { rootMargin: `0px 0px ${pct - 100}% 0px` });
   io.observe(el);
   cleanups.push(() => io.disconnect());

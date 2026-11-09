@@ -44,7 +44,7 @@ const media = [
     <section id={r.id} class={`section row ${i % 2 ? 'row--flip section--mist' : ''}`} data-scene>
       <div class="wrap grid-2">
         <div class="row__media" data-reveal={i % 2 ? 'right' : 'left'}>
-          {media[i].video && <video class={`img-frame ${media[i].square ? 'img-frame--square' : ''}`} autoplay muted loop playsinline preload="metadata" poster={media[i].poster} src={media[i].video}></video>}
+          {media[i].video && <video class={`img-frame ${media[i].square ? 'img-frame--square' : ''}`} muted loop playsinline preload="metadata" poster={media[i].poster} src={media[i].video}></video>}
           {media[i].img && <div class="img-frame"><img src={media[i].img} alt="" loading="lazy" /></div>}
           {media[i].panel && (
             <div class="row__panel img-frame" aria-hidden="true">

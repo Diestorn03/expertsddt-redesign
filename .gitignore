@@ -4,3 +4,7 @@ dist
 
 # content panel / hosting managed (not in the repo)
 /public/downloads/libraries/
+
+# motion QA harness (tools/qa): dependencies and run output
+tools/qa/node_modules/
+tools/qa/out/
