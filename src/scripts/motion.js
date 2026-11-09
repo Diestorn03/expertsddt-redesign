@@ -65,7 +65,7 @@ const jump = (y) => {
 function initLenis() {
   if (reduced || lenis) return;
   // lerp follows the wheel frame by frame; the old 1.15s duration made every flick take ~1s to settle
-  lenis = new Lenis({ lerp: 0.16, wheelMultiplier: 1, smoothWheel: true });
+  lenis = new Lenis({ lerp: 0.16, wheelMultiplier: 1, smoothWheel: true, allowNestedScroll: true }); // nested scrollers (the contact textarea) scroll natively, then hand the wheel back to the page
   lenis.on('scroll', ScrollTrigger.update);
   gsap.ticker.add((t) => lenis.raf(t * 1000));
   gsap.ticker.lagSmoothing(0);
