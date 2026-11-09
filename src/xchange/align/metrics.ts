@@ -23,7 +23,7 @@ export interface QualityThresholds {
   goodCoverage: number;
   acceptableRmsMm: number;
   acceptableCoverage: number;
-  /** A distinct pose (> 5° or > 0.25 mm at the source centroid) scoring within this ratio of the best -> 'ambiguous'. */
+  /** Another finalist ending more than the tolerance from the best (any sample) and scoring within this ratio of it -> 'ambiguous'. */
   ambiguityRatio: number;
   /** ... or within the best score plus this (mm): near-zero residuals make any ratio too tight (as the prototype, 0.05·tol). */
   ambiguitySlackMm: number;

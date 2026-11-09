@@ -136,17 +136,18 @@ export function makeArch(arch: Arch = 'lower', options: ArchOptions = {}): TriMe
 }
 
 /**
- * n implant frames (implant -> capture coordinates) on the ridge of makeArch(arch, options):
- * origin 1 mm below the crest, axis pointing out of the gum (+Z lower, -Z upper) tilted up to
- * ~11°, and a pseudo-random clocking of +X. Deterministic for a seed.
+ * n implant frames (implant -> capture coordinates) on the ridge of makeArch(arch, options), evenly
+ * from arch position span[0] to span[1] (0 and 1 are the two ends of the arch): origin 1 mm below the
+ * crest, axis pointing out of the gum (+Z lower, -Z upper) tilted up to ~11°, and a pseudo-random
+ * clocking of +X. Deterministic for a seed.
  */
-export function makeFrames(n: number, arch: Arch = 'lower', seed = 7, options: ArchOptions = {}): Mat4[] {
+export function makeFrames(n: number, arch: Arch = 'lower', seed = 7, options: ArchOptions = {}, span: readonly [number, number] = [0.15, 0.85]): Mat4[] {
   const o = { ...ARCH_DEFAULTS, ...options };
   const rng = createRng(seed);
   const zSign = arch === 'lower' ? 1 : -1;
   const frames: Mat4[] = [];
   for (let k = 0; k < n; k++) {
-    const s = n === 1 ? 0.5 : 0.15 + (0.7 * k) / (n - 1);
+    const s = n === 1 ? (span[0] + span[1]) / 2 : span[0] + ((span[1] - span[0]) * k) / (n - 1);
     const c = archCurve(s, o);
     const tangent: Vec3 = [c.tx, c.ty, 0];
     const lateral: Vec3 = [c.ty, -c.tx, 0];
@@ -195,6 +196,10 @@ export interface SyntheticCaseOptions {
   maxAngleRad?: number;
   maxTranslationMm?: number;
   archOptions?: ArchOptions;
+  /** Arch positions of the first and last implant (makeFrames), default [0.15, 0.85]. */
+  span?: readonly [number, number];
+  /** Scan body shape (makeScanBody), e.g. { segments: 5 } for a prism with no round wall. */
+  bodyOptions?: Omit<ScanBodyOptions, 'flat'>;
 }
 
 export interface SyntheticCase {
@@ -220,8 +225,8 @@ export function makeSyntheticCase(options: SyntheticCaseOptions = {}): Synthetic
   const arch = options.arch ?? 'lower';
   const seed = options.seed ?? 1;
   const flat = options.flat ?? true;
-  const body = makeScanBody({ flat });
-  const frames = makeFrames(options.implants ?? 4, arch, seed + 1, options.archOptions);
+  const body = makeScanBody({ ...options.bodyOptions, flat });
+  const frames = makeFrames(options.implants ?? 4, arch, seed + 1, options.archOptions, options.span);
   const sites: ImplantSite[] = frames.map((matrix, i) => ({
     id: `site-${i + 1}`,
     label: `S${i + 1}`,

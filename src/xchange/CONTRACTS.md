@@ -312,8 +312,8 @@ export function linkSitesToComponents(sites: readonly ImplantSite[], components:
 
 ## 4. align (builder 4)
 
-Files: `align/kdtree.ts`, `icp.ts`, `multistart.ts`, `landmarks.ts`, `metrics.ts`, `deviation.ts`, `protocol.ts`,
-`handler.ts`, `worker.ts`, `client.ts`. PCA for the starts: compute it from your samples with
+Files: `align/kdtree.ts`, `icp.ts`, `multistart.ts`, `seeds.ts`, `landmarks.ts`, `metrics.ts`, `deviation.ts`,
+`protocol.ts`, `handler.ts`, `worker.ts`, `client.ts`. PCA for the starts: compute it from your samples with
 `core/linalg.eigenSymmetric` (do not import `geometry/`).
 
 ```ts
@@ -361,7 +361,7 @@ export interface QualityThresholds {
   goodCoverage: number;       // 0.95
   acceptableRmsMm: number;    // 0.10
   acceptableCoverage: number; // 0.80
-  /** A distinct pose (> 5° or > 0.25 mm) scoring within max(ratio · best, best + slack) -> 'ambiguous'. */
+  /** Another finalist ending > toleranceMm from the best (any sample) and scoring within max(ratio · best, best + slack) -> 'ambiguous'. */
   ambiguityRatio: number;     // 1.1
   ambiguitySlackMm: number;   // 0.005 (added at integration: near-zero residuals make any ratio too tight)
 }
@@ -373,7 +373,7 @@ export interface AlignOptions extends IcpOptions {
   quality?: Partial<QualityThresholds>;
   onProgress?: (stage: AlignStage, fraction: number) => void;
 }
-/** Global search (identity, centroid, 24 PCA axis matchings) -> coarse ICP -> up to 5 distinct finalists -> fine ICP -> metrics + status. With `initial`, refine locally first and search globally only if that is not 'good'. */
+/** Global search (capture pose, scan-body seeds, identity and 24 PCA axis matchings, turns about the jaw's normal when no seed fits) -> coarse ICP -> up to 5 finalists -> fine ICP + untrimmed polish -> metrics + status. With `initial`, refine locally first and search globally only if that is not 'good'. */
 export function multiStartAlign(parts: readonly AssemblyPart[], target: IcpTarget, options?: AlignOptions & { initial?: Mat4 }): AlignmentResult;
 
 // align/landmarks.ts
@@ -457,6 +457,23 @@ export class AlignClient {
 - **Result semantics:** a bad fit is not an exception: return `status: 'failed'` with the best attempt's metrics
   (the UI shows "last attempt, not applied"). Throw only for unusable input: no jaw set or empty parts
   (`INSUFFICIENT_DATA`), fewer than 6 pairs everywhere (`ALIGNMENT_FAILED reason 'noPairs'`).
+- **Search** (align-robust, from Fernando's 8 real arches; `seeds.ts`, `multistart.ts`, `icp.ts` `polish`):
+  - Seeds: the parts' wall radius (samples moved by r along their normals pile up on the axis; refined to the wall's
+    mean distance from each part's axis), the parts' axes and the scanned bodies of that radius in the jaw (fullest
+    peaks of the same histogram on 40 k jaw samples), then site <-> scanned-body pairs at equal distance and axis angle,
+    each a kabsch fit on the top end and the axis, kept by the number of sites it puts on a scanned body (up to 6).
+    Winding-agnostic. No seeds for 1 part or parts without a round wall; without the bodies in the jaw, no seed puts
+    3 sites on scanned bodies.
+  - The 24 PCA matchings assume the implant set shares the jaw's in-plane axes; real sets are 15-35° off. Unless a seed
+    puts max(3, parts - 1) sites on scanned bodies, the 8 matchings that put the parts' normal axis on the jaw's turn by
+    15°-75° about it (voted translation only). The vote counts in one dense grid (2 M cells at most).
+  - Sizes (vote cell, coarse correspondence radius) come from the parts' box in their PCA frame, so the result does not
+    depend on how the capture arrives: on the real arches every start ends on one pose (spread <= 3 µm).
+  - Finalists: the first 3 coarse fits may be close (not distinct) if every sample ends > toleranceMm from the others;
+    then distinct ones up to 5. Each: fine ICP, then `polish` (icp untrimmed with pairs within poseScore's cap,
+    3 × toleranceMm; kept only if poseScore improves). poseScore ranks them. The 80 % trim alone held a fixed point
+    0.57° off on a real case; the robust (MAD) polish is gone (never kept after this one). `alignFromLandmarks` polishes
+    the same way.
 - **Status** (`DEFAULT_QUALITY`): `failed` (did not converge to anything usable) -> `ambiguous` (flag
   `ambiguousAlternative`, or nearly isotropic source PCA within 1 % -> `symmetricSource`) -> `good` (rms <=
   goodRmsMm and coverage >= goodCoverage) -> `acceptable` -> `weak`. `flags` always contains `visualCheckRequired`.
@@ -472,7 +489,11 @@ export class AlignClient {
   within 20 µm / 0.05° of `captureToJaw` noise-free, RMS < 30 µm with `noiseSigmaMm: 0.01`, status `good`; 1 implant
   with `makeRevolutionBody` -> `ambiguous`; landmarks with 1, 2, 3 and 4 pairs hit the three modes and refine to the
   truth; `deviationMap` vs brute force; client <-> handler through a fake in-process `WorkerLike`: result, progress,
-  error payload, cancel then reuse. Budget: 4 implants on a 50 k-triangle jaw < 10 s in the test runner.
+  error payload, cancel then reuse. Budget: 4 implants on a 50 k-triangle jaw < 10 s in the test runner. Search
+  (`multistart-search.test.ts`, `seeds.test.ts`): a set 15-35° off the jaw's axes with round bodies 2.5 mm under the
+  gum and with prism bodies (no seeds: the turns), scanned bodies off the layout (result scores <= the truth), a near
+  rival flagged; wall radius of several bodies and windings, seeds with half the jaw wound the other way, none
+  without round walls.
 
 ## 5. export (builder 5)
 

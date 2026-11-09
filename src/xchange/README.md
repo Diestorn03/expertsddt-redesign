@@ -16,7 +16,7 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 | `io/positions/` | Implant position files: MicronMapper CSV, ScanAdaptor XML (strict mini XML reader, no DOMParser), matrix tables, JSON, ImplantPositions XML, iCam TXT. XLSX is out of scope for v1 (users export CSV) |
 | `geometry/` | Weld, connected components, PCA, BVH (closest point, ray pick) |
 | `detect/` | Implant frames from a capture mesh: component split, reference fitting, index ambiguity, linking position files to components; replacement assemblies (`planAssembly`, `verifyAssemblyLayout`) |
-| `align/` | k-d tree, trimmed ICP, multi-start auto alignment, guided landmarks 1-2-3-4, metrics, deviation map (µm), Web Worker protocol + Promise client |
+| `align/` | k-d tree, trimmed ICP, multi-start auto alignment (starts seeded from the scan bodies seen in the jaw, PCA matchings and their turns about the jaw's normal, untrimmed polish), guided landmarks 1-2-3-4, metrics, deviation map (µm), Web Worker protocol + Promise client |
 | `export/` | Replacement placement, combined/individual STLs, jaw copied byte for byte, `report.json`, README (ES/EN), stored ZIP |
 | `state/` | Later: typed case store, geometry library (IndexedDB) |
 | `viewer/` | Later: three.js scene, exocad-style controls, picking, manipulation |
@@ -50,7 +50,11 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 - Paso 2: geometría de reemplazo desde "Tus geometrías" (IndexedDB, 50 como máximo, favoritas, renombrar, eliminar
   con confirmación, copia de seguridad en JSON). Elegir una la aplica al instante a todos o al implante elegido en este
   paso, con Deshacer; aplicada a todos, pasa sola al paso 3.
-- Paso 3: escaneo de la mandíbula (opcional) y, al cargarlo, alineación automática.
+- Paso 3: escaneo de la mandíbula (opcional) y, al cargarlo, alineación automática. La búsqueda arranca también desde
+  los scan bodies que ve en el escaneo y, si no los encuentra, gira cada arranque PCA alrededor de la normal oclusal; el
+  ajuste final no recorta pares. En las 8 arcadas de Fernando llega a la misma pose desde cualquier arranque y desde el
+  marco de su CSV, a 0,02-0,07 mm de su alineación (caso 2 superior: 0,32 mm, el escaneo viene estirado ~1 %), con
+  mejor puntaje propio que la suya, en 0,7-1,6 s (mediana).
 - Paso 4: automática, puntos guiados 1-2-3-4 (clic, toque en tableta o Enter con la mira desde el teclado; se pueden
   omitir implantes y alinear con los puntos puestos), resultado con RMS, cobertura, tabla por implante y mapa de
   colores 0-100 µm; ajuste a mano (arrastrar, Ctrl + arrastrar, panel de 30°/5° con Fino para pasos de 5° · 0,1 mm
@@ -83,7 +87,7 @@ All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángul
 el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
 solo (Good fit, unos 4 µm) y exporta el ZIP.
 
-**Probado:** 547 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 554 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones

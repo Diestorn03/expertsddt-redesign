@@ -52,8 +52,6 @@ const TARGET_SPACING_MM = 0.15;
 const TARGET_SAMPLES = { min: 20_000, max: 120_000 };
 /** A point-to-plane step that turns more than this is outside its linearisation: use point-to-point. */
 const MAX_PLANE_STEP_RAD = 0.25;
-/** Robust polish: pairs whose |point-to-plane residual| exceeds max(floorMm, sigmas × mad × median) are dropped. */
-const ROBUST = { sigmas: 3, mad: 1.4826, floorMm: 0.05 };
 /** Local refinement (landmarks, previous pose) first runs this wider, shorter pass. */
 const LOCAL_COARSE = { iterations: 20, minDistanceMm: 3, normalDot: 0.2 };
 const PART_MAX_TRIANGLES = LIMITS.capture.maxTriangles;
@@ -154,11 +152,9 @@ export function prefixSamples(s: SurfaceSamples, count: number): SurfaceSamples 
 
 /**
  * Trimmed ICP from `initial`: point-to-plane steps, point-to-point (kabsch) when that fails or the fit is
- * still far off. `robust` also drops pairs whose point-to-plane residual exceeds ROBUST sigmas (MAD); use
- * it only to polish an already converged pose, since early on it can drop the few pairs that hold a
- * sliding direction (e.g. the caps of a round body).
+ * still far off.
  */
-export function icp(source: SurfaceSamples, target: IcpTarget, initial: Mat4, options: IcpOptions = {}, robust = false): IcpResult {
+export function icp(source: SurfaceSamples, target: IcpTarget, initial: Mat4, options: IcpOptions = {}): IcpResult {
   const o = icpSettings(options);
   const sp = source.points, sn = source.normals;
   const n = sp.length / 3;
@@ -248,19 +244,6 @@ export function icp(source: SurfaceSamples, target: IcpTarget, initial: Mat4, op
     for (let i = 0; i < k; i++) {
       residual[i] = (src[3 * i]! - dst[3 * i]!) * nrm[3 * i]! + (src[3 * i + 1]! - dst[3 * i + 1]!) * nrm[3 * i + 1]! + (src[3 * i + 2]! - dst[3 * i + 2]!) * nrm[3 * i + 2]!;
     }
-    if (robust) {
-      const view = sorted.subarray(0, k);
-      for (let i = 0; i < k; i++) view[i] = Math.abs(residual[i]!);
-      view.sort();
-      const limit = Math.max(ROBUST.floorMm, ROBUST.sigmas * ROBUST.mad * view[(k - 1) >>> 1]!);
-      let inliers = 0;
-      for (let i = 0; i < k; i++) if (Math.abs(residual[i]!) <= limit) inliers++;
-      if (inliers >= MIN_PAIRS && inliers < k) {
-        let kept = 0;
-        for (let i = 0; i < k; i++) if (Math.abs(residual[i]!) <= limit) move(i, kept++);
-        k = kept;
-      }
-    }
     pairs = k;
     let plane2 = 0, euclid2 = 0;
     for (let i = 0; i < k; i++) {
@@ -319,14 +302,16 @@ export function poseScore(samples: SurfaceSamples, surface: TriangleTree, t: Mat
 }
 
 /**
- * Robust polish of a converged pose: icp in robust mode, kept only if it scores better on the exact
- * surface (poseScore). Returns the chosen fit and its score.
+ * Polish of a converged pose: icp untrimmed, with every pair within poseScore's own cap
+ * (RANK_CAP_TOLERANCES × toleranceMm), close to minimising poseScore itself. The 80 % trim of the fine
+ * ICP can hold a fixed point that poseScore does not prefer (0.57° off on a real case). Kept only if
+ * poseScore improves; returns the chosen fit and its score.
  */
 export function polish(source: SurfaceSamples, target: IcpTarget, fit: IcpResult, options: IcpOptions, toleranceMm: number): { fit: IcpResult; score: number } {
   const before = poseScore(source, target.surface, fit.transform, toleranceMm);
-  const robust = icp(source, target, fit.transform, { ...options, onIteration: undefined }, true);
-  const after = robust.pairs >= MIN_PAIRS ? poseScore(source, target.surface, robust.transform, toleranceMm) : Infinity;
-  return after <= before ? { fit: robust, score: after } : { fit, score: before };
+  const next = icp(source, target, fit.transform, { ...options, trimFraction: 1, maxCorrespondenceMm: RANK_CAP_TOLERANCES * toleranceMm, onIteration: undefined });
+  const after = next.pairs >= MIN_PAIRS ? poseScore(source, target.surface, next.transform, toleranceMm) : Infinity;
+  return after <= before ? { fit: next, score: after } : { fit, score: before };
 }
 
 /** Local refinement from a rough pose (clicks, previous fit): a wider coarse pass, then `options`. */

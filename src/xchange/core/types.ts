@@ -114,7 +114,7 @@ export type AlignmentMethod = 'auto' | 'landmarks' | 'manual';
 export type AlignmentFlag =
   | 'visualCheckRequired' // always set: a surface fit is not a clinical validation
   | 'notConverged'
-  | 'ambiguousAlternative' // a clearly different pose scored almost as well
+  | 'ambiguousAlternative' // another pose, more than the tolerance away, scored almost as well
   | 'symmetricSource' // the assembly surface is (nearly) rotationally symmetric
   | 'fewCorrespondences'
   | 'landmarkTranslationOnly' // 1 landmark, no surface refinement
