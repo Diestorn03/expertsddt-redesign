@@ -36,6 +36,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
+/* a #fragment jump (direct load, Back, links handled natively without Lenis) lands below the fixed nav, like the Lenis jumps */
+:target { scroll-margin-top: var(--nav-h); }
 html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto; }
 .lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
@@ -59,6 +61,8 @@ h1, h2, h3, h4 { color: var(--ink); line-height: 1.08; margin: 0; letter-spacing
 p { margin: 0; }
 :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* skip link: visible when reached with the keyboard (WCAG 2.4.7) */
+a.sr-only:focus-visible { position: fixed; top: .75rem; left: .75rem; width: auto; height: auto; clip: auto; overflow: visible; z-index: 1001; padding: .7rem 1.1rem; border-radius: 999px; background: #fff; color: var(--navy-deep); font-weight: 600; box-shadow: 0 10px 30px -10px rgba(0,0,0,.5); outline: 3px solid var(--blue); outline-offset: 2px; }
 
 /* ---------- layout ---------- */
 .wrap { width: min(1200px, 100% - 2rem); margin-inline: auto; }
@@ -115,14 +119,18 @@ p { margin: 0; }
 .btn--outline { border-color: var(--blue); color: var(--blue); background: transparent; }
 .btn--outline:hover { background: var(--blue); color: #fff; }
 [data-theme="dark"] .btn--outline { border-color: #6fb6ff; color: #6fb6ff; }
+[data-theme="dark"] .btn--outline:hover { color: #fff; border-color: var(--blue); } /* the dark rule above would otherwise keep #6fb6ff on #046bd2 (2.4:1) */
 .btn--white { background: #fff; color: var(--navy); box-shadow: 0 10px 30px -12px rgba(0,0,0,.45); }
 .btn svg { flex-shrink: 0; }
 .btn .arrow { transition: transform .35s var(--ease-out); }
 .btn:hover .arrow { transform: translateX(4px); }
 
 /* ---------- reveal primitives (GSAP drives these) ---------- */
-[data-reveal] { opacity: 0; }
-[data-split] { visibility: hidden; }
+/* pre-hidden only when the reveals will actually run (motion.js running, motion allowed): no JS, a failed script or reduced motion = content as written */
+@media (prefers-reduced-motion: no-preference) {
+  html.motion [data-reveal] { opacity: 0; }
+  html.motion [data-split] { visibility: hidden; }
+}
 .line-mask { overflow: hidden; display: block; }
 
 /* ---------- card ---------- */
@@ -282,7 +290,8 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important; animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important; scroll-behavior: auto !important;
+    /* none, not .01ms: a near-zero transition still delays layout changes (e.g. the stacked pillars) past ScrollTrigger's measurement */
+    transition: none !important; scroll-behavior: auto !important;
   }
   [data-reveal], [data-split] { opacity: 1 !important; visibility: visible !important; }
 }

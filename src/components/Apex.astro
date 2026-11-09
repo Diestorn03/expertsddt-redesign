@@ -22,14 +22,21 @@ const waText = lang === 'es' ? 'Hola, me interesa saber más sobre los servicios
 {chat && (
   <>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@n8n/chat/dist/style.css" />
+    <!-- persisted mount: the widget survives navigations instead of being re-created (and losing an open chat) on every page -->
+    <div id="n8n-chat" transition:persist={`apex-chat-${lang}`}></div>
     <script type="module" is:inline define:vars={{ chat, lang }}>
       import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat/dist/chat.bundle.es.js';
       const es = lang === 'es';
+      // Astro re-runs this script after every navigation: create the chat once per language (the mount is persisted per language)
+      const mount = document.getElementById('n8n-chat');
+      if (mount && !mount.dataset.ready) {
+      mount.dataset.ready = '1';
       createChat({
-        webhookUrl: chat, mode: 'window', loadPreviousSession: true,
+        webhookUrl: chat, mode: 'window', loadPreviousSession: true, target: '#n8n-chat',
         initialMessages: es ? ['Hola, soy Apex, tu concierge digital de Experts DDT. ¿En qué puedo ayudarte?'] : ['Welcome to Experts DDT. I am Apex, your Digital Concierge. How may I guide you through our services or workflows today?'],
         i18n: { en: { title: 'Apex · Experts DDT', subtitle: es ? 'Soporte técnico y guía de servicios' : 'Technical Support & Service Guide', footer: '', getStarted: es ? 'Nueva conversación' : 'New conversation', inputPlaceholder: es ? 'Escribe tu pregunta…' : 'Type your question…' } },
       });
+      }
     </script>
   </>
 )}

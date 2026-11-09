@@ -13,7 +13,7 @@ Nada sale a `expertsddt.com` sin que alguien lance el workflow **Deploy to Hosti
    - `PUBLIC_SHOW_REVIEWS=1` solo cuando las reseñas del inicio sean testimonios reales y verificados; por defecto la sección no se publica.
 6. Producción exige `PUBLIC_SHOP_URL`, `PUBLIC_N8N_FORM_WEBHOOK` y `PUBLIC_GCAL_EMBED`; el workflow se detiene si faltan.
 
-El webhook de n8n recibe JSON con `source`: `contact` (formulario de contacto) o `exocad-libraries` (descarga de librerías, con `name`, `email`, `version`). Un nodo *Switch* por `source` decide si manda correo o agrega una fila a Google Sheets. En el webhook hay que permitir el origen `https://expertsddt.com` (Options → Allowed Origins).
+El webhook de n8n recibe JSON con `source`: `contact` (formulario de contacto) `exocad-libraries` (descarga de librerías, con `name`, `email`, `version`) o `ddt-xchange` (correo que pide la herramienta DDT Xchange antes de exportar: `email`, `lang`, `page`). Un nodo *Switch* por `source` decide si manda correo o agrega una fila a Google Sheets. En el webhook hay que permitir el origen `https://expertsddt.com` (Options → Allowed Origins).
 
 ## Archivos que viven en el servidor, no en el repo
 

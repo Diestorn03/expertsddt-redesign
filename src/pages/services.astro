@@ -44,7 +44,7 @@ const media = [
     <section id={r.id} class={`section row ${i % 2 ? 'row--flip section--mist' : ''}`} data-scene>
       <div class="wrap grid-2">
         <div class="row__media" data-reveal={i % 2 ? 'right' : 'left'}>
-          {media[i].video && <video class={`img-frame ${media[i].square ? 'img-frame--square' : ''}`} autoplay muted loop playsinline preload="metadata" poster={media[i].poster} src={media[i].video}></video>}
+          {media[i].video && <video class={`img-frame ${media[i].square ? 'img-frame--square' : ''}`} muted loop playsinline preload="metadata" poster={media[i].poster} src={media[i].video}></video>}
           {media[i].img && <div class="img-frame"><img src={media[i].img} alt="" loading="lazy" /></div>}
           {media[i].panel && (
             <div class="row__panel img-frame" aria-hidden="true">
@@ -86,7 +86,7 @@ const media = [
   .row__panel span { font-size: .8rem; letter-spacing: .3em; text-transform: uppercase; opacity: .8; }
   .row__panel b { font-size: clamp(2.2rem, 5vw, 3.8rem); font-weight: 800; letter-spacing: -.03em; line-height: 1.05; margin-top: 1rem; text-wrap: balance; }
   .tags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
-  .tags li { padding: .4rem .8rem; border-radius: 999px; background: rgba(4,107,210,.08); color: var(--blue); font-size: .8rem; font-weight: 600; }
+  .tags li { padding: .4rem .8rem; border-radius: 999px; background: rgba(4,107,210,.08); color: var(--blue-dark); font-size: .8rem; font-weight: 600; }
   :global([data-theme="dark"]) .tags li { background: rgba(111,182,255,.14); color: #8fc1ff; }
   @media (max-width: 960px) { .row--flip .row__media { order: 0; } .row__num { font-size: 2.6rem; } }
 </style>

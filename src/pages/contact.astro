@@ -43,12 +43,12 @@ const wa = import.meta.env.PUBLIC_WHATSAPP || '15106760418';
         </ul>
       </div>
 
-      <form class="card form" data-reveal="right" id="contact-form" data-webhook={webhook} data-lang={lang} data-lenis-prevent novalidate>
+      <form class="card form" data-reveal="right" id="contact-form" data-webhook={webhook} data-lang={lang} novalidate>
         <h2 class="h-lg">{c.form.title}</h2>
         <label>{c.form.name} <input name="name" required autocomplete="name" /></label>
         <label>{c.form.email} <input type="email" name="email" required autocomplete="email" inputmode="email" /></label>
         <label>{c.form.clinic} <input name="clinic" autocomplete="organization" /></label>
-        <label>{c.form.message} <textarea name="message" rows="5" required></textarea></label>
+        <label>{c.form.message} <textarea name="message" rows="5" required data-lenis-prevent></textarea></label>
         <input type="text" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
         <button class="btn btn--primary" type="submit" data-label={c.form.send} data-sending={c.form.sending}>{c.form.send} <span class="arrow">→</span></button>
         <p class="form__note" data-ok={c.form.sent} data-err={c.form.error}>{c.form.note}</p>
