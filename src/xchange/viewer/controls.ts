@@ -50,6 +50,8 @@ export interface ControlCallbacks {
   onSectionNudge?(mm: number): boolean;
   /** R (not during guided points): the distance tool on or off. */
   onToggleMeasure?(): void;
+  /** R during guided points: the tool waits for them (the Distance button says the same). */
+  onMeasureBusy?(): void;
   /** A click, a tap or Enter put a distance point on a surface. */
   onMeasurePoint?(point: Vec3): void;
   /** Enter in measure mode with nothing under the crosshair. */
@@ -62,6 +64,8 @@ export interface ControlCallbacks {
 const DEG = Math.PI / 180;
 /** Touch & hold: one finger within HOLD_PX for HOLD_MS; its ring shows from RING_MS. */
 const HOLD_MS = 500, RING_MS = 150, HOLD_PX = 8;
+/** A double tap: the second tap within DOUBLE_TAP_MS and DOUBLE_TAP_PX of the first (two quick taps apart are two taps). */
+const DOUBLE_TAP_MS = 300, DOUBLE_TAP_PX = 24;
 
 export function translatePose(pose: THREE.Matrix4, v: THREE.Vector3): THREE.Matrix4 {
   return new THREE.Matrix4().makeTranslation(v.x, v.y, v.z).multiply(pose);
@@ -74,7 +78,8 @@ export function rotatePose(pose: THREE.Matrix4, axis: THREE.Vector3, angle: numb
   return to.multiply(r).multiply(back).multiply(pose);
 }
 
-type Drag = { kind: 'rotate' | 'pan' | 'moveSet' | 'rotateSet' | 'dot'; x: number; y: number; x0: number; y0: number; t0: number; button: number; pose?: THREE.Matrix4; pivot?: THREE.Vector3; moved: boolean; shift: boolean; ctrl: boolean; held?: boolean; dot?: number };
+/** `pose`: the set's pose when a set drag started, `last`: the last pose it wrote (what the release commits). */
+type Drag = { kind: 'rotate' | 'pan' | 'moveSet' | 'rotateSet' | 'dot'; x: number; y: number; x0: number; y0: number; t0: number; button: number; pose?: THREE.Matrix4; last?: THREE.Matrix4; pivot?: THREE.Vector3; moved: boolean; shift: boolean; ctrl: boolean; held?: boolean; dot?: number };
 
 export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCallbacks, outer: AbortSignal): void {
   const signal = viewer.signal ? AbortSignal.any([outer, viewer.signal]) : outer;
@@ -85,7 +90,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
   let drag: Drag | null = null;
   const touches = new Map<number, { x: number; y: number }>();
   let pinch: { d: number; cx: number; cy: number } | null = null;
-  let lastTap = 0;
+  let lastTap = { t: 0, x: 0, y: 0 };
   let hoverRaf = 0;
   let dotRaf = 0;
   /** The mouse over the canvas (null once it leaves): where Home sets the rotation center. */
@@ -114,6 +119,12 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     viewer.target.sub(p).multiplyScalar(factor).add(p);
   };
   const touchInput = (): void => { viewer.stopCameraTween(); viewer.interacting(); viewer.invalidate(); };
+  /** A set drag writes the pose it shows; a pose animation started meanwhile (Ctrl + Z, an alignment result) stops. */
+  const showPose = (pose: THREE.Matrix4): void => {
+    viewer.stopPose?.();
+    viewer.assembly.matrix.copy(pose);
+    viewer.assembly.matrixWorldNeedsUpdate = true;
+  };
   /** The user moved the camera: a running tween stops where it is, and no view button claims the view any more. */
   const cameraInput = (): void => { touchInput(); cb.onCameraInput?.(); };
   /** Rotation center on the surface under (x, y), as a middle click does; false when nothing is there. */
@@ -152,6 +163,8 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     hold = null;
   };
 
+  /** Clicks and taps place points (guided points, the distance tool): no double-click or double tap fits then. */
+  const placing = (): boolean => { const m = cb.mode(); return m === 'guided' || m === 'measure'; };
   /** A distance point under the press (12 px with a mouse, 24 px on touch): -1 for none or outside measure mode. */
   const dotAt = (x: number, y: number, touch: boolean): number => (cb.mode() === 'measure' ? viewer.measureDotAt?.(x, y, touch ? 24 : 12) ?? -1 : -1);
   /** A dragged distance point follows the surface under the pointer, one pick per frame; over nothing it stays. */
@@ -224,6 +237,9 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       });
       return;
     }
+    // left + right pans (exocad's both-buttons move): the second button never sends a pointerdown, only this
+    // (chorded) pointermove, so a view drag turns into a pan the moment both are down
+    if (drag.kind === 'rotate' && e.pointerType !== 'touch' && (e.buttons & 3) === 3) drag.kind = 'pan';
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     drag.x = e.clientX;
     drag.y = e.clientY;
@@ -249,8 +265,8 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
         const angle = Math.hypot(ax, ay) * (viewer.display.speed / 3) * 0.3 * DEG;
         pose = axis.lengthSq() > 0 ? rotatePose(drag.pose!, axis, angle, drag.pivot!) : drag.pose!.clone();
       }
-      viewer.assembly.matrix.copy(pose);
-      viewer.assembly.matrixWorldNeedsUpdate = true;
+      drag.last = pose;
+      showPose(pose);
       cb.onSetChange(pose, 'move');
       touchInput();
       return;
@@ -284,11 +300,12 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       if (touches.size < 2) pinch = null;
       endHold();
       if (drag?.kind === 'dot' && drag.moved && touches.size === 0) dropDot(drag, e.clientX, e.clientY);
-      // a one-finger tap (never part of a pinch: drag is null then; never after a hold) acts like a click; a double tap fits
+      // a one-finger tap (never part of a pinch: drag is null then; never after a hold) acts like a click; a double tap
+      // (one spot) fits, except while taps place points (two quick taps on two caps are two points)
       else if (drag && !drag.moved && !drag.held && touches.size === 0 && e.type === 'pointerup') {
-        const now = performance.now();
-        if (now - lastTap < 300) { cb.onPreset('fit'); lastTap = 0; }
-        else { lastTap = now; if (now - drag.t0 < 500) primaryClick(e.clientX, e.clientY); }
+        const now = performance.now(), x = e.clientX, y = e.clientY;
+        if (now - lastTap.t < DOUBLE_TAP_MS && Math.hypot(x - lastTap.x, y - lastTap.y) <= DOUBLE_TAP_PX && !placing()) { cb.onPreset('fit'); lastTap.t = 0; }
+        else { lastTap = { t: now, x, y }; if (now - drag.t0 < 500) primaryClick(x, y); }
       }
       if (touches.size === 0) drag = null;
       return;
@@ -297,7 +314,8 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     drag = null;
     stage.classList.remove('is-grabbing');
     if (!d) return;
-    if (d.moved && d.pose) cb.onSetChange(viewer.assembly.matrix.clone(), 'end');
+    // the release commits the pose the drag shows (moved: it has written one), whatever animation started meanwhile
+    if (d.moved && d.last) { showPose(d.last); cb.onSetChange(d.last.clone(), 'end'); }
     if (d.moved && d.kind === 'dot') dropDot(d, e.clientX, e.clientY);
     const click = !d.moved && performance.now() - d.t0 < 300;
     if (!click) return;
@@ -307,19 +325,31 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
   on(canvas, 'pointerup', end);
   on(canvas, 'pointercancel', end);
   on(canvas, 'pointerleave', () => { hoverAt = null; stage.classList.remove('is-grab'); cb.onHover(null); });
-  on(canvas, 'dblclick', () => cb.onPreset('fit'));
-  on(canvas, 'wheel', (e) => {
+  // a double-click fits, except while clicks place points (its two clicks are a point and a point on top of it)
+  on(canvas, 'dblclick', () => { if (!placing()) cb.onPreset('fit'); });
+  const wheel = (e: WheelEvent): void => {
     e.preventDefault();
     const notches = (d: number): number => Math.max(-3, Math.min(3, (e.deltaMode === 1 ? d * 16 : d) / 100));
     // Shift + wheel moves the cut 0.5 mm per notch, pushing the wheel (up) goes deeper; macOS turns a Shift wheel sideways
     if (e.shiftKey && cb.onSectionNudge?.(-0.5 * notches(e.deltaY || e.deltaX))) return;
     zoomAt(e.clientX, e.clientY, Math.pow(1.12, notches(e.deltaY)));
     cameraInput();
+  };
+  on(canvas, 'wheel', wheel, { passive: false });
+  // the chrome over the canvas (icon bar, views dial, pad, legend) zooms too: the stage is data-lenis-prevent, so a wheel
+  // it let through would scroll the page under the view. A popover scrolls itself, and never the page.
+  on(stage, 'wheel', (e) => {
+    if (e.target === canvas) return; // the canvas's own listener had it
+    const pop = (e.target as Element).closest?.('.xch__display');
+    if (!pop) wheel(e);
+    else if (pop.scrollHeight <= pop.clientHeight) e.preventDefault();
   }, { passive: false });
 
-  // keys act only while focus is inside the stage (WCAG 2.1.4)
+  // keys act only while focus is inside the stage (WCAG 2.1.4): on the stage itself, or a character key on a button of
+  // its chrome (a view key on the views dial, P on the icon bar); the buttons keep Enter, Space, the arrows, Home and End
   on(stage, 'keydown', (e) => {
-    if (e.target !== stage) return;
+    const t = e.target as HTMLElement;
+    if (t !== stage && !(t.tagName === 'BUTTON' && e.key.length === 1 && e.key !== ' ' && !t.closest?.('.xch__display'))) return;
     const k = e.key;
     if ((k === 'Control' || k === 'Meta') && cb.mode() === 'set') { cb.onCtrl(true); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -346,6 +376,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     else if (k === 's' || k === 'S') once(() => cb.onShowAll?.());
     else if (k === 'p' || k === 'P') once(() => cb.onToggleSection?.()); // exocad's Ctrl+P prints in a browser
     else if ((k === 'r' || k === 'R') && mode !== 'guided') once(() => cb.onToggleMeasure?.()); // Ctrl+R reloads
+    else if (k === 'r' || k === 'R') { handled = false; once(() => cb.onMeasureBusy?.()); } // guided: R only says why not
     else if (k === '?') once(() => cb.onShortcuts());
     else if (k === 'Enter' && (mode === 'guided' || mode === 'measure')) once(() => {
       const [x, y] = center();

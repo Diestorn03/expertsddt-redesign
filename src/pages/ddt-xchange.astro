@@ -33,7 +33,8 @@ const steps = c.steps.names;
 const ICO = {
   layers: ['M12 3.5l8.5 4.5-8.5 4.5L3.5 8z', 'M3.5 12l8.5 4.5 8.5-4.5', 'M3.5 16l8.5 4.5 8.5-4.5'],
   map: ['M3.5 10h17v7h-17z', 'M9.2 10v7M14.8 10v7', 'M13 4.5h3.6L14.8 7z'],
-  xray: ['M12 4a8 8 0 1 1 0 16a8 8 0 1 1 0-16z', 'M12 4v16M12 8l4.2-2.1M12 12.5l6.6-3.3M12 17l7.2-3.6'],
+  // jaw transparency: a drop, half hatched (a half-hatched circle read as the Section block beside it at 20 px)
+  xray: ['M12 3.5C14.6 7 18 10.4 18 14.5a6 6 0 0 1-12 0C6 10.4 9.4 7 12 3.5z', 'M12 3.5v17M12 10.05l3.6-1.8M12 13.85l5.3-2.65M12 17.98l5.95-2.98'],
   keys: ['M4.5 6.5h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z', 'M7 10h.01M10.3 10h.01M13.7 10h.01M17 10h.01M8 14h8'],
   fsOn: ['M14 4h6v6M20 4l-6 6M10 20H4v-6M4 20l6-6'],
   fsOff: ['M20 10h-6V4M14 10l6-6M4 14h6v6M10 14l-6 6'],
@@ -372,11 +373,28 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <button type="button" class="xch__tool" data-display-btn aria-expanded="false" aria-controls="xch-display" aria-label={c.view.display} data-tip={c.view.display}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('layers')} /></button>
                   <button type="button" class="xch__tool" data-map-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="C" aria-label={c.display.map} data-tip={fmt(L, c.view.tip, { name: c.display.map, key: 'C' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('map')} /></button>
                   <button type="button" class="xch__tool" data-xray-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="T" aria-label={c.view.xray} data-tip={fmt(L, c.view.tip, { name: c.view.xray, key: 'T' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('xray')} /></button>
-                  <button type="button" class="xch__tool" data-section-btn aria-expanded="false" aria-controls="xch-section" aria-keyshortcuts="P" aria-label={c.section.title} data-tip={fmt(L, c.view.tip, { name: c.section.title, key: 'P' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('section')} /></button>
-                  <button type="button" class="xch__tool" data-dist-btn aria-pressed="false" aria-keyshortcuts="R" aria-label={c.dist.button} data-tip={fmt(L, c.view.tip, { name: c.dist.button, key: 'R' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('distance')} /></button>
+                  <button type="button" class="xch__tool" data-section-btn aria-expanded="false" aria-disabled="true" aria-controls="xch-section" aria-keyshortcuts="P" aria-label={c.section.title} data-tip={fmt(L, c.view.tip, { name: c.section.title, key: 'P' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('section')} /></button>
+                  <button type="button" class="xch__tool" data-dist-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="R" aria-label={c.dist.button} data-tip={fmt(L, c.view.tip, { name: c.dist.button, key: 'R' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('distance')} /></button>
                   <span class="xch__sep" aria-hidden="true"></span>
                   <button type="button" class="xch__tool" data-keys-btn aria-label={c.view.shortcuts} aria-keyshortcuts="?" data-tip={fmt(L, c.view.tip, { name: c.view.shortcuts, key: '?' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('keys')} /></button>
                   <button type="button" class="xch__tool" data-fs-btn data-on={c.view.exitFullscreen} data-off={c.view.fullscreen} aria-label={c.view.fullscreen} data-tip={c.view.fullscreen} hidden><svg class="xch__ico xch__fs-on" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('fsOn')} /><svg class="xch__ico xch__fs-off" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('fsOff')} /></button>
+                </div>
+                {/* the popovers follow the icon bar: Tab from their last control goes on to the views dial, not off the stage */}
+                <div class="xch__display" id="xch-display" role="group" aria-labelledby="xch-display-title" data-lenis-prevent data-display hidden>
+                  <p class="xch__subtitle" id="xch-display-title">{c.display.title}</p>
+                  {switches.map(([id, label]) => <button type="button" role="switch" aria-checked="false" class="xch__switch" data-switch={id}><span>{label}</span><i aria-hidden="true"></i></button>)}
+                  <label class="xch__range">{c.display.jawOpacity}<input type="range" min="0" max="100" step="5" value="100" data-range="jawOpacity" /><output></output></label>
+                  <label class="xch__range">{c.display.partOpacity}<input type="range" min="0" max="100" step="5" value="100" data-range="partOpacity" /><output></output></label>
+                  <label class="xch__range">{c.display.fov}<input type="range" min="1" max="60" step="1" value="1" data-range="fovDeg" /><output></output></label>
+                  <label class="xch__range">{c.display.speed}<input type="range" min="1" max="5" step="1" value="3" data-range="speed" /><output></output></label>
+                </div>
+                <div class="xch__display xch__section" id="xch-section" role="group" aria-labelledby="xch-section-title" data-lenis-prevent data-section hidden>
+                  <p class="xch__subtitle" id="xch-section-title">{c.section.title}</p>
+                  <label class="xch__range">{c.section.position}<input type="range" min="-10" max="10" step="0.1" value="0" data-section-range /><output></output></label>
+                  <button type="button" role="switch" aria-checked="false" class="xch__switch" data-section-switch="flipped"><span>{c.section.flip}</span><i aria-hidden="true"></i></button>
+                  <button type="button" role="switch" aria-checked="false" class="xch__switch" data-section-switch="follow"><span>{c.section.follow}</span><i aria-hidden="true"></i></button>
+                  <p class="xch__small">{c.section.hint}</p>
+                  <button type="button" class="btn btn--outline xch-btn-sm" data-section-off>{c.section.off}</button>
                 </div>
                 <div class="xch__views" role="toolbar" aria-label={c.view.views}>
                   <div class="xch__dial">
@@ -392,14 +410,15 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <p>{c.view.emptyText}</p>
                   <p class="xch__loading" data-loading>{c.ws.loading}</p>
                 </div>
-                <div class="xch__pad" role="toolbar" aria-label={c.pad.label} aria-orientation="vertical" data-pad hidden>
+                <div class="xch__pad" role="toolbar" aria-label={c.pad.label} aria-describedby="xch-pad-hint" aria-orientation="vertical" data-pad hidden>
                   {pad.map(([group, items]) => (
                     <div class="xch__padgroup" role="group" aria-label={c.pad[group]} data-g={group}>
                       <span class="xch__padcap" aria-hidden="true">{c.pad[group]}</span>
                       {items.map(([key, ico, op, dir]) => <button type="button" class="xch__tool xch__padbtn" data-pad-op={op} data-pad-dir={dir} data-pad-key={key} aria-label={fmt(L, c.pad[key], { deg: 30, mm: 1 })} data-tip={fmt(L, c.pad[key], { deg: 30, mm: 1 })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths(ico)} /></button>)}
                     </div>
                   ))}
-                  <p class="xch__padhint" aria-hidden="true">{c.pad.hint}</p>
+                  <button type="button" class="xch__tool xch__padfine" data-pad-fine aria-pressed="false">{c.pad.fine}</button>
+                  <p class="xch__padhint" id="xch-pad-hint" aria-hidden="true">{c.pad.hint}</p>
                 </div>
                 <div class="xch__legend" role="img" aria-label={c.legend.aria} data-legend hidden>
                   <p class="xch__legendtitle">{c.legend.title}<span>µm</span></p>
@@ -416,22 +435,6 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <p class="xch__emptytitle">{c.view.lost}</p>
                   <p>{c.view.lostText}</p>
                   <button type="button" class="btn btn--primary xch-btn-sm" data-restart>{c.view.restart}</button>
-                </div>
-                <div class="xch__display" id="xch-display" data-lenis-prevent data-display hidden>
-                  <p class="xch__subtitle">{c.display.title}</p>
-                  {switches.map(([id, label]) => <button type="button" role="switch" aria-checked="false" class="xch__switch" data-switch={id}><span>{label}</span><i aria-hidden="true"></i></button>)}
-                  <label class="xch__range">{c.display.jawOpacity}<input type="range" min="0" max="100" step="5" value="100" data-range="jawOpacity" /><output></output></label>
-                  <label class="xch__range">{c.display.partOpacity}<input type="range" min="0" max="100" step="5" value="100" data-range="partOpacity" /><output></output></label>
-                  <label class="xch__range">{c.display.fov}<input type="range" min="1" max="60" step="1" value="1" data-range="fovDeg" /><output></output></label>
-                  <label class="xch__range">{c.display.speed}<input type="range" min="1" max="5" step="1" value="3" data-range="speed" /><output></output></label>
-                </div>
-                <div class="xch__display xch__section" id="xch-section" data-lenis-prevent data-section hidden>
-                  <p class="xch__subtitle">{c.section.title}</p>
-                  <label class="xch__range">{c.section.position}<input type="range" min="-10" max="10" step="0.1" value="0" data-section-range /><output></output></label>
-                  <button type="button" role="switch" aria-checked="false" class="xch__switch" data-section-switch="flipped"><span>{c.section.flip}</span><i aria-hidden="true"></i></button>
-                  <button type="button" role="switch" aria-checked="false" class="xch__switch" data-section-switch="follow"><span>{c.section.follow}</span><i aria-hidden="true"></i></button>
-                  <p class="xch__small">{c.section.hint}</p>
-                  <button type="button" class="btn btn--outline xch-btn-sm" data-section-off>{c.section.off}</button>
                 </div>
               </div>
             </div>

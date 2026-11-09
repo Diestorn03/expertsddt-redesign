@@ -278,7 +278,7 @@ the same module instance motion.js uses) or CSS transitions, with this vocabular
 | Status chip | new result | `fromTo({scale:.86, opacity:0}, {scale:1, opacity:1})` (= `data-reveal="scale"`) | .6 s `back.out(1.6)` |
 | Metric numbers | new result | count-up like `[data-count]` | .9 s `power3.out` |
 | Table and list rows | rendered | `fromTo({y:24, opacity:0}, {y:0, opacity:1, stagger:.04, clearProps:'transform,opacity'})` | .6 s `power3.out` |
-| Toast | show / hide | `y: 24 → 0` + opacity | .5 s `expo.out` · .3 s `power2.in` |
+| Toast | show / hide (every toast goes when step 4 opens: one of an earlier step would sit on the legend and the scale bar) | `y: 24 → 0` + opacity | .5 s `expo.out` · .3 s `power2.in` |
 | Dialog | open / close | CSS `@starting-style { opacity:0; transform: translateY(16px) scale(.98) }`, backdrop fades; exit through `transition-behavior: allow-discrete` on `display, overlay` | .5 s `var(--ease-out)` · .3 s |
 | Display and Section popovers | open | opacity + `translateY(-8px) → 0` | CSS .35 s `var(--ease-out)` |
 | Camera preset, Fit, focus on an implant | click, key | slerp orientation, lerp target, geometric distance (`d0 · (d1 / d0)^t`) | .7 s `expo.out` = `EASE_OUT` in `ui/motion.ts` (≈ `--ease-out`); rotation center .35 s |
@@ -712,24 +712,31 @@ only warn (`ex.warn*`; blocking is Fernando's call, §15.3). Export also waits w
 - Highlight (selected implant, current guided target, a pulse): a 2.5 px `--xch-active` ring around the part's whole
   silhouette, drawn last (the part into the stencil, then 8 copies shifted on screen where the stencil is clear: first
   depth-tested at full strength where the part shows, then over everything at 40 % where the scan hides it, each ring
-  pixel drawn once), plus a faint warm glow only when the map is off. It never changes the color map's reading.
+  pixel drawn once; mask and copies draw both sides, since looking into a cut all that shows of a part is its back
+  side), plus a faint warm glow only when the map is off. It never changes the color map's reading.
 - Transparency: jaw opacity < 1 → `transparent, depthWrite: false`, drawn after the opaque parts (`renderOrder`).
 - Coincident surfaces: once aligned, a replacement (or captured body) lies on the scan body inside the jaw scan with
   another tessellation, which z-fights in stripes. Parts and ghosts are drawn `DEPTH_BIAS_MM` = 20 µm nearer the
   camera: `polygonOffset`, factor −1 (grazing walls) and units recomputed every frame per mesh from the current
   near/far, its view depth and distance (24-bit depth), so the bias stays 20 µm at every zoom and field of view. A real
   deviation above 20 µm still shows the scan through.
-- Section (VIEWER-POLISH B2): `localClippingEnabled`; one `THREE.Plane` shared by the jaw, parts, ghosts, the highlight
-  ring, the cut faces and the pick material. While it is on, the jaw and the ghosts draw their front side only and each
-  cut mesh draws its back side once more as a child `cut` mesh, flat and unlit in `--xch-cut` (one material for all, so
-  coincident cut faces cannot stripe), so you look into a section rather than a lit inside. The bias above still holds
-  (VIEWER-POLISH §5.10: 100 % part pixels with the cut on).
+- Section (VIEWER-POLISH B2): `localClippingEnabled`; one `THREE.Plane` carried, always, by the jaw, parts, ghosts, the
+  highlight ring, the cut faces and the pick material. Without a cut it keeps everything (1 km away), so turning the cut
+  on or off is a uniform change and never recompiles a shader. While it is on, each replacement (a closed solid; front
+  side only) draws its back side once more as a child `cut` mesh, flat and unlit in `--xch-cut` with the replacement's
+  depth bias (one material for all, so coincident cut faces cannot stripe), so you look into a section rather than a lit
+  inside. The jaw scan and the captured bodies are open scanner surfaces with nothing inside to section: the cut only
+  removes from them and both their sides stay lit, as without it. The bias above still holds: where a replacement
+  coincides with the scanned scan body, its cut face wins (VIEWER-POLISH §5.11).
 - Labels: DOM pills in the labels layer, moved with transforms in the render callback (no layout reads): `--xch-glass`
   with `--ink` text `.75rem` 600, `aria-hidden` (the lists carry the same information). Each sits 6 px outside its
   part's screen box, past the part's free end when its axis shows on screen, else outward from the middle of the set
-  (`labelSpot` in `viewer.ts`), so it never covers the part or its fit color.
+  (`labelSpot` in `viewer.ts`), so it never covers the part or its fit color. A label that would sit under the chrome
+  (icon bar, views dial, pad, legend; their boxes are read on resize and when the pad or the legend shows or hides,
+  never in a frame) goes to the other side of its part. A replacement hidden from the Display menu takes its label along.
 - Scale bar, bottom center (labels layer): the longest 1, 2 or 5 × 10ⁿ mm under 120 px at the orbit target's depth
   (`niceScale`), exact for the whole scene at the default 1° field of view; written to the DOM only when it changes.
+  Above 5° of field of view one length no longer holds across the case (34 % off at 60°): the bar hides.
 - WebGL unavailable at mount: the stage shows `ui.webglUnavailable` and the step panels are disabled (nothing can be
   checked visually). Context lost later: `preventDefault()`, the stage shows "3D view paused" + `[Restart the 3D
   view]`, which disposes the viewer and rebuilds it from the case state (the case survives).
@@ -743,9 +750,14 @@ roving tabindex (one Tab stop each, arrow keys move):
 - Icon bar, top right, vertical: Display (popover, §6.4, opens to its left) · Color map (C) · Jaw transparency (T) ·
   Section (P; opens the section popover, §6.4) · Distance (R; a toggle with `aria-pressed`, §6.6) |
   Shortcuts (`?`, opens `#xch-keys`) · Full screen (`stage.requestFullscreen()`, hidden when
-  `document.fullscreenEnabled` is false; name, tooltip and icon toggle to "Exit full screen"). Color map and Jaw
-  transparency are toggles (`aria-pressed`) on the keys' path (`Stage.toggleMap()`, `toggleJawOpacity()`), so the
-  legend follows; `aria-disabled` before a measurement or a jaw scan.
+  `document.fullscreenEnabled` is false; name, tooltip and icon toggle to "Exit full screen"; in full screen the stage
+  loses its rounded corners). Color map and Jaw transparency are toggles (`aria-pressed`) on the keys' path
+  (`Stage.toggleMap()`, `toggleJawOpacity()`), so the legend follows; `aria-disabled` before a measurement or a jaw scan,
+  and their keys (C, D, T, Shift + middle click) do nothing then either. Section and Distance are `aria-disabled` while
+  nothing is shown (server-rendered so; P and R do nothing then). Enter or a click on Distance turns the tool on and
+  moves focus into the 3D view, where Enter places a point at the crosshair (as Section takes it into its popover).
+  A character key (a view digit, T, C, D, S, P, R, ?, + or −) on a focused button of the chrome acts as on the stage;
+  the buttons keep Enter, Space, the arrows, Home and End, and the popovers keep every key.
 - Views dial, bottom right: Fit in the hub; Top, Back, Right, Bottom, Front, Left at the ends of three faint view axes
   (screen up/down and left/right, Front/Back on the depth diagonal); below, the default view button "Occlusal"
   (tooltip "Initial view (occlusal)"). `aria-pressed` on the last preset used, cleared as soon as a drag, the wheel, a
@@ -787,7 +799,11 @@ implant set moves.
 ### 6.4 Display popover
 
 Non-modal panel under the Display button (`aria-expanded`/`aria-controls`; Esc and outside click close it; focus returns
-to the button).
+to the button). `role="group"` named by its title; in the DOM right after the icon bar. Tab from its last control
+closes it and goes on to the views dial (`Stage.wirePopover`; with the dial hidden under the open menu the browser's own
+next stop was off the stage, the FAQ 4,500 px down), never off the stage. It is taller than the room above the views dial
+(586 px of 560 at 1440 × 900, 738 px on a tablet): it takes the stage's height, scrolling inside only if it still must
+(`overscroll-behavior: contain`), and the views dial and the scale bar under it wait hidden until it closes.
 
 - Switches (`<button role="switch" aria-checked>`): Jaw scan · Jaw color (PLY; shown only when the PLY had colors) ·
   Replacements · Captured scan bodies (on by default in step 1 for mesh captures, off afterwards) · Labels · Color map
@@ -807,9 +823,11 @@ to the button).
 and turns the cut on if it was off; closing it (Esc, outside press, focus leaving) keeps the cut, and the button keeps
 its pressed look and the name "Section (on)" while it lasts. P toggles the cut from the stage without moving focus
 (`say.sectionOn` / `say.sectionOff`). The cut starts through the orbit target, perpendicular to the view, removing what
-lies between it and the camera, and stays fixed in the scene. Controls: Position (range ±r, r = the radius of what was
-shown when it started, step 0.1 mm, `aria-valuetext` "1.5 mm"; Shift + wheel over the stage moves it 0.5 mm per
-notch) · Show the other side (switch) · Follow the view (switch: perpendicular to the view at its depth from the
+lies between it and the camera, and stays fixed in the scene. Controls: Position (range ±r, r = how far the farthest
+corner of what is shown lies along the cut from where it started, at least the radius of what is shown, so a cut started
+on a surface after a middle click still reaches the far side; it widens when more is shown later, a jaw after a cut
+started in step 2, and never narrows under the user; step 0.1 mm, `aria-valuetext` "1.5 mm"; Shift + wheel over the
+stage moves it 0.5 mm per notch) · Show the other side (switch) · Follow the view (switch: perpendicular to the view at its depth from the
 target as you turn) · hint · Remove the cut (off, closes the popover, focus back on the button). A new case, the sample
 and a viewer restart remove it. Labels of implants whose center is cut away hide; guided pins and distance points
 stay. On a coarse pointer the rows of both popovers are 44 px and the section hint hides (half of it is about Shift +
@@ -828,7 +846,8 @@ wheel), so Remove the cut stays in view above the views dial.
 
 ### 6.6 Hover readout, picking and the guided flow in the stage
 
-- **Hover** (mouse or pen): raycast the visible part meshes only (they are small), at most once per frame. Readout chip
+- **Hover** (mouse or pen): raycast the visible part meshes and their cut faces only (they are small; never what the cut
+  removed, so a part cut away is neither hovered, grabbed nor selected), at most once per frame. Readout chip
   bottom-center: with the map on "AXO2 · 42 µm" (barycentric interpolation of the hit triangle's three values);
   otherwise "AXO2 · H6.6 cap", "AXO2 · provisional" or "AXO2 · rotation unknown". The jaw is never looked at on hover (up
   to 3 M triangles), only on click.
@@ -836,9 +855,11 @@ wheel), so Remove the cut stays in view above the views dial.
   the parts). A point on a surface (guided and distance points, the rotation center, modified middle clicks) is a GPU
   pick: one render of the pickable meshes (the jaw; also parts and ghosts unless only the jaw counts; visible, ≥ 10 %
   opaque) into a 1×1 float target framed on the clicked pixel, world position in rgb and an object code in alpha, each
-  mesh with its depth bias and the cut (VIEWER-POLISH B1: 1–3 ms on 3 M triangles; three's raycast without
-  `EXT_color_buffer_float`). Step 4 in guided mode: the jaw receives the current point (an `--xch-active` pin
-  with its number in `#1e293b`, scale-in); parts are ignored.
+  mesh with its depth bias, the cut and the sides the frame draws of it (a replacement: its front side, with the cut its
+  cut faces too) (VIEWER-POLISH B1: 1–3 ms on 3 M triangles; three's raycast without `EXT_color_buffer_float`). Nothing
+  of a pick is kept after it. Step 4 in guided mode: the jaw receives the current point (an `--xch-active` pin
+  with its number in `#1e293b`, scale-in); parts are ignored. A point within 0.5 mm of a placed one (a double-click,
+  Enter twice) is refused and said (`gp.same`): each guided point marks another scan body.
 - **Guided mode visuals**: the current target implant glows `--xch-active` and its label pulses; other implants drop to
   40 % opacity; placed points keep numbered pins on the jaw; on entering, Fit frames the jaw and the implant set
   together; the camera stays under the user's control.
@@ -856,14 +877,17 @@ wheel), so Remove the cut stays in view above the views dial.
   nothing the ring goes and the center stays. `.xch__stage` has `-webkit-touch-callout: none`.
 - **Distance** (R or the Distance button; not during guided points, when the button is `aria-disabled` with
   `dist.busy`): a click or a tap on any visible surface places point 1, the next one point 2 and the value, a third
-  starts a new pair; over nothing nothing happens. Two 12 px dots and a 2 px line in `--xch-active` with the
-  crosshair's dark halo, and the value pill at the midpoint ("12.34 mm", `--xch-active` fill, `#1e293b` text), in the
-  labels layer, hidden when a point leaves the stage; a hint chip at the top center while a point is missing. A press
+  starts a new pair; over nothing nothing happens; a second point on top of the first (under 0.005 mm: a double-click,
+  Enter twice) is refused and said (`dist.same`), never a 0.00 mm value. Two 12 px dots and a 2 px line in
+  `--xch-active` with the crosshair's dark halo, and the value pill at the midpoint ("12.34 mm", `--xch-active` fill,
+  `#1e293b` text), or beside the line, 9 px off it, when the dots are under 120 px apart (on the line it would hide both),
+  in the labels layer, hidden when a point leaves the stage; a hint chip at the top center while a point is missing. A press
   within 12 px of a dot (24 px on touch) drags it along the surfaces, one pick per frame; the release says the value.
   Keyboard: the crosshair shows, Enter places a point under it (`dist.miss` on nothing), Backspace removes the last
-  point, Esc or R ends the tool (`say.distOff`). Values are announced (`say.distFirst`, `say.distance`); the stage's
-  description adds `dist.keyboard`. While it is on the pad hides and set drags pause; any change of the implant-set
-  pose ends it, so a number never describes a pose you no longer see.
+  point, Esc or R ends the tool (`say.distOff`); R during guided points says `dist.busy`, as the button does. Values are
+  announced (`say.distFirst`, `say.distance`); the stage's description adds `dist.keyboard`. While it is on the pad hides
+  and set drags pause; any change of the implant-set pose ends it, so a number never describes a pose you no longer see.
+  A new case, the sample or Exit sample ends it silently (before the new case renders).
 
 ### 6.7 Camera and implant-set controls (exocad mapping)
 
@@ -877,19 +901,20 @@ Trackball rotation about the orbit target with quaternions.
 | Left-drag on empty space or on the jaw | rotate | — |
 | Left-drag on an implant | — | move the whole set in the camera plane |
 | Ctrl or ⌘ + left-drag anywhere on the canvas | rotate (outside step 4) | rotate the set (arcball about its bounding-box center); + Shift (before or during the drag): only the dominant axis |
-| Middle-drag, Shift + drag, left + right drag | pan | — |
-| Wheel, trackpad pinch | zoom toward the pointer (dolly along the cursor ray to the target plane) | — |
+| Middle-drag, Shift + drag, left + right drag | pan (both buttons: from the moment the second one goes down, which only a chorded pointermove reports) | — |
+| Ctrl or ⌘ + Z during a set drag | — | the drag wins: the undo's (or an alignment result's) animation stops, the release commits what the drag shows |
+| Wheel, trackpad pinch | zoom toward the pointer (dolly along the cursor ray to the target plane), also over the icon bar, views dial, pad and legend; over a popover it scrolls the popover and never the page | — |
 | Shift + wheel | with a cut: move it 0.5 mm per notch (up = deeper; a sideways wheel too); without one: zoom | — |
 | Middle click on a surface | rotation center there (.35 s tween) | — |
 | Shift + middle click | jaw opacity 100 % ↔ last value (on the jaw), geometry opacity 100 % ↔ 30 % (on a replacement) | — |
 | Ctrl or ⌘ + middle click · + Shift | hide what is under the pointer (§6.4) · show what was hidden | — |
-| Double-click | Fit | — |
-| Touch: one finger · two fingers · double tap · touch and hold | rotate · pinch zoom + pan · Fit · rotation center (§6.6) | pad only (no touch drags on the set) |
+| Double-click | Fit (not while clicks place guided or distance points) | — |
+| Touch: one finger · two fingers · double tap · touch and hold | rotate · pinch zoom + pan · Fit (two taps within 300 ms and 24 px, not while taps place points) · rotation center (§6.6) | pad only (no touch drags on the set; Fine for 5° · 0.1 mm) |
 | Arrow keys | pan 5 % of the view height (exocad: the cursor keys move the view) | — |
 | Shift + arrow keys · PageUp / PageDown | rotate 10° about the screen axes · about the screen's vertical axis (PageUp = Shift + ←) | — |
 | + / − (also = and _) | zoom 15 % at the center | — |
-| 1 · 2 · 3 · 4 · 5 · 6 · 8 · 0 | Front · Bottom · Back · Left · Fit · Right · Top · Occlusal (§6.3) | — |
-| Home | rotation center under the mouse, else at the stage center (§6.6) | — |
+| 1 · 2 · 3 · 4 · 5 · 6 · 8 · 0 | Front · Bottom · Back · Left · Fit · Right · Top · Occlusal (§6.3; French AZERTY's - on 6 and _ on 8 are views there) | — |
+| Home | rotation center under the mouse, else at the stage center (§6.6); during a view's tween, that view's orientation is kept | — |
 | T · C or D · S · P · R · ? | jaw transparency · color map · show what was hidden · section on/off · distance tool · shortcuts | — |
 | Click or tap, drag a dot (distance tool) | place a distance point · move it along the surfaces (§6.6) | paused: drags turn the view, the pad hides |
 | Ctrl or ⌘ + Z | — | undo the last set move |
@@ -912,14 +937,17 @@ hairline, `role="toolbar"` with roving tabindex, tooltips as the toolbar.
 
 | Group | Buttons (the accessible name includes the amount) | Step |
 |---|---|---|
-| Rotate | Tilt forward / back (screen X) · Turn left / right (screen Y) · Roll counterclockwise / clockwise (view axis) | 30°, Shift 5° |
-| Move | Up · Down · Left · Right (screen plane) | 1 mm, Shift 0.1 mm |
+| Rotate | Tilt forward / back (screen X) · Turn left / right (screen Y) · Roll counterclockwise / clockwise (view axis) | 30°, Fine or Shift 5° |
+| Move | Up · Down · Left · Right (screen plane) | 1 mm, Fine or Shift 0.1 mm |
 | Flip | Flip over (180° about screen X) · Turn around (180° about screen Y) | — |
+| Fine | A pill across the pad, "Fine: 5° · 0.1 mm", `aria-pressed`: while pressed every click steps 5° · 0.1 mm (a tablet has no Shift, nor has a screen reader's click) | — |
 | Other | Move to the jaw (set's bounding-box center → jaw's) · Undo · Reset to last alignment | — |
 
 Pivot: the set's bounding-box center in its current pose. Every action pushes the previous pose onto the undo stack
 (≤ 20 entries; cleared by a new alignment), tweens the pose (.35 s) and schedules the re-measure. Shift with Enter or
-Space on a focused pad button uses the small step (read from the click event's `shiftKey`).
+Space on a focused pad button uses the small step (read from the click event's `shiftKey`). Each button's name and
+tooltip say the step it makes now ("Tilt forward 30°", with Fine "Tilt forward 5°"); the pad is described by its hint
+(`pad.hint`, "Shift + click: one fine step", shown with a mouse only).
 
 ### 6.8 Shortcuts dialog
 
@@ -1313,7 +1341,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `s4.noJaw` | No jaw scan: the replacements stay in the capture's coordinates, exactly where the capture put them. | Sin escaneo de la arcada: los reemplazos quedan en las coordenadas de la captura, justo donde la captura los ubicó. |
 | `s4.alignment` | Alignment | Alineación |
 | `s4.manual` | Adjust by hand | Ajuste manual |
-| `s4.manualText` | Drag an implant to move the whole set; hold Ctrl (⌘ on Mac) and drag to rotate it. The adjust panel at the top left of the view turns it 30° per click, 5° with Shift. The fit is measured again after every move. | Arrastra un implante para mover todo el conjunto; mantén Ctrl (⌘ en Mac) y arrastra para girarlo. El panel de ajuste, arriba a la izquierda del visor, lo gira 30° por clic, 5° con Shift. El ajuste se vuelve a medir después de cada movimiento. |
+| `s4.manualText` | Drag an implant to move the whole set; hold Ctrl (⌘ on Mac) and drag to rotate it. The adjust panel at the top left of the view turns it 30° per click, 5° with Fine or Shift. The fit is measured again after every move. | Arrastra un implante para mover todo el conjunto; mantén Ctrl (⌘ en Mac) y arrastra para girarlo. El panel de ajuste, arriba a la izquierda del visor, lo gira 30° por clic, 5° con Fino o Shift. El ajuste se vuelve a medir después de cada movimiento. |
 | `s4.moveToJaw` | Move to the jaw | Llevar a la arcada |
 | `s4.undo` | Undo | Deshacer |
 | `s4.reset` | Reset to last alignment | Volver a la última alineación |
@@ -1389,6 +1417,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `dist.value` | {mm} mm (two decimals, the page's separator) | {mm} mm |
 | `dist.miss` | Nothing under the crosshair. Pan or turn the view until it sits on a surface, then press Enter. | No hay nada bajo la mira. Desplaza o gira la vista hasta que quede sobre una superficie y pulsa Enter. |
 | `dist.busy` | Finish the guided points first. | Termina primero los puntos guiados. |
+| `dist.same` | That is where the first point is. Place the second one somewhere else. | Ahí está el primer punto. Coloca el segundo en otro lugar. |
 | `legend.title` | Distance to the jaw scan | Distancia al escaneo |
 | `legend.onReplacement` | On the replacement geometry | Sobre la geometría de reemplazo |
 | `legend.onCapture` | On the captured scan bodies | Sobre los scan bodies capturados |
@@ -1412,14 +1441,15 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `pad.left` | Move left {mm} mm | Mover a la izquierda {mm} mm |
 | `pad.right` | Move right {mm} mm | Mover a la derecha {mm} mm |
 | `pad.flipOver` | Flip over 180° | Dar vuelta 180° |
-| `pad.turnAround` | Turn around 180° | Girar media vuelta 180° |
-| `pad.hint` | 30° · 1 mm per click. Shift: 5° · 0.1 mm | 30° · 1 mm por clic. Shift: 5° · 0,1 mm |
+| `pad.turnAround` | Turn around 180° | Girar 180° |
+| `pad.hint` | Shift + click: one fine step | Shift + clic: un paso fino |
+| `pad.fine` | Fine: 5° · 0.1 mm | Fino: 5° · 0,1 mm |
 | `pad.ctrlHint` | Drag to rotate · Shift: one axis | Arrastra para girar · Shift: un eje |
 | `keys.title` | Mouse and keyboard | Mouse y teclado |
 | `keys.colAction` | Action | Acción |
 | `keys.colMouse` | Mouse | Mouse |
 | `keys.colKeys` | Keyboard (3D view focused) | Teclado (con el visor activo) |
-| `keys.touch` | On a tablet: one finger turns the view, two fingers zoom and pan, a double tap fits everything, touch and hold sets the rotation center; move the implant set with the adjust panel. | En una tablet: un dedo gira la vista, dos dedos acercan y desplazan, un doble toque encuadra todo y mantener presionado fija el centro de giro; mueve el conjunto con el panel de ajuste. |
+| `keys.touch` | On a tablet: one finger turns the view, two fingers zoom and pan, a double tap fits everything, touch and hold sets the rotation center; move the implant set with the adjust panel (Fine: 5° and 0.1 mm per tap). | En una tablet: un dedo gira la vista, dos dedos acercan y desplazan, un doble toque encuadra todo y mantener presionado fija el centro de giro; mueve el conjunto con el panel de ajuste (Fino: 5° y 0,1 mm por toque). |
 | `keys.close` | Close | Cerrar |
 
 `keys.rows` (action · mouse · keyboard; "—" = none):
@@ -1437,11 +1467,11 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | 9 | Hide what is under the pointer · Ctrl or ⌘ + middle-click · Display menu | Ocultar lo que está bajo el puntero · Ctrl o ⌘ + clic central · Menú Visualización |
 | 10 | Show what you hid · Ctrl or ⌘ + Shift + middle-click · S | Mostrar lo que ocultaste · Ctrl o ⌘ + Shift + clic central · S |
 | 11 | Color map · Toolbar or Display menu · C or D | Mapa de color · Barra de herramientas o menú Visualización · C o D |
-| 12 | Section · Section button · P | Corte · Botón Corte · P |
-| 13 | Measure a distance · Distance button, then click two points · R, then Enter at the crosshair | Medir una distancia · Botón Distancia y luego clic en dos puntos · R y luego Enter sobre la mira |
+| 12 | Section · Section button, then its Position slider; Shift + wheel moves the cut · P; the Position slider in the Section menu (arrow keys) | Corte · Botón Corte y luego su control Posición; Shift + rueda mueve el corte · P; el control Posición del menú Corte (flechas) |
+| 13 | Measure a distance · Measure a distance button, then click two points · R, then Enter at the crosshair | Medir una distancia · Botón Medir una distancia y luego clic en dos puntos · R y luego Enter sobre la mira |
 | 14 | Select an implant (step 2) · Click it · Implant list | Seleccionar un implante (paso 2) · Clic sobre él · Lista de implantes |
 | 15 | Move the implant set (step 4) · Drag an implant · Adjust panel | Mover el conjunto (paso 4) · Arrastrar un implante · Panel de ajuste |
-| 16 | Rotate the implant set (step 4) · Ctrl or ⌘ + drag anywhere (Shift: one axis) · Adjust panel (Shift: 5°) | Girar el conjunto (paso 4) · Ctrl o ⌘ + arrastrar en cualquier parte (Shift: un eje) · Panel de ajuste (Shift: 5°) |
+| 16 | Rotate the implant set (step 4) · Ctrl or ⌘ + drag anywhere (Shift: one axis) · Adjust panel (Fine or Shift: 5°) | Girar el conjunto (paso 4) · Ctrl o ⌘ + arrastrar en cualquier parte (Shift: un eje) · Panel de ajuste (Fino o Shift: 5°) |
 | 17 | Undo a move · — · Ctrl or ⌘ + Z | Deshacer un movimiento · — · Ctrl o ⌘ + Z |
 | 18 | Place a guided point · Click on the jaw · Enter at the crosshair | Colocar un punto guiado · Clic en el escaneo · Enter sobre la mira |
 | 19 | Remove the last point (guided points, distance) · — · Backspace | Quitar el último punto (puntos guiados, distancia) · — · Retroceso |
@@ -1563,6 +1593,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `gp.two` | With two points, the turn around their line stays free. | Con dos puntos, el giro alrededor de su línea queda libre. |
 | `gp.announce` | Point {n} placed. Next: implant {label}. | Punto {n} colocado. Siguiente: implante {label}. |
 | `gp.announceLast` | Point {n} placed. Aligning… | Punto {n} colocado. Alineando… |
+| `gp.same` | There is a point there already. Place this one on the top of implant {label}. | Ya hay un punto ahí. Coloca este sobre la parte superior del implante {label}. |
 | `gp.miss` | Nothing under the crosshair. Pan (arrow keys) or turn (Shift + arrows) the view until it sits on the top of the scan body, then press Enter. | No hay nada bajo la mira. Desplaza (flechas) o gira (Shift + flechas) la vista hasta que quede sobre la parte superior del scan body y pulsa Enter. |
 
 ### 12.6 Export and email gate
@@ -1952,14 +1983,20 @@ format, warnings }` · `export { request }` → `ExportBundle` (zip transferred)
 - `test/ux/controls-keys.ux.test.ts` (controls on stand-ins): view keys never stop their tween; arrows pan, Shift +
   arrows and PageUp/PageDown turn; Ctrl/⌘ + drag anywhere turns the set in step 4; Home at the pointer or the center;
   touch & hold with fake timers; every modified middle click; camera input clears the pressed view; Stage hide/show
-  all and the keyboard view announcement; P, Shift + wheel with and without a cut, D, R (ignored in guided mode),
+  all and the keyboard view announcement; P, Shift + wheel with and without a cut, D, R (in guided mode it only says why),
   measure clicks, taps, Enter, Backspace and Esc, set drags paused, dot drags with a mouse and on touch.
 - `viewer/pick` and `viewer/section`: the pick decode (code 0, jaw, captured body, implant index → site id, non-finite
   positions) and the section plane (what lies toward the camera is removed, flip swaps the halves, offsets go deeper).
 - `test/ux/viewer-tools.ux.test.ts` (the real Viewer, a renderer stand-in that records the pick pass): codes, layers and
-  depth bias per draw, state restored, warm-ups, raycast fallback with the cut, dispose; the cut on every material with
-  its cut faces, fixed or following the view, labels cut away; the distance overlay; the Stage's section popover and
-  distance tool (EN/ES values, pose change, guided points, new case).
+  depth bias per draw, the sides each draw rasterizes, state restored, one warm-up for every cut state, raycast
+  fallback with the cut, dispose; the plane on every material, the replacements' cut faces with their bias and the scans
+  left lit both sides, fixed or following the view, labels cut away or stepping aside from the chrome; the distance
+  overlay; the Stage's section popover and distance tool (EN/ES values, pose change, guided points, new case).
+- Review fixes (2026-11-09): `test/ux-viewer/*.bugs.test.ts` and `test/adversarial-viewer/*.adversarial.test.ts` (the
+  reviews' "BUG:" tests, now passing) and `test/ux/review-fixes.ux.test.ts` (the pad's Fine, Section and Distance on an
+  empty stage, the slider following what is shown, guided points on one spot, toasts at step 4), plus the review-fix
+  blocks of `controls-keys` (keys on the chrome, R during guided points, double taps, both buttons, the wheel over the
+  chrome) and `viewer-look` (framing on touch).
 
 DOM, WebGL and workers are verified by hand with the checklist above (Playwright would be a new dev dependency; not
 needed for v1).

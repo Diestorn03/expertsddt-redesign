@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { identity, maxAbsDiff } from '../core/mat4';
 import { computeBounds, countTriangles } from '../core/mesh';
+import { distance } from '../core/vec3';
 import type { AlignmentResult, ExportRequest, ImplantSite, LandmarkPair, Mat4, Vec3 } from '../core/types';
 import { guidePoint, orderSitesAlongArch } from '../align/landmarks';
 import { DEFAULT_QUALITY } from '../align/metrics';
@@ -26,6 +27,8 @@ import { dropZone } from './step-capture';
 import { fmt, mb, num, warningMessage } from './i18n/format';
 
 export const XCHANGE_VERSION = '1.0.0';
+/** Guided points closer than this (mm) are on one spot: they mark different scan bodies, millimetres apart. */
+const GUIDED_APART_MM = 0.5;
 const STAGE_SPAN: Readonly<Record<AlignStage, [number, number]>> = { prepare: [0, 0.1], coarse: [0.1, 0.55], fine: [0.55, 0.9], metrics: [0.9, 1] };
 const TONE = { good: ['ok', 'check'], acceptable: ['info', 'info'], weak: ['warn', 'warn'], ambiguous: ['warn', 'warn'], failed: ['bad', 'bad'] } as const;
 
@@ -139,6 +142,7 @@ export class AlignStep {
       onToggleSection: () => app.stage.toggleSection(true),
       onSectionNudge: (mm) => app.stage.nudgeSection(mm),
       onToggleMeasure: () => app.stage.toggleMeasure(),
+      onMeasureBusy: () => app.say.say(app.c.dist.busy),
       onMeasurePoint: (p) => app.stage.measurePoint(p),
       onMeasureMiss: () => app.say.say(app.c.dist.miss),
       onMeasureKey: (k) => app.stage.measureKey(k),
@@ -431,6 +435,9 @@ export class AlignStep {
     const app = this.app, g = this.guided;
     if (!g || g.idx < 0) return;
     const site = g.targets[g.idx]!;
+    // each point marks another scan body: one on top of a placed one (a double-click, Enter twice at the crosshair) is
+    // refused here, not four points later as "points on top of each other"
+    if (g.pairs.some((q) => q && distance(q.target, p) < GUIDED_APART_MM)) { app.say.say(fmt(app.lang, app.c.gp.same, { label: site.label })); return; }
     const body = app.bodyInImplantFrame(site);
     if (!body) return;
     g.pairs[g.idx] = { source: guidePoint(site, body), target: p };

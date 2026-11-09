@@ -18,7 +18,7 @@ import { PICK_CAPTURE, PICK_JAW, PICK_PART } from '../../viewer/pick';
 import { DEFAULT_DISPLAY, Viewer } from '../../viewer/viewer';
 import { fakeElement, installFakeDom, type FakeElement } from '../adversarial/fake-dom';
 
-interface Draw { object: THREE.Object3D; code: number; offset: boolean; units: number }
+interface Draw { object: THREE.Object3D; code: number; offset: boolean; units: number; side: THREE.Side }
 interface PickPass { target: unknown; mask: number; view: THREE.PerspectiveCamera['view']; override: THREE.Material | null; alpha: number; draws: Draw[] }
 
 vi.mock('three', async (importOriginal) => {
@@ -54,7 +54,7 @@ vi.mock('three', async (importOriginal) => {
       scene.traverseVisible((o) => {
         if (!(o as THREE.Mesh).isMesh || !o.layers.test(camera.layers)) return;
         mat.onBeforeRender(this as never, scene, camera, (o as THREE.Mesh).geometry, o, null as never);
-        draws.push({ object: o, code: mat.uniforms.code!.value as number, offset: mat.polygonOffset, units: mat.polygonOffsetUnits });
+        draws.push({ object: o, code: mat.uniforms.code!.value as number, offset: mat.polygonOffset, units: mat.polygonOffsetUnits, side: mat.side });
       });
       this.passes.push({ target: this.target, mask: camera.layers.mask, view: camera.view && { ...camera.view }, override: mat, alpha: this.alpha, draws });
     }
@@ -151,6 +151,21 @@ describe('B1 · GPU picking', () => {
     v.dispose();
   });
 
+  it('rasterizes the sides the frame draws: replacements their front only, with the cut their cut faces too; the scans both; nothing kept after', () => {
+    const v = scene(true);
+    const sides = (): THREE.Side[] => rnd(v).passes.at(-1)!.draws.map((d) => d.side);
+    const objects = (): THREE.Object3D[] => rnd(v).passes.at(-1)!.draws.map((d) => d.object);
+    v.pickObject(400, 300);
+    const expected = (o: THREE.Object3D, cut: boolean): THREE.Side => (o === part(v, 'a') || o === part(v, 'b')) && !cut ? THREE.FrontSide : THREE.DoubleSide;
+    expect(sides()).toEqual(objects().map((o) => expected(o, false)));
+    v.setSection({ offset: 0, flipped: false, follow: false });
+    v.pickObject(400, 300);
+    expect(sides()).toEqual(objects().map((o) => expected(o, true)));
+    expect(priv<THREE.ShaderMaterial>(v, 'pickMat').side, 'the material itself ends double-sided').toBe(THREE.DoubleSide);
+    expect(priv<Map<THREE.Object3D, number>>(v, 'pickCode').size, 'no mesh is kept between picks').toBe(0);
+    v.dispose();
+  });
+
   it('jawOnly (guided points) sees the jaw alone; hidden or nearly transparent meshes are not pickable', () => {
     const v = scene(true);
     v.pickSurface(400, 300, true);
@@ -192,7 +207,7 @@ describe('B1 · GPU picking', () => {
     v.dispose();
   });
 
-  it('warm-up: one pick at the stage center once a jaw loads, when the browser is idle (200 ms without requestIdleCallback)', () => {
+  it('warm-up: one pick at the stage center once a jaw loads, when the browser is idle (200 ms without requestIdleCallback); the cut never needs another', () => {
     vi.useFakeTimers();
     const v = scene(true);
     const passes = rnd(v).passes;
@@ -200,19 +215,17 @@ describe('B1 · GPU picking', () => {
     vi.advanceTimersByTime(250);
     expect(passes).toHaveLength(1);
     expect(passes[0]!.view).toMatchObject({ offsetX: 399.5, offsetY: 299.5 });
-    v.setSection({ offset: 0, flipped: false, follow: false }); // the clipped pick shader is another program: warmed too
-    vi.advanceTimersByTime(250);
-    expect(passes).toHaveLength(2);
-    expect(passes[1]!.override!.clippingPlanes).toEqual([v.plane]);
-    v.setSection({ offset: 2, flipped: true, follow: true }); // the same program: no new warm-up
-    vi.advanceTimersByTime(250);
-    expect(passes).toHaveLength(2);
-    // the cut off again before any click (the plane-less program may never have been warmed: a pending warm-up ran with
-    // the cut on): warmed again
+    // the pick shader always carries the plane (it clips nothing without a cut): one program, warmed with the jaw. The
+    // cut on, moved, flipped, following and off again changes no material, so nothing recompiles and nothing re-warms
+    const pickMat = priv<THREE.ShaderMaterial>(v, 'pickMat'), version = pickMat.version;
+    expect(passes[0]!.override!.clippingPlanes).toEqual([v.plane]);
+    v.setSection({ offset: 0, flipped: false, follow: false });
+    v.setSection({ offset: 2, flipped: true, follow: true });
     v.setSection(null);
-    vi.advanceTimersByTime(250);
-    expect(passes).toHaveLength(3);
-    expect(passes[2]!.override!.clippingPlanes ?? []).toEqual([]);
+    vi.advanceTimersByTime(1000);
+    expect(passes).toHaveLength(1);
+    expect(pickMat.version, 'no recompile').toBe(version);
+    expect(pickMat.clippingPlanes).toEqual([v.plane]);
     v.dispose();
     const w = scene(true);
     w.dispose(); // a pending warm-up goes with the viewer
@@ -258,13 +271,13 @@ describe('B2 · the section plane in the viewer', () => {
     v.dispose();
   });
 
-  it('clips every drawn surface with one plane; front sides only, the back sides flat in --xch-cut on a second, unpickable draw', () => {
+  it('clips every drawn surface with one plane; replacements show their back side flat in --xch-cut on a second, unpickable draw with their depth bias; the scans keep both sides lit', () => {
     const v = scene(false);
     v.setSelected('a');
     v.setSection({ offset: 0, flipped: false, follow: false });
     const meshes = [jaw(v), part(v, 'a'), part(v, 'b'), ghost(v)];
     const cutMat = priv<THREE.MeshBasicMaterial>(v, 'cutMaterial');
-    for (const m of meshes) {
+    for (const m of [part(v, 'a'), part(v, 'b')]) {
       expect(m.material.clippingPlanes).toEqual([v.plane]);
       expect(m.material.side).toBe(THREE.FrontSide);
       const faces = m.children.filter((c) => c.name === 'cut') as THREE.Mesh[];
@@ -273,12 +286,29 @@ describe('B2 · the section plane in the viewer', () => {
       expect(faces[0]!.geometry).toBe(m.geometry);
       expect(faces[0]!.layers.mask, 'not on a pick layer').toBe(1);
     }
+    // the jaw scan and the captured shell are open scanner surfaces: the cut removes from them, both sides stay lit as
+    // without it (a back side painted as a section read as cut far from the plane), no cut faces
+    for (const m of [jaw(v), ghost(v)]) {
+      expect(m.material.clippingPlanes).toEqual([v.plane]);
+      expect(m.material.side).toBe(THREE.DoubleSide);
+      expect(m.children.some((c) => c.name === 'cut')).toBe(false);
+    }
     expect([cutMat.side, cutMat.toneMapped, '#' + cutMat.color.getHexString(), cutMat.clippingPlanes]).toEqual([THREE.BackSide, false, '#3d9ad4', [v.plane]]);
     // the highlight ring is clipped alike, so it outlines what is left of a cut part
     for (const ring of part(v, 'a').children.filter((c) => c.name !== 'cut') as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[]) expect(ring.material.clippingPlanes).toEqual([v.plane]);
+    // a cut face is drawn with its replacement's depth bias: where it coincides with the scanned scan body (lit, both
+    // sides), the section wins without stripes
+    render(v);
+    const face = part(v, 'a').children.find((c) => c.name === 'cut') as THREE.Mesh;
+    cutMat.onBeforeRender(v.renderer, v.scene, v.camera, face.geometry, face, null as never);
+    expect([cutMat.polygonOffset, cutMat.polygonOffsetFactor, cutMat.polygonOffsetUnits]).toEqual([true, -1, part(v, 'a').material.polygonOffsetUnits]);
+    expect(cutMat.polygonOffsetUnits).toBeLessThan(0);
     v.setSection(null);
+    // no cut: the same plane stays on every material (no shader recompiles) and keeps everything shown
+    const shown = new THREE.Box3().setFromObject(jaw(v)).union(new THREE.Box3().setFromObject(v.assembly));
+    for (let i = 0; i < 8; i++) expect(v.plane.distanceToPoint(new THREE.Vector3(i & 1 ? shown.max.x : shown.min.x, i & 2 ? shown.max.y : shown.min.y, i & 4 ? shown.max.z : shown.min.z))).toBeGreaterThan(1e5);
     for (const m of meshes) {
-      expect(m.material.clippingPlanes).toBeNull();
+      expect(m.material.clippingPlanes).toEqual([v.plane]);
       expect(m.children.some((c) => c.name === 'cut')).toBe(false);
     }
     expect([jaw(v).material.side, ghost(v).material.side]).toEqual([THREE.DoubleSide, THREE.DoubleSide]);
@@ -334,6 +364,32 @@ describe('B2 · the section plane in the viewer', () => {
     v.setSection({ offset: 0, flipped: true, follow: false });
     render(v);
     expect([tag('a').classList.contains('is-off'), tag('b').classList.contains('is-off')]).toEqual([false, true]);
+    v.dispose();
+  });
+});
+
+describe('implant labels step aside from the chrome', () => {
+  it('a label that would sit under the chrome (the views dial on a tablet) goes to the other side of its part', () => {
+    const labels = fakeElement();
+    const v = scene(false, { labels });
+    render(v);
+    const tag = labels.children.filter((c) => c.className === 'xch__tag')[1]!; // B
+    const rect = (): number[] => {
+      const [x, y, tx, ty] = /translate\(([-\d.e]+)px, ([-\d.e]+)px\) translate\(([-\d.e]+)%, ([-\d.e]+)%\)/.exec(String(tag.style.transform))!.slice(1).map(Number) as [number, number, number, number];
+      const w = 7.5 * String(tag.textContent).length + 20, h = 26;
+      return [x + (tx / 100) * w, y + (ty / 100) * h, x + (tx / 100) * w + w, y + (ty / 100) * h + h];
+    };
+    const before = rect();
+    const chrome = { x0: before[0]! - 30, y0: before[1]! - 30, x1: before[2]! + 30, y1: before[3]! + 30 };
+    (v as unknown as { chrome: object[] }).chrome = [chrome];
+    render(v);
+    const after = rect();
+    expect(after[0]! >= chrome.x1 || after[2]! <= chrome.x0 || after[1]! >= chrome.y1 || after[3]! <= chrome.y0, `${before} -> ${after}`).toBe(true);
+    // on the other side of its part (labelSpot keeps it clear of the part there too)
+    const b = new THREE.Box3().setFromObject(part(v, 'b'));
+    const c = b.getCenter(new THREE.Vector3()).project(v.camera);
+    const cx = ((c.x + 1) / 2) * 800;
+    expect(Math.sign((after[0]! + after[2]!) / 2 - cx)).toBe(-Math.sign((before[0]! + before[2]!) / 2 - cx));
     v.dispose();
   });
 });

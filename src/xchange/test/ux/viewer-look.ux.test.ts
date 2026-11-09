@@ -137,6 +137,19 @@ describe('default view and Fit frame what is shown', () => {
     v.dispose();
   });
 
+  it(`on a touch screen it fills ${LOOK.frameTouch * 100} %: the 44 px chrome takes more of a smaller stage`, () => {
+    const g = globalThis as Record<string, unknown>, had = g.matchMedia;
+    g.matchMedia = (q: string) => ({ matches: q === '(pointer: coarse)' });
+    try {
+      const v = viewer();
+      v.view('occlusal', true);
+      expect(Math.max(spread(v).x, spread(v).y)).toBeCloseTo(LOOK.frameTouch, 2);
+      v.dispose();
+    } finally {
+      g.matchMedia = had;
+    }
+  });
+
   it('frames closer than the bounding sphere did (the arch filled about half the stage)', () => {
     const v = viewer();
     v.view('occlusal', true);

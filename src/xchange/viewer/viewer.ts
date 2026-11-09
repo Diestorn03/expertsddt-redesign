@@ -61,7 +61,17 @@ export const LOOK = {
   ringHidden: 0.4,
   /** Default view and Fit: the visible box fills this share of the stage, a margin left for the chrome in the corners. */
   frame: 0.8,
+  /** The same on a touch screen, where the 44 px chrome takes more of a smaller stage. */
+  frameTouch: 0.68,
 } as const;
+
+/** The plane while there is no cut: it keeps everything within a kilometre. Every clipped material always carries the one
+ * plane, so turning the cut on or off never recompiles a shader (the first P froze for 70–100 ms on a 3 M-triangle jaw). */
+const NO_CUT = 1e6;
+/** Above this field of view one scale no longer holds across the case (34 % off at 60°): the scale bar goes. */
+const SCALE_FOV_MAX = 5;
+/** The distance pill sits on the line's midpoint while the dots are this far apart (stage px); closer, it goes beside the line. */
+const PILL_ON_LINE_PX = 120;
 
 type Shine = { readonly specular: number; readonly shininess: number };
 const shine = (m: THREE.MeshPhongMaterial, s: Shine): void => { m.specular.setScalar(s.specular); m.shininess = s.shininess; };
@@ -70,7 +80,8 @@ const shine = (m: THREE.MeshPhongMaterial, s: Shine): void => { m.specular.setSc
 // LOOK.ringPx on screen wherever the stencil stays clear: first depth-tested (where the part shows), then over
 // everything at LOOK.ringHidden (where the scan hides it; it still shows where a buried implant is). Each copy marks the
 // pixels it draws, so every ring pixel is drawn once. Last in the frame, in the same render call: no pass, no target.
-// The cut clips mask and copies alike, so the ring outlines what is left of a cut part.
+// The cut clips mask and copies alike, so the ring outlines what is left of a cut part; both sides are drawn, because
+// looking into the cut all that shows of a part is its back side (the cut faces).
 const RING_VS = `#include <clipping_planes_pars_vertex>
 uniform vec2 ringRes;
 uniform vec2 ringDir;
@@ -225,10 +236,12 @@ export class Viewer {
   private readonly lut = buildLut().linear;
   private colors = { jaw: '#d9d1c4', part: '#d8ad77', capture: '#b8b5b0', active: '#f59e0b' };
   private readonly fill = new THREE.HemisphereLight(LOOK.sky, LOOK.ground, LOOK.fill);
+  /** B2: the cut's plane, carried by every material it clips; it clips nothing while there is no cut (`cut` null). */
+  readonly plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), NO_CUT);
   private readonly ringRes = { value: new THREE.Vector2(800, 600) };
   private readonly ringColor = { value: new THREE.Color() };
   private readonly ringMask = new THREE.MeshBasicMaterial({
-    colorWrite: false, depthTest: false, depthWrite: false, transparent: true,
+    colorWrite: false, depthTest: false, depthWrite: false, transparent: true, side: THREE.DoubleSide, clippingPlanes: [this.plane],
     stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
   });
   // shown side first (depth-tested), then the hidden side; stencil 0 → 1: a pixel the ring already drew is never drawn again
@@ -237,11 +250,12 @@ export class Viewer {
       ringRes: this.ringRes, ringColor: this.ringColor, ringAlpha: { value: shown ? 1 : LOOK.ringHidden },
       ringDir: { value: new THREE.Vector2(Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)).multiplyScalar(LOOK.ringPx) },
     },
-    vertexShader: RING_VS, fragmentShader: RING_FS, clipping: true,
+    vertexShader: RING_VS, fragmentShader: RING_FS, clipping: true, clippingPlanes: [this.plane], side: THREE.DoubleSide,
     depthTest: shown, depthWrite: false, transparent: true,
     stencilWrite: true, stencilRef: 1, stencilFunc: THREE.GreaterStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
   })));
-  /** Scale bar, bottom centre (labels layer): exact at the orbit target's depth, which the 1° view makes the whole scene. */
+  /** Scale bar, bottom centre (labels layer): exact at the orbit target's depth, which the 1° view makes the whole scene;
+   * above SCALE_FOV_MAX it is hidden. */
   private readonly scale: HTMLElement;
   private scaleText = '';
   private selected: string | null = null;
@@ -260,23 +274,28 @@ export class Viewer {
   private readonly ro: ResizeObserver;
   private readonly io: IntersectionObserver;
   private readonly mo: MutationObserver;
+  /** Watches the adjust pad and the legend show and hide (the chrome labels step aside from). */
+  private readonly co: MutationObserver;
+  /** The chrome over the canvas (icon bar, views dial, adjust pad, legend), stage px; read outside the frame loop. */
+  private chrome: { x0: number; y0: number; x1: number; y1: number }[] = [];
   private readonly raycaster = new THREE.Raycaster();
   private sphere = new THREE.Sphere(new THREE.Vector3(), 10);
   private poseTween: gsap.core.Tween | null = null;
   private camTween: gsap.core.Tween | null = null;
+  /** The orientation the running camera tween ends on (a rotation center set meanwhile keeps it). */
+  private readonly camEnd = new THREE.Quaternion();
   private onLost: (e: Event) => void;
   /** B1: a 1×1 float target and one pick material; `gpu` null until the first pick asks for float targets. */
   private readonly pickTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.FloatType });
-  private readonly pickMat = new THREE.ShaderMaterial({ vertexShader: PICK_VS, fragmentShader: PICK_FS, uniforms: { code: { value: 0 } }, side: THREE.DoubleSide, clipping: true });
+  private readonly pickMat = new THREE.ShaderMaterial({ vertexShader: PICK_VS, fragmentShader: PICK_FS, uniforms: { code: { value: 0 } }, side: THREE.DoubleSide, clipping: true, clippingPlanes: [this.plane] });
   private readonly pickBuf = new Float32Array(4);
+  /** The object codes of the pick under way (empty between picks: it never keeps a removed mesh alive). */
   private readonly pickCode = new Map<THREE.Object3D, number>();
   private readonly clearColor = new THREE.Color();
   private gpu: boolean | null = null;
   private unwarm: (() => void) | null = null;
-  /** B2: the cut's plane, shared by every material it clips; `cut` null while there is none. */
-  readonly plane = new THREE.Plane();
   private cut: (Section & { origin: THREE.Vector3; axis: THREE.Vector3; r: number }) | null = null;
-  private readonly cutMaterial = new THREE.MeshBasicMaterial({ side: THREE.BackSide, toneMapped: false });
+  private readonly cutMaterial = new THREE.MeshBasicMaterial({ side: THREE.BackSide, toneMapped: false, clippingPlanes: [this.plane] });
   /** B3: the distance overlay (made on first use), its points and its dots' last stage px. */
   private distEls: { root: SVGSVGElement; halo: SVGLineElement; line: SVGLineElement; dots: HTMLElement[]; pill: HTMLElement } | null = null;
   private measure: { points: Vec3[]; text: string } = { points: [], text: '' };
@@ -310,21 +329,36 @@ export class Viewer {
     this.scene.add(this.assembly);
 
     this.ctx = gsap.context(() => {});
-    this.ro = new ResizeObserver(() => this.resize());
+    this.ro = new ResizeObserver(() => { this.measureChrome(); this.resize(); });
     this.ro.observe(stage);
+    // only a real show or hide (the stage rewrites `hidden` with the same value on every update)
+    this.co = new MutationObserver((list) => {
+      if (list.some((m) => (m.oldValue !== null) !== (m.target as HTMLElement).hidden)) { this.measureChrome(); this.invalidate(); }
+    });
+    for (const el of stage.querySelectorAll('.xch__pad, .xch__legend')) this.co.observe(el, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
     // the last entry is the current state (one callback can carry an enter and a leave)
     this.io = new IntersectionObserver((entries) => { this.visible = !!entries[entries.length - 1]?.isIntersecting; if (this.visible) this.invalidate(); });
     this.io.observe(stage);
     this.mo = new MutationObserver(() => this.refreshTheme());
     this.mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    // per pick draw: the mesh's object code and its depth bias, so a replacement over the scan wins as it is drawn
+    // per pick draw: the mesh's object code, its depth bias (a replacement over the scan wins as it is drawn) and the
+    // sides the frame draws of it (a replacement shows its back side only as cut faces). The side only switches culling:
+    // the pick shader never reads it, and three re-resolves the program only when the material changes
     this.pickMat.onBeforeRender = (_r, _s, _c, _g, object) => {
       const src = (object as THREE.Mesh).material as THREE.Material, m = this.pickMat;
       m.uniforms.code!.value = this.pickCode.get(object) ?? 0;
       m.polygonOffset = src.polygonOffset;
       m.polygonOffsetFactor = src.polygonOffsetFactor;
       m.polygonOffsetUnits = src.polygonOffsetUnits;
+      m.side = this.cut ? THREE.DoubleSide : src.side;
       m.uniformsNeedUpdate = true;
+    };
+    // a replacement's cut faces keep its depth bias: where it coincides with the scanned scan body, its section wins
+    this.cutMaterial.onBeforeRender = (_r, _s, _c, _g, object) => {
+      const src = (object.parent as THREE.Mesh).material as THREE.Material, m = this.cutMaterial;
+      m.polygonOffset = src.polygonOffset;
+      m.polygonOffsetFactor = src.polygonOffsetFactor;
+      m.polygonOffsetUnits = src.polygonOffsetUnits;
     };
     this.refreshTheme();
     this.resize();
@@ -363,7 +397,7 @@ export class Viewer {
 
   /** Writes the DOM only when the bar changes (an orbit at one zoom writes nothing). */
   private placeScale(): void {
-    const any = !!this.jaw || this.implants.size > 0 || this.ghosts.length > 0;
+    const any = (!!this.jaw || this.implants.size > 0 || this.ghosts.length > 0) && this.display.fovDeg <= SCALE_FOV_MAX;
     const { mm, px } = any ? niceScale(this.mmPerPixel(), 120) : { mm: 0, px: 0 };
     const key = `${px.toFixed(1)}|${mm}`;
     if (key === this.scaleText) return;
@@ -371,6 +405,23 @@ export class Viewer {
     this.scale.hidden = !mm;
     this.scale.style.setProperty('--w', `${px.toFixed(1)}px`);
     this.scale.textContent = `${mm.toLocaleString(document.documentElement.lang || 'en')}\u00a0mm`;
+  }
+
+  /** Reads where the chrome sits (on resize, and when the pad or the legend shows or hides; never in a frame). */
+  private measureChrome(): void {
+    const s = this.stage.getBoundingClientRect();
+    this.chrome = [...this.stage.querySelectorAll<HTMLElement>('.xch__toolbar, .xch__views, .xch__pad, .xch__legend')].filter((e) => !e.hidden).map((e) => {
+      const r = e.getBoundingClientRect();
+      return { x0: r.left - s.left, y0: r.top - s.top, x1: r.right - s.left, y1: r.bottom - s.top };
+    }).filter((r) => r.x1 > r.x0 && r.y1 > r.y0);
+  }
+
+  /** Whether an implant label at `s` (labelSpot) would sit under the chrome; its size from its text, no layout read. */
+  private underChrome(s: { x: number; y: number; ox: number; oy: number }, label: HTMLElement): boolean {
+    if (!this.chrome.length) return false;
+    const w = 7.5 * (label.textContent?.length ?? 0) + 20, h = 26; // .75rem bold digits, .55rem padding, a 1 px border
+    const x0 = s.x + ((s.ox - 1) / 2) * w, y0 = s.y + ((s.oy - 1) / 2) * h;
+    return this.chrome.some((r) => x0 < r.x1 && x0 + w > r.x0 && y0 < r.y1 && y0 + h > r.y0);
   }
 
   private resize(render = true): void {
@@ -441,22 +492,15 @@ export class Viewer {
     this.restyle();
   }
 
-  /** The cut's plane on a material (B2); a change of the plane count recompiles it. */
-  private clip(m: THREE.Material): void {
-    const on = !!this.cut;
-    if (!!m.clippingPlanes?.length === on) return;
-    m.clippingPlanes = on ? [this.plane] : null;
-    m.needsUpdate = true;
-  }
-
   /**
-   * B2's cut faces: while the cut is on, every cut mesh shows only its front side and draws its back side once more, flat
-   * and unlit in --xch-cut, so you look into a section rather than a lit inside. One material for all: coincident cut faces
-   * cannot stripe. Not on a pick layer.
+   * B2's cut faces: while the cut is on, every replacement (a closed solid; it shows its front side only) draws its back
+   * side once more, flat and unlit in --xch-cut, so you look into a section rather than a lit inside. One material for
+   * all: coincident cut faces cannot stripe. Not on a pick layer. The jaw scan and the captured bodies are open scanner
+   * surfaces with nothing inside to section: the cut only removes from them, and both their sides stay lit, as without
+   * it (painting their back side as a section made uncut surfaces far from the plane read as cut).
    */
   private syncCutFaces(): void {
-    for (const m of [this.jaw, ...[...this.implants.values()].map((i) => i.mesh), ...this.ghosts]) {
-      if (!m) continue;
+    for (const { mesh: m } of this.implants.values()) {
       let f = m.getObjectByName('cut') as THREE.Mesh | undefined;
       if (!this.cut) { if (f) m.remove(f); continue; }
       if (!f) {
@@ -464,6 +508,7 @@ export class Viewer {
         f.name = 'cut';
         f.matrixAutoUpdate = false;
         m.add(f);
+        f.updateMatrixWorld(true); // picked before the next frame
       }
       f.geometry = m.geometry;
     }
@@ -471,7 +516,7 @@ export class Viewer {
 
   /** Re-applies materials from colors, display options, selection and guided state. */
   private restyle(): void {
-    const d = this.display, side = this.cut ? THREE.FrontSide : THREE.DoubleSide;
+    const d = this.display;
     if (this.jaw) {
       const m = this.jaw.material;
       const colored = d.jawColor && !!this.jawLinearColors;
@@ -480,8 +525,6 @@ export class Viewer {
       m.opacity = d.jawOpacity;
       m.transparent = d.jawOpacity < 1;
       m.depthWrite = d.jawOpacity >= 1;
-      m.side = side;
-      this.clip(m);
       m.needsUpdate = true;
       this.jaw.visible = d.jaw;
       this.jaw.renderOrder = d.jawOpacity < 1 ? 2 : 0;
@@ -504,10 +547,9 @@ export class Viewer {
       m.opacity = opacity;
       m.transparent = opacity < 1;
       m.depthWrite = opacity >= 1;
-      this.clip(m);
       m.needsUpdate = true;
       imp.mesh.visible = d.parts;
-      imp.label.hidden = !d.labels;
+      imp.label.hidden = !d.labels || !d.parts; // a hidden replacement takes its label along
       imp.label.classList.toggle('is-active', active);
     }
     this.ghosts.forEach((g, i) => {
@@ -519,12 +561,9 @@ export class Viewer {
       m.opacity = mapped ? 1 : 0.45;
       m.transparent = !mapped;
       m.depthWrite = mapped;
-      m.side = side;
-      this.clip(m);
       m.needsUpdate = true;
       g.visible = d.capture;
     });
-    for (const m of [this.ringMask, ...this.ringCopies, this.cutMaterial]) this.clip(m);
     this.syncCutFaces();
     this.invalidate();
   }
@@ -550,7 +589,7 @@ export class Viewer {
         this.jawLinearColors = linearSrgbFromBytes(mesh.colors);
         g.setAttribute('color', new THREE.BufferAttribute(this.jawLinearColors, 3));
       }
-      const m = new THREE.MeshPhongMaterial({ side: THREE.DoubleSide });
+      const m = new THREE.MeshPhongMaterial({ side: THREE.DoubleSide, clippingPlanes: [this.plane] });
       shine(m, LOOK.jaw);
       this.jaw = new THREE.Mesh(g, m);
       this.jaw.matrixAutoUpdate = false;
@@ -571,7 +610,7 @@ export class Viewer {
     this.ghosts.length = 0;
     this.ghostUm = [];
     for (const c of components) {
-      const g = new THREE.Mesh(bufferGeometry(c.mesh, c.normals), new THREE.MeshPhongMaterial({ side: THREE.DoubleSide }));
+      const g = new THREE.Mesh(bufferGeometry(c.mesh, c.normals), new THREE.MeshPhongMaterial({ side: THREE.DoubleSide, clippingPlanes: [this.plane] }));
       g.matrixAutoUpdate = false;
       g.renderOrder = 1;
       this.assembly.add(g);
@@ -595,7 +634,7 @@ export class Viewer {
         imp.mesh.matrixWorldNeedsUpdate = true;
         continue;
       }
-      const mesh = new THREE.Mesh(this.glyph, new THREE.MeshPhongMaterial());
+      const mesh = new THREE.Mesh(this.glyph, new THREE.MeshPhongMaterial({ clippingPlanes: [this.plane] }));
       mesh.matrixAutoUpdate = false;
       mesh.matrix.copy(rowMajor(site.matrix));
       mesh.userData.siteId = site.id;
@@ -734,9 +773,7 @@ export class Viewer {
 
   /** Implant set pose (capture -> world). `tween` = 'align' (.9 s expo.out) or 'step' (.35 s power3.out). */
   setAssembly(m: Mat4, tween: 'none' | 'align' | 'step' = 'none'): void {
-    this.poseTween?.kill();
-    forget(this.ctx, this.poseTween);
-    this.poseTween = null;
+    this.stopPose();
     const to = rowMajor(m);
     if (tween === 'none' || this.opts.reducedMotion) {
       this.assembly.matrix.copy(to);
@@ -767,6 +804,17 @@ export class Viewer {
   /** Ends a running pose animation at its target: a drag starts from the pose the store holds, not an in-between one. */
   finishPose(): void {
     this.poseTween?.progress(1);
+  }
+
+  /**
+   * Stops a running pose animation where it is, writing nothing more. A set drag calls it with every pose it writes: a
+   * pose animation started during the drag (Ctrl + Z with Ctrl held for it, an alignment result) must not land after the
+   * release on a pose the store no longer holds. The hand wins; the release commits what the drag shows.
+   */
+  stopPose(): void {
+    this.poseTween?.kill();
+    forget(this.ctx, this.poseTween);
+    this.poseTween = null;
   }
 
   /* ---------------- bounds, camera ---------------- */
@@ -810,6 +858,7 @@ export class Viewer {
 
   private tweenCamera(target: THREE.Vector3, q: THREE.Quaternion, dist: number, duration = 0.7): void {
     this.stopCameraTween();
+    this.camEnd.copy(q);
     if (this.opts.reducedMotion || duration === 0) {
       this.target.copy(target);
       this.q.copy(q);
@@ -852,7 +901,8 @@ export class Viewer {
     const box = this.visibleBox();
     if (box.isEmpty()) return { center: this.sphere.center.clone(), dist: this.fitDistance(this.sphere.radius) };
     const center = box.getCenter(new THREE.Vector3()), inv = q.clone().invert(), c = new THREE.Vector3();
-    const ty = Math.tan(THREE.MathUtils.degToRad(this.display.fovDeg) / 2) * LOOK.frame, tx = ty * Math.max(0.2, this.camera.aspect);
+    const share = window.matchMedia?.('(pointer: coarse)').matches ? LOOK.frameTouch : LOOK.frame;
+    const ty = Math.tan(THREE.MathUtils.degToRad(this.display.fovDeg) / 2) * share, tx = ty * Math.max(0.2, this.camera.aspect);
     let dist = 0;
     for (let i = 0; i < 8; i++) {
       // the corner in camera axes (z toward the eye): at view depth dist − z it must project within ±tx, ±ty
@@ -875,23 +925,38 @@ export class Viewer {
   /**
    * The cut (B2); null removes it. It starts through the orbit target, perpendicular to the view, removing what lies
    * between it and the camera, and stays put in the scene (turn the view to see it from the side) unless `follow` keeps it
-   * perpendicular to the view at its depth from the target. Returns the half-range of the position slider: the radius of
-   * what was shown when the cut started.
+   * perpendicular to the view at its depth from the target. Returns the half-range of the position slider
+   * (`sectionReach`). The plane is a uniform: no shader changes, so nothing compiles here.
    */
   setSection(s: Section | null): number {
-    const was = !!this.cut;
-    if (!s) this.cut = null;
-    else if (this.cut) Object.assign(this.cut, s);
+    if (!s) {
+      this.cut = null;
+      this.plane.normal.set(0, 0, 1);
+      this.plane.constant = NO_CUT;
+    } else if (this.cut) Object.assign(this.cut, s);
     else {
-      const box = this.visibleBox();
-      const r = box.isEmpty() ? this.sphere.radius : box.getBoundingSphere(new THREE.Sphere()).radius;
-      this.cut = { ...s, origin: this.target.clone(), axis: new THREE.Vector3(0, 0, -1).applyQuaternion(this.q), r };
+      this.cut = { ...s, origin: this.target.clone(), axis: new THREE.Vector3(0, 0, -1).applyQuaternion(this.q), r: 0 };
+      this.cut.r = this.sectionReach();
     }
-    // with and without a plane the pick shader is another program: the next idle moment compiles the one now in use
-    if (was !== !!this.cut) this.warmPick();
     this.placePlane();
     this.restyle();
     return this.cut?.r ?? 0;
+  }
+
+  /**
+   * How far the position slider must reach either way (mm) for the cut to sweep everything shown now: at least the radius
+   * of what is shown, and as far as its farthest corner along the cut from where the cut started (a rotation center set
+   * on a surface puts that start on the near face, the far side a whole case away). 0 without a cut.
+   */
+  sectionReach(): number {
+    const c = this.cut;
+    if (!c) return 0;
+    const box = this.visibleBox();
+    if (box.isEmpty()) return this.sphere.radius;
+    let r = box.getBoundingSphere(new THREE.Sphere()).radius;
+    const p = new THREE.Vector3();
+    for (let i = 0; i < 8; i++) r = Math.max(r, Math.abs(p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(c.origin).dot(c.axis)));
+    return r;
   }
 
   /** Frames everything visible (or only some sites), keeping the direction. */
@@ -918,10 +983,13 @@ export class Viewer {
     this.tweenCamera(center, q, dist, instant ? 0 : 0.7);
   }
 
-  /** Orbit center at a world point (.35 s). */
+  /**
+   * Orbit center at a world point (.35 s). A view still turning (Home or a middle click right after a view key) ends in
+   * that view's orientation: the view asked for (pressed, maybe announced) is the view you get, centered on the point.
+   */
   setOrbitCenter(point: THREE.Vector3): void {
     const eye = new THREE.Vector3(0, 0, this.dist).applyQuaternion(this.q).add(this.target);
-    this.tweenCamera(point.clone(), this.q.clone(), eye.distanceTo(point), 0.35);
+    this.tweenCamera(point.clone(), (this.camTween ? this.camEnd : this.q).clone(), eye.distanceTo(point), 0.35);
   }
 
   /* ---------------- picking ---------------- */
@@ -931,14 +999,14 @@ export class Viewer {
     return new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
   }
 
-  /** Visible implant meshes only (they are small). */
+  /** The implant drawn under (x, y): visible implant meshes (they are small) and their cut faces, never a removed half. */
   pickPart(x: number, y: number): PartHit | null {
     this.updateCamera();
     this.raycaster.setFromCamera(this.ndc(x, y), this.camera);
-    const meshes = [...this.implants.values()].filter((i) => i.mesh.visible).map((i) => i.mesh);
-    const hit = this.raycaster.intersectObjects(meshes, false)[0];
+    const meshes = [...this.implants.values()].filter((i) => i.mesh.visible).flatMap((i) => [i.mesh, ...i.mesh.children.filter((c) => c.name === 'cut')]);
+    const hit = this.raycaster.intersectObjects(meshes, false).find((h) => this.kept(h.point));
     if (!hit) return null;
-    const imp = this.implants.get(hit.object.userData.siteId as string);
+    const imp = this.implants.get((hit.object.name === 'cut' ? hit.object.parent! : hit.object).userData.siteId as string);
     if (!imp) return null;
     let um: number | null = null;
     if (imp.um && hit.face && this.display.map) {
@@ -949,6 +1017,11 @@ export class Viewer {
       if (w) um = w.x * imp.um[hit.face.a]! + w.y * imp.um[hit.face.b]! + w.z * imp.um[hit.face.c]!;
     }
     return { siteId: imp.site.id, um };
+  }
+
+  /** What the cut keeps (everything without a cut). */
+  private kept(p: THREE.Vector3): boolean {
+    return !this.cut || this.plane.distanceToPoint(p) >= 0;
   }
 
   /** The surface point drawn under (x, y) (`jawOnly`: on the jaw scan), world coordinates; never on a removed half. */
@@ -983,9 +1056,7 @@ export class Viewer {
     const r = this.canvas.getBoundingClientRect(), rnd = this.renderer, cam = this.camera, mat = this.pickMat;
     this.updateCamera();
     this.biasDepth();
-    this.clip(mat);
     const sites: string[] = [];
-    this.pickCode.clear();
     const pickable = (m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>, code: number, layer: number): void => {
       m.layers.set(0);
       if (m.visible && m.material.opacity >= 0.1) { m.layers.enable(layer); this.pickCode.set(m, code); }
@@ -1010,6 +1081,8 @@ export class Viewer {
       this.scene.overrideMaterial = override;
       cam.layers.mask = mask;
       cam.clearViewOffset();
+      this.pickCode.clear();
+      mat.side = THREE.DoubleSide;
     }
     return decodePick(this.pickBuf, sites);
   }
@@ -1034,7 +1107,7 @@ export class Viewer {
       for (const i of this.implants.values()) add(i.mesh, 'part');
       for (const g of this.ghosts) add(g, 'capture');
     }
-    const hits = this.raycaster.intersectObjects([...kind.keys()], false).filter((h) => !this.cut || this.plane.distanceToPoint(h.point) >= 0);
+    const hits = this.raycaster.intersectObjects([...kind.keys()], false).filter((h) => this.kept(h.point));
     const top = hits.find((h) => kind.get(h.object)![0] !== 'jaw' && h.distance <= hits[0]!.distance + DEPTH_BIAS_MM) ?? hits[0];
     if (!top) return null;
     const [object, owner] = kind.get(top.object)!;
@@ -1091,7 +1164,20 @@ export class Viewer {
       d.pill.classList.toggle('is-off', !b);
       if (a && b) {
         for (const l of [d.halo, d.line]) { l.setAttribute('x1', String(a[0])); l.setAttribute('y1', String(a[1])); l.setAttribute('x2', String(b[0])); l.setAttribute('y2', String(b[1])); }
-        d.pill.style.transform = `translate(${(a[0] + b[0]) / 2}px, ${(a[1] + b[1]) / 2}px) translate(-50%, -50%)`;
+        // the pill on the midpoint; on a short line it would hide both dots, so it goes beside it (above it, right of an
+        // upright one) with its near edge 9 px off the line (dot radius, halo, a gap), the edge chosen as labelSpot does
+        const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
+        let x = (a[0] + b[0]) / 2, y = (a[1] + b[1]) / 2, ox = 0, oy = 0;
+        if (len < PILL_ON_LINE_PX) {
+          let nx = len ? dy / len : 0, ny = len ? -dx / len : -1;
+          if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; }
+          const m = Math.max(Math.abs(nx), Math.abs(ny));
+          x += nx * 9;
+          y += ny * 9;
+          ox = nx / m;
+          oy = ny / m;
+        }
+        d.pill.style.transform = `translate(${x}px, ${y}px) translate(${(ox - 1) * 50}%, ${(oy - 1) * 50}%)`;
       }
     }
     if (!this.display.labels) return;
@@ -1116,7 +1202,13 @@ export class Viewer {
     const mx = parts.reduce((s, q) => s + q.box.x0 + q.box.x1, 0) / (2 * parts.length || 1);
     const my = parts.reduce((s, q) => s + q.box.y0 + q.box.y1, 0) / (2 * parts.length || 1);
     for (const { imp, box, axis } of parts) {
-      const s = labelSpot(box, axis, [(box.x0 + box.x1) / 2 - mx, (box.y0 + box.y1) / 2 - my]);
+      const away: [number, number] = [(box.x0 + box.x1) / 2 - mx, (box.y0 + box.y1) / 2 - my];
+      let s = labelSpot(box, axis, away);
+      // a label that would sit under the chrome (the views dial on a tablet) goes to the other side of its part
+      if (this.underChrome(s, imp.label)) {
+        const t = labelSpot(box, [-axis[0], -axis[1]], [-away[0], -away[1]]);
+        if (!this.underChrome(t, imp.label)) s = t;
+      }
       imp.label.style.transform = `translate(${s.x}px, ${s.y}px) translate(${(s.ox - 1) * 50}%, ${(s.oy - 1) * 50}%)`;
     }
   }
@@ -1222,6 +1314,7 @@ export class Viewer {
     this.ro.disconnect();
     this.io.disconnect();
     this.mo.disconnect();
+    this.co.disconnect();
     this.canvas.removeEventListener('webglcontextlost', this.onLost);
     this.setJaw(null, null);
     this.setCapture([]);

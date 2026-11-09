@@ -37,7 +37,7 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 - Tests use synthetic data generated in code (`test/fixtures`). Never commit or load real scans, and never open the
   client's sample archive (it contains a real patient name).
 
-## Estado (2026-11-08)
+## Estado (2026-11-09)
 
 **Funciona en la interfaz** (`/ddt-xchange/` y `/es/ddt-xchange/`, dentro del sitio, con su motion, Lenis y ClientRouter):
 - Paso 1: arcada superior/inferior e importación de la captura (malla de scan bodies o uno o varios archivos de
@@ -49,7 +49,8 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 - Paso 3: escaneo de la mandíbula (opcional) y, al cargarlo, alineación automática.
 - Paso 4: automática, puntos guiados 1-2-3-4 (clic, toque en tableta o Enter con la mira desde el teclado; se pueden
   omitir implantes y alinear con los puntos puestos), resultado con RMS, cobertura, tabla por implante y mapa de
-  colores 0-100 µm; ajuste a mano (arrastrar, Ctrl + arrastrar, panel de 30°/5°, voltear 180°), re-medido 250 ms
+  colores 0-100 µm; ajuste a mano (arrastrar, Ctrl + arrastrar, panel de 30°/5° con Fino para pasos de 5° · 0,1 mm
+  también en tablet, voltear 180°), re-medido 250 ms
   después; Deshacer y Restablecer. Exportar el ZIP para Exocad tras pedir el correo una vez (webhook
   `PUBLIC_N8N_FORM_WEBHOOK`; nunca bloquea la descarga).
 - Visor bajo demanda (60 fps, pausa fuera de pantalla), tema claro/oscuro en vivo, movimiento reducido respetado,
@@ -63,10 +64,14 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
   el conjunto (paso 4), mantener presionado en tablet fija el centro de giro, Shift / Ctrl + clic central sobre un
   objeto cambia su transparencia o lo oculta, y S lo vuelve a mostrar.
 - Herramientas de inspección (`VIEWER-POLISH.md` §5.10): corte con un plano (botón Corte o P; posición, Shift + rueda,
-  mostrar el otro lado, seguir la vista; las caras cortadas se ven planas en azul), distancia entre dos puntos (botón o
+  mostrar el otro lado, seguir la vista; las caras cortadas de las piezas se ven planas en azul y el escaneo, una
+  superficie abierta, sigue iluminado por ambos lados), distancia entre dos puntos (botón o
   R; clic, toque o Enter con la mira, arrastrar un punto, valor en mm con dos decimales y anunciado), D alterna el mapa
   de color como C, y los clics sobre superficies se resuelven en la GPU (1-3 ms en 3 M triángulos en vez de 0,2-0,4 s).
   Nada de esto mueve el conjunto ni el escaneo: lo que se exporta sigue siendo lo que se ve.
+- Correcciones de las revisiones de UX y adversarial (`VIEWER-POLISH.md` §5.11): 32 hallazgos, entre ellos la pose
+  mostrada = guardada aunque llegue un Deshacer o una alineación durante un arrastre, el primer P sin congelar la vista
+  (de 70-100 ms a un cuadro de 21 ms con 3 M triángulos), ambos botones desplazan, la rueda sobre los controles hace zoom.
 
 **Cómo probar la demo:** `npm run build` y `npx astro preview`, abrir `/ddt-xchange/` y pulsar "Try a sample case"
 (o "Probar un caso de ejemplo"). Se genera en el navegador un caso sintético (`sample/`: arcada superior desdentada
@@ -74,7 +79,7 @@ All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángul
 el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
 solo (Good fit, unos 4 µm) y exporta el ZIP.
 
-**Probado:** 494 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 532 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones

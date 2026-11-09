@@ -28,7 +28,14 @@ export interface ToastAction {
 
 export class Toasts {
   private readonly timers = new Set<number>();
+  /** How to take each toast showing now away. */
+  private readonly live = new Set<() => void>();
   constructor(private readonly box: HTMLElement, private readonly motion: Motion, private readonly closeLabel: string) {}
+
+  /** Every toast goes (as its close button does). */
+  clear(): void {
+    for (const remove of [...this.live]) remove();
+  }
 
   /** A toast with an action stays 10 s and pauses while hovered or focused (WCAG 2.2.1). */
   show(text: string, action?: ToastAction): void {
@@ -44,10 +51,12 @@ export class Toasts {
     const remove = (): void => {
       if (gone) return;
       gone = true;
+      this.live.delete(remove);
       clearTimeout(timer);
       this.timers.delete(timer);
       this.motion.toastOut(el, () => el.remove());
     };
+    this.live.add(remove);
     const run = (): void => { started = Date.now(); timer = window.setTimeout(remove, left); this.timers.add(timer); };
     const pause = (): void => { clearTimeout(timer); left -= Date.now() - started; };
     el.addEventListener('pointerenter', pause);
@@ -64,6 +73,7 @@ export class Toasts {
 
   dispose(): void {
     for (const t of this.timers) clearTimeout(t);
+    this.live.clear();
     this.box.replaceChildren();
   }
 }

@@ -252,7 +252,12 @@ export class App {
       if (!to.contains(document.activeElement)) q<HTMLElement>(to, '.xch__h').focus({ preventScroll: true });
     }).then(() => bringIntoView(q(this.root, '.xch__stepper')));
     this.say.say(fmt(this.lang, this.c.say.step, { n: step, name: this.c.steps.names[step - 1]! }));
-    if (step === 4) this.alignStep.onEnter();
+    if (step === 4) {
+      // a toast of an earlier step (the geometry's "applied to all", its Undo about step 2) would sit on the legend and
+      // the scale bar just as the color map comes up
+      this.toasts.clear();
+      this.alignStep.onEnter();
+    }
   }
 
   /* ---------------- render ---------------- */
@@ -446,11 +451,12 @@ export class App {
     this.jawNormals = null;
     this.componentData = [];
     this.geometry.target = 'all';
+    // no cut, no distance, silently: before the new case renders, whose pose change would end the tool out loud
+    this.stage?.resetTools();
     this.store.set(freshCase(arch));
     for (const n of [1, 2, 3, 4] as Step[]) { this.clearAlerts(n); this.notes(n, []); }
     this.capture?.clearWarnings();
     this.stage?.showAll(false); // what a middle click hid comes back with the new case
-    this.stage?.resetTools(); // no cut, no distance
     this.rebuildViewer();
   }
 

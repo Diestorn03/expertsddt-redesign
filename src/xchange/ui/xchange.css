@@ -262,6 +262,8 @@
 .xch__stage.is-hold::after { opacity: 1; scale: 1; transition: scale .35s var(--ease-out); }
 /* on the indigo stage in both themes: the light focus blue (5:1 there) */
 .xch__stage:focus-visible { outline: 3px solid #8fc1ff; outline-offset: -3px; }
+/* full screen fills the screen edge to edge: rounded corners would show the black backdrop */
+.xch__stage:fullscreen { border-radius: 0; }
 .xch__canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
 .xch__stage.is-grab .xch__canvas { cursor: grab; }
 .xch__stage.is-grabbing .xch__canvas { cursor: grabbing; }
@@ -335,7 +337,12 @@
 .xch__padgroup [data-pad-key="down"] { grid-area: 3 / 2; }
 .xch__padgroup [data-pad-key="right"] { grid-area: 3 / 3; }
 .xch__padcap { grid-column: 1 / -1; grid-row: 1; padding: 2px 0 1px; font-size: .62rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--slate); text-align: center; }
-.xch__padhint { font-size: .68rem; color: var(--slate); max-width: calc(3 * var(--xch-btn) + 4px); line-height: 1.35; text-align: center; }
+.xch__padhint { font-size: .68rem; color: var(--slate); max-width: calc(3 * var(--xch-btn) + 4px); line-height: 1.35; text-align: center; text-wrap: balance; }
+/* Fine: a pill across the pad, pressed like the icon bar's toggles; every click then steps 5° · 0.1 mm (stage.ts) */
+.xch__tool.xch__padfine { width: 100%; height: auto; min-height: 28px; padding: .25rem .5rem; border-radius: 999px; font: inherit; font-size: .68rem; font-weight: 600; line-height: 1.25; text-align: center; background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.xch__tool.xch__padfine:hover { background: rgba(4,107,210,.1); }
+.xch__tool.xch__padfine[aria-pressed="true"] { background: rgba(4,107,210,.14); color: var(--blue-dark); box-shadow: inset 0 0 0 1.5px currentColor; }
+[data-theme="dark"] .xch__tool.xch__padfine[aria-pressed="true"] { color: #8fc1ff; background: rgba(111,182,255,.14); }
 .xch__legend { position: absolute; left: .7rem; bottom: .7rem; z-index: 3; padding: .6rem .8rem; border-radius: 14px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: var(--xch-float); display: grid; gap: .3rem; font-size: .72rem; color: var(--slate); }
 .xch__legendtitle { display: flex; justify-content: space-between; gap: 1rem; font-weight: 600; color: var(--ink); }
 .xch__legendtitle span { font-weight: 500; color: var(--slate); }
@@ -377,8 +384,12 @@
 .xch__dropover { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; background: rgba(4,107,210,.85); color: #fff; font-weight: 700; font-size: 1.1rem; clip-path: circle(0% at var(--dx, 50%) var(--dy, 50%)); transition: clip-path .5s var(--ease-out); pointer-events: none; }
 .xch__dropover.is-on { clip-path: circle(150% at var(--dx, 50%) var(--dy, 50%)); }
 /* left of the icon bar, ending above the views dial */
-.xch__display { position: absolute; top: .7rem; right: calc(.7rem + var(--xch-btn) + 18px); z-index: 5; width: 270px; max-width: calc(100% - 1.4rem); max-height: calc(100% - 1.4rem - 2 * var(--dial-r) - 2 * var(--dial-b) - 44px); overflow: auto; display: grid; gap: .5rem; padding: .9rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 24px 60px -20px rgba(0,0,0,.5); transition: opacity .35s var(--ease-out), transform .35s var(--ease-out); }
+.xch__display { position: absolute; top: .7rem; right: calc(.7rem + var(--xch-btn) + 18px); z-index: 5; width: 270px; max-width: calc(100% - 1.4rem); max-height: calc(100% - 1.4rem - 2 * var(--dial-r) - 2 * var(--dial-b) - 44px); overflow: auto; overscroll-behavior: contain; display: grid; gap: .5rem; padding: .9rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 24px 60px -20px rgba(0,0,0,.5); transition: opacity .35s var(--ease-out), transform .35s var(--ease-out); }
 @starting-style { .xch__display:not([hidden]) { opacity: 0; transform: translateY(-8px); } }
+/* the Display menu is taller than the room above the views dial (586 px of 560 at 1440 × 900, half of it on a tablet):
+   it takes the stage's height, and the dial and the scale bar under it wait hidden until it closes, as the chips do */
+#xch-display { max-height: calc(100% - 1.4rem); }
+.xch__stage:has(#xch-display:not([hidden])) :is(.xch__views, .xch__scale) { visibility: hidden; }
 .xch__section .btn { justify-self: start; }
 .xch__switch { display: flex; justify-content: space-between; align-items: center; gap: .6rem; min-height: 36px; background: none; border: 0; padding: .2rem 0; color: var(--ink); font-size: .85rem; cursor: pointer; text-align: left; }
 /* off: a --muted edge so the track reads at 3:1 (a --line fill alone is 1.5:1) */
@@ -442,7 +453,8 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
 @media (pointer: coarse) {
   .xch__stage, .xch__pad { --xch-btn: 44px; }
   .xch__stage { --dial-b: 44px; --dial-r: 66px; } /* 2r·sin 22.5° ≥ b + 6 */
-  .xch__padhint { display: none; } /* about clicks and Shift: nothing to do with a finger */
+  .xch__padhint { display: none; } /* about clicks and Shift: nothing to do with a finger (Fine is) */
+  .xch__tool.xch__padfine { min-height: 44px; }
   /* Display and Section popovers: 44 px rows for a finger (the range's box takes the touch, its thumb stays the same) */
   .xch__display :is(.xch__switch, .xch-btn-sm, .xch__range input) { min-height: 44px; }
   /* the section hint is about Shift + wheel too; without it Remove the cut stays in view above the views dial */

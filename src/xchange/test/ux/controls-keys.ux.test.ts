@@ -724,3 +724,101 @@ describe('B3 · the distance tool (measure mode)', () => {
     ac.abort();
   });
 });
+
+describe('review fixes (2026-11-09) · keys on the chrome, R during guided points, taps, both buttons, the wheel', () => {
+  /** A keydown that bubbled to the stage from `target` (a focused button of its chrome, or a popover control). */
+  const from = (s: ReturnType<typeof setup>, target: object, k: string, code: string): Event => {
+    const e = keyEvent('keydown', k, { code });
+    Object.defineProperty(e, 'target', { value: target });
+    s.stage.dispatchEvent(e);
+    return e;
+  };
+  const button = (inPopover = false): object => ({ tagName: 'BUTTON', closest: (sel: string) => (inPopover && sel === '.xch__display' ? {} : null) });
+
+  it('a character key on a chrome button acts as on the stage; the button keeps Enter, Space, arrows, Home and End; a popover keeps every key', () => {
+    const s = setup('camera');
+    expect(from(s, button(), '1', 'Digit1').defaultPrevented).toBe(true); // the views dial: 1 is Front
+    expect(s.cb.onPreset).toHaveBeenLastCalledWith('front', true);
+    from(s, button(), 'p', 'KeyP'); // the icon bar: P is the cut
+    expect(s.cb.onToggleSection).toHaveBeenCalledTimes(1);
+    for (const [k, code] of [['Enter', 'Enter'], [' ', 'Space'], ['ArrowLeft', 'ArrowLeft'], ['Home', 'Home'], ['End', 'End']]) {
+      expect(from(s, button(), k!, code!).defaultPrevented, k).toBe(false);
+    }
+    expect(s.viewer.target.toArray(), 'the arrows stay the toolbar\'s').toEqual([0, 0, 0]);
+    expect(s.viewer.setOrbitCenter, 'Home stays the toolbar\'s').not.toHaveBeenCalled();
+    expect(from(s, button(true), 'p', 'KeyP').defaultPrevented, 'a switch in the Section menu').toBe(false);
+    expect(from(s, { tagName: 'INPUT', closest: () => null }, '5', 'Digit5').defaultPrevented, 'a range input').toBe(false);
+    expect(s.cb.onToggleSection).toHaveBeenCalledTimes(1);
+    expect(s.cb.onPreset).toHaveBeenCalledTimes(1);
+    s.ac.abort();
+  });
+
+  it('R during guided points says why it does nothing (once when held) and still leaves the key alone', () => {
+    const s = setup('guided');
+    const onMeasureBusy = vi.fn();
+    (s.cb as ControlCallbacks).onMeasureBusy = onMeasureBusy;
+    expect(s.key('r', { code: 'KeyR' }).defaultPrevented).toBe(false);
+    s.key('r', { code: 'KeyR', repeat: true });
+    expect(onMeasureBusy).toHaveBeenCalledTimes(1);
+    expect(s.cb.onToggleMeasure).not.toHaveBeenCalled();
+    s.ac.abort();
+  });
+
+  it('a double tap is two taps on one spot: two quick taps apart are two taps; while taps place points none fits', () => {
+    const s = setup('camera');
+    s.touch('pointerdown', 300, 300, 1);
+    s.touch('pointerup', 300, 300, 1);
+    s.touch('pointerdown', 520, 340, 2); // within 300 ms, 225 px away: a second tap
+    s.touch('pointerup', 520, 340, 2);
+    expect(s.cb.onPreset).not.toHaveBeenCalled();
+    expect(s.cb.onSelect).toHaveBeenCalledTimes(2);
+    s.touch('pointerdown', 530, 345, 3); // within 24 px of the last tap: a double tap fits
+    s.touch('pointerup', 530, 345, 3);
+    expect(s.cb.onPreset).toHaveBeenCalledWith('fit');
+    s.ac.abort();
+    for (const mode of ['guided', 'measure'] as const) {
+      const p = setup(mode);
+      for (const id of [1, 2]) { p.touch('pointerdown', 300, 300, id); p.touch('pointerup', 300, 300, id); }
+      expect(p.cb.onPreset, mode).not.toHaveBeenCalled();
+      p.canvas.dispatchEvent(new Event('dblclick'));
+      expect(p.cb.onPreset, `${mode}: dblclick`).not.toHaveBeenCalled();
+      p.ac.abort();
+    }
+    const c = setup('set');
+    c.canvas.dispatchEvent(new Event('dblclick'));
+    expect(c.cb.onPreset, 'elsewhere a double-click still fits').toHaveBeenCalledWith('fit');
+    c.ac.abort();
+  });
+
+  it('right then left (both buttons) pans too; releasing one keeps the pan', () => {
+    const { viewer, ac, mouse } = setup('camera');
+    mouse('pointerdown', { button: 2, buttons: 2 });
+    mouse('pointermove', { button: 0, buttons: 3 });
+    mouse('pointermove', { button: -1, buttons: 3, clientX: 460 });
+    mouse('pointermove', { button: 0, buttons: 2, clientX: 500 });
+    mouse('pointerup', { button: 2, buttons: 0, clientX: 500 });
+    expect(viewer.q.equals(new THREE.Quaternion())).toBe(true);
+    expect(viewer.target.x).toBeCloseTo(-5); // 100 px at 0.05 mm per px, the scene follows the pointer
+    ac.abort();
+  });
+
+  it('the wheel over the chrome zooms; over a popover it scrolls the popover and never the page; the canvas wheel is handled once', () => {
+    const { viewer, cb, ac, stage, canvas } = setup('camera');
+    const wheel = (target: object, props: Record<string, unknown> = {}): Event => {
+      const e = Object.assign(new Event('wheel', { cancelable: true }), { deltaY: 100, deltaX: 0, deltaMode: 0, clientX: 700, clientY: 100, shiftKey: false, ...props });
+      Object.defineProperty(e, 'target', { value: target });
+      stage.dispatchEvent(e);
+      return e;
+    };
+    const popover = (scrolls: boolean): object => ({ closest: (sel: string) => (sel === '.xch__display' ? { scrollHeight: scrolls ? 700 : 300, clientHeight: 400 } : null) });
+    expect(wheel(popover(true)).defaultPrevented, 'a popover that scrolls scrolls itself').toBe(false);
+    expect(wheel(popover(false)).defaultPrevented, 'one that does not: nothing moves').toBe(true);
+    expect(viewer.dist).toBe(100);
+    expect(wheel(canvas).defaultPrevented, 'bubbled from the canvas: already handled there').toBe(false);
+    expect(cb.onCameraInput).not.toHaveBeenCalled();
+    wheel({ closest: () => null }); // the legend, say
+    expect(viewer.dist).toBeCloseTo(112);
+    expect(cb.onCameraInput).toHaveBeenCalledTimes(1);
+    ac.abort();
+  });
+});

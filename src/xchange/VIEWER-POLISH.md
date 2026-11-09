@@ -7,14 +7,15 @@ looks nothing like exocad and looks cheap. Spec only: no code changes with this 
 Order of work: **1** the look panel's base commit (z-fight, preset keys) → **2** the winning look merged →
 **3** slice A (navigation) → **4** slice B (tools and picking). Slices change behaviour, never the look. All four steps
 are done: Diego chose look A "Fiel a exocad" on 2026-11-08 and it is merged with grafts and the judges' fixes (§3.1,
-§3.5); slice A (§4.14) and slice B (§5.10) followed the same day.
+§3.5); slice A (§4.14) and slice B (§5.10) followed the same day. The findings of the UX and adversarial reviews of the
+finished viewer were fixed on 2026-11-09 (§5.11).
 
 Contents: 0 Why it looks cheap · 1 Sources · 2 Gap table · 3 Look · 4 Slice A · 5 Slice B · 6 Integration notes
 
 **Terms.** MUST: the slice is not done without it. SHOULD: done if the slice still fits its budget, otherwise it stays
 here as To do. WON'T: decided against, reason given. Status values: `Exists` (in b03dd97) · `Handled (look base)` ·
 `Look` (the winning look decides) · `Done (look A)` (merged with the look, §3.5) · `Done (slice A)` (§4.14) ·
-`Done (slice B)` (§5.10) · `Slice A` · `Slice B` · `To do` · `Won't`. **< 960 px**: the one-column workspace
+`Done (slice B)` (§5.10) · `Fixed (review)` (a review finding fixed, §5.11) · `Slice A` · `Slice B` · `To do` · `Won't`. **< 960 px**: the one-column workspace
 (tablets in portrait, narrow or zoomed desktop windows down to 600 px, UI-DESIGN §4). Under 768 px on touch and under
 600 px on anything the workspace is replaced by the larger-screen card (UI-DESIGN §2.5): no viewer feature runs there.
 
@@ -92,7 +93,7 @@ scratchpad `C:\Users\Diestorn\AppData\Local\Temp\claude\C--Users-Diestorn-Deskto
 |---|---|---|---|---|---|
 | G1 | Right-drag rotates about the rotation center (the center of the scene objects by default) | OV, HK | Right-drag, or left-drag on empty space, turns a free trackball about the orbit target | Keep | Exists |
 | G2 | Webview: click and drag rotates the view | WV | Left-drag on empty space or on the jaw turns the view | Keep | Exists |
-| G3 | Both buttons drag = move the view | OV, HK | Left + right drag pans; so do middle-drag and Shift + drag | Keep | Exists |
+| G3 | Both buttons drag = move the view | OV, HK | Left + right drag pans; so do middle-drag and Shift + drag | Keep | Exists; both buttons Fixed (review): it never fired (§5.11) |
 | G4 | Cursor keys move (translate) the view | HK, OV | Arrows turn 10°; Shift + arrows pan | Arrows pan; Shift + arrows turn | Done (slice A): A4 |
 | G5 | PageUp / PageDown rotate horizontally about the pivot | HK | Not handled: the page scrolls | Turn 10° about the screen's vertical axis | Done (slice A): A4 |
 | G6 | Wheel zooms, centered on the mouse position | OV, HK | Same, 12 % per notch | Keep | Exists |
@@ -267,15 +268,15 @@ what the look lacks), `src/pages/ddt-xchange.astro` (§6), UI-DESIGN §3.2/§6.2
 | Id | Item | Level | Status | Min |
 |---|---|---|---|---|
 | A1 | Preset keys move the camera with motion on | MUST | Handled (look base); re-checked in slice A | 0 (re-check) |
-| A2 | exocad view keys, Bottom view, Default view on 0 | MUST | Done (slice A) | 10 |
+| A2 | exocad view keys, Bottom view, Default view on 0 | MUST | Done (slice A); AZERTY 6 and 8 Fixed (review) | 10 |
 | A3 | Camera transitions with the site easing | MUST | Done (look A); re-checked in slice A | 0 |
 | A4 | Arrows pan; Shift + arrows and PageUp/PageDown turn | MUST | Done (slice A) | 8 |
 | A5 | Ctrl/⌘ + drag anywhere rotates the implant set | MUST | Done (slice A) | 4 |
-| A6 | Home sets the rotation center | MUST | Done (slice A) | 6 |
+| A6 | Home sets the rotation center | MUST | Done (slice A); during a view tween Fixed (review) | 6 |
 | A7 | View buttons (behaviour of the look's widget) and tooltips | MUST | Done (look A); keys Done (slice A) | 3 |
 | A8 | Touch & hold sets the rotation center | SHOULD | Done (slice A) | 8 |
 | A9 | Per-object middle clicks and S | SHOULD | Done (slice A) | 10 |
-| A10 | Pressed state follows the camera; keyboard views announced | SHOULD | Done (slice A) | 4 |
+| A10 | Pressed state follows the camera; keyboard views announced | SHOULD | Done (slice A); Fixed (review) with A6 | 4 |
 | A11 | Not in this slice | WON'T | Won't | — |
 
 ### A1 · Preset keys move the camera with motion on (MUST, Handled (look base))
@@ -654,12 +655,12 @@ Decision: **GPU picking** (no dependency, no build step, respects clipping). The
 
 | Id | Item | Level | Status | Min |
 |---|---|---|---|---|
-| B1 | GPU picking | MUST | Done (slice B) | 15 |
-| B2 | Section plane | MUST (Follow the view: SHOULD) | Done (slice B), Follow the view included | 18 + 4 |
-| B3 | Distance | MUST (dragging a point: SHOULD) | Done (slice B), dragging included | 15 + 6 |
+| B1 | GPU picking | MUST | Done (slice B); hover and pick sides Fixed (review) | 15 |
+| B2 | Section plane | MUST (Follow the view: SHOULD) | Done (slice B), Follow the view included; open scans, ring, range and first P Fixed (review) | 18 + 4 |
+| B3 | Distance | MUST (dragging a point: SHOULD) | Done (slice B), dragging included; keyboard, short lines, double-clicks Fixed (review) | 15 + 6 |
 | B4 | D toggles the color map | SHOULD | Done (slice B) | 1 |
 | B5 | No z-fight with the cut | MUST | Handled (look base); re-checked in slice B | 0 (re-check) |
-| B6 | 3 M-triangle budget | MUST | Done (slice B) | 8 |
+| B6 | 3 M-triangle budget | MUST | Done (slice B); first P Fixed (review) | 8 |
 | B7 | Not in this slice | WON'T | Won't | — |
 
 ### B1 · GPU picking (MUST)
@@ -928,6 +929,62 @@ the removed half). The first rAF window after the benchmark's synchronous loops 
 before): the first present after 360 synchronous renders instead of 180, which the app never does; the steady window
 is 144 fps. Not run: axe (not installed) and a screen reader.
 
+### 5.11 Review fixes (2026-11-09)
+
+Two reviews of the finished viewer (UX in system Chrome, adversarial in code) left 22 failing "BUG:" tests in
+`test/ux-viewer/` and `test/adversarial-viewer/`; all pass now, unchanged. Where a fix changes what an earlier item said,
+the item above keeps its text and this table rules.
+
+| Finding | Fix |
+|---|---|
+| Parts the cut removed could be hovered, grabbed and dragged (`pickPart`) | `pickPart` raycasts the parts and their cut faces and keeps only hits the cut keeps, as the picks do |
+| A pose tween started during a set drag (Ctrl + Z with Ctrl held for it, an alignment result) landed after the release: shown ≠ stored ≠ exported | The drag wins: every pose a set drag writes first stops a running pose tween (`Viewer.stopPose`), and the release commits the drag's own last pose, shown again |
+| Left + right never panned (the second button only sends a chorded `pointermove`) | A view drag turns into a pan in `pointermove` as soon as both buttons are down |
+| The wheel over the icon bar, views dial, pad or legend scrolled the page | The stage takes the wheel bubbling from its chrome (zoom, Shift + wheel); over a popover it scrolls the popover and never the page (`overscroll-behavior: contain`) |
+| Tab past a popover's last control jumped to the FAQ | The popovers follow the icon bar in the DOM, and Tab from a popover's last control closes it and goes on to the views dial (the open Display menu hides the dial, so the browser's own next stop was still off the stage); both are `role="group"` named by their title |
+| Enter on Distance left focus on the button (the next Enter closed the tool); keys dead on the chrome; R silent during guided points | The Distance button moves focus into the 3D view when the tool turns on; a character key on a chrome button acts as on the stage (the buttons keep Enter, Space, arrows, Home, End; popovers keep every key); R during guided points says `dist.busy` (optional `onMeasureBusy?`) |
+| A double-click while measuring or placing guided points refit the view and made a 0.00 mm pair; four Enters at one spot were four guided points; two quick taps on two caps fit | No double-click or double tap fits while clicks place points; a double tap is two taps within 300 ms and 24 px; a distance point on top of the first (< 0.005 mm) and a guided point within 0.5 mm of a placed one are refused and said (`dist.same`, `gp.same`) |
+| The value pill hid both dots on short lines | Under 120 px between the dots the pill goes beside the line, 9 px off it, its edge chosen as `labelSpot` does |
+| No sub-millimetre adjustment on a tablet (fine steps need Shift) | **Fine** in the pad (`pad.fine`, `aria-pressed`): every click steps 5° · 0.1 mm; each pad button's name and tooltip say the step it makes; the pad is described by its hint (`pad.hint` now "Shift + click: one fine step") |
+| The highlight ring vanished when the cut faced the camera through the part | Ring mask and copies draw both sides (all that shows of a cut part is its back side): 1659 → 1392 ring px through the guided target on the GPU (was 350 → 0) |
+| Every back face of the open jaw scan was painted as a section, far from the plane | Cut faces only on replacements (closed CAD solids), drawn with the replacement's depth bias so they win over the coincident scanned scan body; the jaw scan and the captured bodies (open scanner surfaces) keep both sides lit with the cut, as without it. With no jaw cut faces the raycast fallback walks the jaw once per pick again |
+| The first P froze 70–100 ms (clipped shader variants compiled on the spot) and the next click missed 5 ms | Every clipped material carries the plane all the time; without a cut it keeps everything (1 km away), so P is a uniform change and the pick program warmed with the jaw serves every cut state. 3 M-triangle jaw in the page: first P max frame 20.8 ms, no long animation frame (was 69.5 / 101 ms); Enter at the crosshair right after it 3.8 ms |
+| The slider (±r about the target) could not reach the far side once the rotation center sat on a surface; a jaw loaded after the cut kept the small range | `Viewer.sectionReach()`: the farthest corner of what is shown along the cut from where it started, at least the radius; `Stage.update()` widens the slider when more is shown, never narrows it |
+| A pick kept the removed jaw alive (≈ 69 MB) until the next one | `pickCode` is cleared after every pick |
+| Without a cut the GPU pick rasterized replacements' back faces the frame does not draw | The pick draw takes each mesh's side (`cut ? DoubleSide : material.side`); culling only, the program never changes |
+| Labels of replacements hidden from the Display menu stayed frozen on screen | A hidden replacement takes its label along |
+| Home or a middle click during a view tween stopped it part-way while the view stayed pressed | A rotation center set during a camera tween keeps the orientation that tween was heading to |
+| French AZERTY 6 and 8 zoomed out ("symbols win" took its - and _) | Those two keys go by the digit (the keypad - and the wheel still zoom out); every other symbol still wins (Czech and Slovak + on 1) |
+| New case, the sample or Exit sample while measuring said "Distance tool closed." | `App.resetCase()` removes the tools before the new case renders |
+| T flipped the transparency with no jaw; Section and Distance acted on an empty stage | T and Shift + middle click wait for a jaw like their button; Section and Distance are `aria-disabled` (server-rendered so) while nothing is shown, and P and R do nothing then |
+| The "applied to all" toast sat on the legend and scale bar as the map appeared | Every toast goes when step 4 opens (`Toasts.clear()`) |
+| Black corners in full screen | `.xch__stage:fullscreen { border-radius: 0 }` |
+| The Display popover scrolled inside at 1440 × 900 and hid half its rows on a tablet | It takes the stage's height; the views dial and the scale bar wait hidden while it is open (as the chips do) |
+| On a tablet the chrome hid AXO04's label and covered the arch's flanks | Default view and Fit fill 68 % on a touch screen (`LOOK.frameTouch`); a label that would sit under the chrome goes to the other side of its part (chrome boxes read on resize and when the pad or legend shows or hides, never in a frame) |
+| A wide field of view made the scale bar wrong by up to 34 % | The bar hides above 5° |
+| Jaw transparency and Section icons looked alike | Jaw transparency is a drop, half hatched |
+| Copy | The shortcuts' Section row adds the Position slider and Shift + wheel; "Distance button" → "Measure a distance button"; ES `pad.turnAround` "Girar 180°". "Exocad" keeps its capital: the rest of the site writes it so in 55 places (titles, meta descriptions, other pages this branch does not touch) and the tool in all 13 of its own; lowercase in two strings would read as a typo |
+
+**Tests changed with the spec** (assertions replaced, not loosened): `viewer-tools` "clips every drawn surface" now pins the
+permanent plane, the scans' two lit sides without cut faces and the replacements' cut faces with their bias; "warm-up"
+pins one warm-up for every cut state and an unchanged pick material version. **New:** `test/ux/review-fixes.ux.test.ts`
+(8, Tab out of a popover included), the review-fix block of `controls-keys` (5), pick sides and labels beside the chrome in `viewer-tools` (2), framing
+on touch in `viewer-look` (1).
+
+**Checks** (2026-11-09): `typecheck:xchange` clean; `test:xchange` 532/532 (the 1 M-triangle STL parse and the privacy flow
+timed out once each in a busy full run and pass alone); build and `npm test` green. Browser, headless system Chrome,
+ANGLE (NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0, D3D11), built site: `probe-fix.mjs` 23/23 (empty stage,
+step 1 T, toasts, first P on the sample with no frame over 50 ms and no long animation frame (its longest frame 7.1 to
+34.8 ms between runs), removed parts neither hovered nor dragged, both buttons, the wheel
+over four overlays with the page still, Tab out of the Section popover onto the views dial, the Display popover without
+inner scroll at 1440 × 900, the Distance button by keyboard, Enter twice, a double-click keeping the zoom, a 40 px
+distance, Fine, full screen, 1024 × 768 touch with no label under the chrome and no overlap), `probe-3m.mjs` 3/3,
+`probe-ring.mjs` 1/1, `probe-tab.mjs` 4/4 (Tab past the last control of either popover lands on the views dial in step 1
+and step 4, the page still; before the last fix the open Display menu's hidden dial sent it to the FAQ in step 1 and to the
+pad in step 4), `probe-display.mjs` 2/2 (the open Display menu opaque, no inner scroll at 1440 × 900, 636 of 738 px
+shown on a 1024 × 768 tablet); 0 console messages, no external request. `shoot.mjs` (`looks/final`): 12 shots, 0 errors, orbit
+p50 / p95 / max 6.9 / 7.0 / 7.1 ms. Scripts and results in the session scratchpad (`viewer-polish/fixrev/`).
+
 ---
 
 ## 6. Integration notes (outside `src/xchange`)
@@ -951,6 +1008,9 @@ is 144 fps. Not run: axe (not installed) and a screen reader.
   For the site motion rework: `src/scripts/motion.js` line 312 reads the first entry of an `IntersectionObserver` batch
   (`([e]) => …`), the bug fixed here in `viewer.ts` and `ui/main.ts`; one callback can carry an enter and a leave, so
   the last entry is the current state.
+- **Review fixes (2026-11-09):** no site change was needed. In the tool's own page: both popovers moved right after the
+  icon bar (Tab order) with `role="group"`, Section and Distance server-rendered `aria-disabled`, the pad's Fine pill and
+  its hint's id (the pad's description), the new Jaw transparency icon.
 - **Slice B (2026-11-08):** no site change was needed. The section popover's entrance is the Display popover's CSS
   (`@starting-style`), which `global.css` already cuts under reduced motion; the distance dots and pill animate in the
   viewer's own GSAP context. Nothing new is fetched and no worker was added.
