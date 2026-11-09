@@ -1,0 +1,21 @@
+// one-off: a 1366x1024 touch tablet (iPad Pro landscape, desktop layout) rotated to portrait and back mid-page
+import { serve, launch, ready, settle, sleep } from '../lib.mjs';
+import { join } from 'node:path';
+const server = await serve();
+const browser = await launch();
+const ctx = await browser.newContext({ viewport: { width: 1366, height: 1024 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: 'no-preference' });
+await ctx.addInitScript({ path: 'C:/Users/Diestorn/Desktop/expertsddt-sitefix/tools/qa/inpage.js' });
+const page = await ctx.newPage();
+await page.goto(server.url + '/'); await ready(page);
+const st = () => page.evaluate(() => ({ w: innerWidth, y: Math.round(scrollY), pins: __qa.pins().map((p) => p.id), pillars: __qa.pillars()?.static, video: __qa.hero()?.video?.src, section: [...document.querySelectorAll('main section')].find((s) => { const r = s.getBoundingClientRect(); return r.top <= innerHeight / 2 && r.bottom > innerHeight / 2; })?.id }));
+console.log('landscape fresh', JSON.stringify(await st()));
+await page.evaluate(() => scrollTo({ top: document.querySelector('#services').getBoundingClientRect().top + scrollY, behavior: 'instant' })); await sleep(1500);
+console.log('landscape at services', JSON.stringify(await st()));
+await page.setViewportSize({ width: 1024, height: 1366 }); await sleep(2200); await settle(page);
+console.log('portrait', JSON.stringify(await st()));
+await page.setViewportSize({ width: 1366, height: 1024 }); await sleep(2200); await settle(page);
+console.log('landscape again', JSON.stringify(await st()));
+await page.evaluate(() => { const sp = document.querySelector('#pillars').parentElement; scrollTo({ top: sp.getBoundingClientRect().top + scrollY + (sp.offsetHeight - innerHeight) / 2, behavior: 'instant' }); }); await sleep(1500);
+await page.screenshot({ path: 'out/cross-probes/ipad-pillars-after-rotation.jpg', type: 'jpeg', quality: 60 });
+console.log('pillars mid after rotation', JSON.stringify(await page.evaluate(() => __qa.pillars())));
+await browser.close(); server.stop(); process.exit(0);

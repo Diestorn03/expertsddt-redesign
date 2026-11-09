@@ -1,0 +1,13 @@
+{
+  "name": "expertsddt-motion-qa",
+  "private": true,
+  "type": "module",
+  "description": "Motion QA harness: loader, scroll animations and edge cases in real Chrome",
+  "scripts": {
+    "qa": "node qa.mjs",
+    "selftest": "node qa.mjs --selftest"
+  },
+  "dependencies": {
+    "playwright-core": "1.65.0"
+  }
+}
