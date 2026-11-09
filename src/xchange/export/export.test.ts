@@ -566,7 +566,7 @@ describe('buildBundle', () => {
     expect(upper.report.alignment).toBeNull(); // without a jaw: a normal export, nothing about an alignment
   });
 
-  it('matchedWith: the bodies the alignment used; an exchange after aligning is said in report.json and README', () => {
+  it('matchedWith: the bodies the alignment used; another geometry exported is said in report.json and README', () => {
     const { request } = caseRequest(true);
     // workflow 2: aligned with the bodies of the positions file (id 'capture'), then exchanged to the cap and the post
     const fileBody = { id: 'capture', name: 'Body from the file' };
@@ -576,13 +576,14 @@ describe('buildBundle', () => {
     expect(report.alignment!.perSite.map((p) => p.matchedWith)).toEqual([fileBody, fileBody, fileBody]);
     expect(report.sites.map((s) => s.geometry.id)).toEqual(['geo-cap', 'geo-post', 'geo-cap']);
     expect(report.alignment).toMatchObject({ status: 'good', rmsMm: 0.012, matchesExport: true }); // the alignment's own numbers
-    expect(report.notes.some((n) => n.startsWith('The geometry was exchanged after aligning'))).toBe(true);
+    expect(report.notes.some((n) => n.startsWith('The exported geometry is not the one the alignment was measured with'))).toBe(true);
+    expect(report.notes.some((n) => n.includes('exchanged'))).toBe(false); // the report cannot know when the geometry was picked: it does not say "after aligning"
     const readme = decode(entry(readZip(bundle.zip), 'README.txt'));
     expect(readme).toContain('Alineado con los cuerpos del archivo de posiciones; se exporta Cap 5 mm, Post.');
     expect(readme).toContain('Aligned with the bodies of the positions file; exported with Cap 5 mm, Post.');
     // the same bodies exported as aligned (no exchange): no note, no line
     const kept = buildBundle({ ...request, geometryBySite: Object.fromEntries(request.sites.map((s) => [s.id, { ...fileBody, mesh: request.geometryBySite[s.id]!.mesh }])), matchedWith });
-    expect(kept.report.notes.some((n) => n.includes('exchanged'))).toBe(false);
+    expect(kept.report.notes.some((n) => n.includes('measured with'))).toBe(false);
     expect(decode(entry(readZip(kept.zip), 'README.txt'))).not.toContain('Aligned with');
     // one implant exchanged: only it is named
     const one = buildBundle({ ...request, matchedWith: { 'site-2': { id: 'geo-cap', name: 'Cap 5 mm' } } });

@@ -26,7 +26,7 @@ import {
   validateRigid,
 } from '../core/mat4';
 import { checkMesh, computeBounds, surfaceArea } from '../core/mesh';
-import { sampleSurface } from '../core/sampling';
+import { createRng, sampleSurface } from '../core/sampling';
 import type { Bounds, ImplantSite, Mat4, MeshFormat, ReferenceBody, TriMesh, Vec3 } from '../core/types';
 import { add, cross, distance, dot, normalize, scale, sub } from '../core/vec3';
 import { buildBvh } from '../geometry/bvh';
@@ -82,6 +82,25 @@ export function describeComponents(mesh: TriMesh, weldToleranceMm = 1e-5): MeshC
   return kept;
 }
 
+/**
+ * Each body's meshes as the file holds them: its outer shell first, the pieces inside it, then the fragments nearest to
+ * it, so no geometry is ever dropped (planAssembly, "No exchange"). One list per non-fragment component, in order.
+ */
+export function bodyMeshes(components: readonly MeshComponent[]): TriMesh[][] {
+  const bodies = components.filter((c) => !c.fragment);
+  const parts = bodies.map((b) => [b.mesh, ...b.inner]);
+  for (const f of components) if (f.fragment) parts[nearestBody(f, bodies)]!.push(f.mesh);
+  return parts;
+}
+
+function nearestBody(fragment: MeshComponent, bodies: readonly MeshComponent[]): number {
+  let best = 0;
+  bodies.forEach((b, i) => {
+    if (distance(b.centroid, fragment.centroid) < distance(bodies[best]!.centroid, fragment.centroid)) best = i;
+  });
+  return best;
+}
+
 /** The inner piece's box may stick out of the outer shell's, and its centroid sit off that shell's axis, by this fraction of the outer shell's diagonal. */
 const NESTED_TOLERANCE = 0.02; // ponytail: real inserts sit within 1 µm of the cap's axis and 0.1 mm of its box; loosen only for scanned inner shells
 /** Above this many non-fragment shells the pair test is skipped (noise; a capture is refused at 64 bodies anyway). */
@@ -112,11 +131,82 @@ function extentAlong(mesh: TriMesh, origin: Readonly<Vec3>, axes: readonly Vec3[
 }
 
 /**
+ * Smallest circle around the points (xs[i], ys[i]): centre and radius. Welzl's incremental algorithm on a shuffled order
+ * (fixed seed), expected O(n); points within 50 ppm of the radius count as on it (float32 vertices of a round wall).
+ */
+function enclosingCircle(xs: Float64Array, ys: Float64Array): [number, number, number] {
+  const n = xs.length, order = Uint32Array.from({ length: n }, (_, i) => i), rng = createRng(1);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1)), t = order[i]!;
+    order[i] = order[j]!;
+    order[j] = t;
+  }
+  let cx = 0, cy = 0, r2 = -1;
+  const out = (k: number): boolean => (xs[k]! - cx) ** 2 + (ys[k]! - cy) ** 2 > r2 * (1 + 1e-4) + 1e-12;
+  const diameter = (i: number, j: number): void => {
+    cx = (xs[i]! + xs[j]!) / 2; cy = (ys[i]! + ys[j]!) / 2;
+    r2 = (xs[i]! - cx) ** 2 + (ys[i]! - cy) ** 2;
+  };
+  for (let a = 0; a < n; a++) {
+    const i = order[a]!;
+    if (!out(i)) continue;
+    cx = xs[i]!; cy = ys[i]!; r2 = 0;
+    for (let b = 0; b < a; b++) {
+      const j = order[b]!;
+      if (!out(j)) continue;
+      diameter(i, j);
+      for (let c = 0; c < b; c++) {
+        const k = order[c]!;
+        if (!out(k)) continue;
+        const ux = xs[j]! - xs[i]!, uy = ys[j]! - ys[i]!, vx = xs[k]! - xs[i]!, vy = ys[k]! - ys[i]!;
+        const det = 2 * (ux * vy - uy * vx), u2 = ux * ux + uy * uy, v2 = vx * vx + vy * vy;
+        if (Math.abs(det) <= 1e-12 * (u2 + v2)) { // in a line: the two farthest apart span it
+          const w2 = (xs[k]! - xs[j]!) ** 2 + (ys[k]! - ys[j]!) ** 2;
+          if (u2 >= v2 && u2 >= w2) diameter(i, j); else if (v2 >= w2) diameter(i, k); else diameter(j, k);
+          continue;
+        }
+        const ox = (vy * u2 - uy * v2) / det, oy = (ux * v2 - vx * u2) / det;
+        cx = xs[i]! + ox; cy = ys[i]! + oy; r2 = ox * ox + oy * oy;
+      }
+    }
+  }
+  return [cx, cy, Math.sqrt(Math.max(0, r2))];
+}
+
+/**
+ * B inside the round outline of A, seen along `u` (unit): B's centroid on the axis through the centre of the smallest
+ * circle around A's vertices, every vertex of B within that circle and within A's length along `u`, all within `tol`.
+ * An index flat is a chord inside that circle, so it moves neither the axis nor the test, as it moves A's centroid.
+ */
+function insideRound(a: TriMesh, b: MeshComponent, u: Vec3, tol: number): boolean {
+  const e1 = normalize(cross(u, Math.abs(u[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), e2 = cross(u, e1);
+  const along = (m: TriMesh): { xs: Float64Array; ys: Float64Array; lo: number; hi: number } => {
+    const p = m.positions, n = p.length / 3, xs = new Float64Array(n), ys = new Float64Array(n);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const x = p[3 * i]!, y = p[3 * i + 1]!, z = p[3 * i + 2]!, t = x * u[0] + y * u[1] + z * u[2];
+      xs[i] = x * e1[0] + y * e1[1] + z * e1[2];
+      ys[i] = x * e2[0] + y * e2[1] + z * e2[2];
+      lo = Math.min(lo, t); hi = Math.max(hi, t);
+    }
+    return { xs, ys, lo, hi };
+  };
+  const A = along(a), B = along(b.mesh);
+  const [cx, cy, r] = enclosingCircle(A.xs, A.ys);
+  if (!(Math.hypot(dot(b.centroid, e1) - cx, dot(b.centroid, e2) - cy) <= tol && B.lo >= A.lo - tol && B.hi <= A.hi + tol)) return false;
+  for (let i = 0; i < B.xs.length; i++) if (Math.hypot(B.xs[i]! - cx, B.ys[i]! - cy) > r + tol) return false;
+  return true;
+}
+
+/**
  * For each component, the index of the outermost non-fragment shell it sits in (-1: none). B sits in A when A is
- * the bigger one (diagonal, then the lower index for twins), B's centroid lies on A's axis (the principal axis whose
- * variance stands apart, through A's centroid) and B lies inside A's box, axis-aligned and in A's principal frame,
- * all within NESTED_TOLERANCE. A neighbouring body sticks out of the box of the body beside it, and a body standing
- * on an arch strip is far from the strip's axis, so neither is folded in.
+ * the bigger one (diagonal, then the lower index for twins), B lies inside A's axis-aligned box and either B's centroid
+ * lies on A's axis (the principal axis whose variance stands apart, through A's centroid) with B inside A's box in A's
+ * principal frame, or B lies inside A's round outline seen along A's or B's principal axis (insideRound): a cap whose
+ * index flat moves its centroid off its axis, or whose principal axes lean (an uneven part about as tall as it is wide),
+ * still holds its insert. All within NESTED_TOLERANCE. A neighbouring body sticks out of the box of the body beside it,
+ * and a body standing on an arch strip is far from the strip's axis and from the centre of its outline, so neither is
+ * folded in.
  */
 function outerShells(components: readonly MeshComponent[]): Int32Array {
   const parent = new Int32Array(components.length).fill(-1);
@@ -144,10 +234,11 @@ function outerShells(components: readonly MeshComponent[]): Int32Array {
       if (!inside) continue;
       const f = frameOf(a);
       const d = sub(b.centroid, f.centroid);
-      if (distance(d, scale(f.axis, dot(d, f.axis))) > tol) continue;
-      const e = extentAlong(b.mesh, f.centroid, f.axes);
-      for (let k = 0; k < 3 && inside; k++) inside = e[2 * k]! >= f.extent[2 * k]! - tol && e[2 * k + 1]! <= f.extent[2 * k + 1]! + tol;
-      if (inside) best = a;
+      if (distance(d, scale(f.axis, dot(d, f.axis))) <= tol) {
+        const e = extentAlong(b.mesh, f.centroid, f.axes);
+        for (let k = 0; k < 3 && inside; k++) inside = e[2 * k]! >= f.extent[2 * k]! - tol && e[2 * k + 1]! <= f.extent[2 * k + 1]! + tol;
+      } else inside = false;
+      if (inside || [f.axis, frameOf(b).axis].some((u) => insideRound(a.mesh, b, u, tol))) best = a;
     }
     if (best) parent[b.index] = best.index;
   }

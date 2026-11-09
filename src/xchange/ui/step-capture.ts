@@ -1,7 +1,7 @@
 /** Step 1 · Arch and capture (UI-DESIGN §5.3): import pipeline, capture scan body, provisional positions. */
 import type { XchangeWarning } from '../core/errors';
 import type { Arch, CaptureFormat, ImplantSite } from '../core/types';
-import { hasDownstreamWork, pendingProvisional, step1Blocker } from '../state/case';
+import { hasDownstreamWork, pendingProvisional, redetected, step1Blocker } from '../state/case';
 import { captureOnly, type CaptureResult, type DetectResult } from '../state/jobs-handler';
 import type { App } from './app';
 import { fillKeep, h, pickFiles, q, radiogroup, setChecked } from './dom';
@@ -97,7 +97,7 @@ export class CaptureStep {
   apply(r: CaptureResult, sample: boolean): void {
     const app = this.app;
     app.resetCase(app.s.arch);
-    app.componentData = (r.components ?? []).map((c) => ({ mesh: c.mesh, normals: c.normals }));
+    app.componentData = (r.components ?? []).map((c) => ({ mesh: c.shell, normals: c.normals }));
     const mesh = r.mesh ?? null;
     this.warnings = r.warnings;
     this.mixed = r.framesDiffer ? r : null;
@@ -106,7 +106,8 @@ export class CaptureStep {
       format: sample ? 'demo' : r.format,
       sites: r.sites,
       captureMesh: mesh,
-      components: (r.components ?? []).map((c) => c.mesh),
+      components: (r.components ?? []).map((c) => c.shell),
+      bodies: (r.components ?? []).map((c) => c.mesh),
       needsReference: !!mesh && r.sites.length === 0,
       sample,
     });
@@ -130,8 +131,16 @@ export class CaptureStep {
     try {
       const r = await app.jobs.run<DetectResult>({ type: 'detect', mesh, reference: ref.mesh }, [], job.signal);
       this.warnings = [...this.warnings.filter((w) => w.code === 'MESH_DEGENERATE_TRIANGLES_DROPPED' || w.code === 'MESH_UNITS_SUSPECT'), ...r.warnings];
-      app.store.set({ sites: r.sites, unresolved: r.unresolved, needsReference: false, referenceId, confirmed: new Set(), excluded: new Set(), geometryBySite: {}, exportedSinceChange: false });
+      // new frames: nothing made for the old ones survives (state/case redetected); a running alignment would be for them too
+      const aligned = app.s.alignment !== null;
+      const { patch, dropped } = redetected(app.s, r.sites, r.unresolved);
+      for (const id of dropped) app.meshCache.delete(id);
+      app.alignStep.stopAligning();
+      app.geometry.clearCaseNotes();
+      app.store.set({ ...patch, referenceId });
+      app.alignStep.applyDeviation();
       app.syncSites();
+      if (aligned) app.toasts.show(app.c.say.realign);
       app.viewer?.view('occlusal');
       const provisional = r.sites.filter((s) => s.flags.provisional).length;
       const d = app.c.say.detected, parts = { found: r.sites.length - provisional, provisional, unresolved: r.unresolved.length };

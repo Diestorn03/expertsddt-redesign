@@ -480,6 +480,7 @@ interface CaseState {
   confirmed: Set<string>; excluded: Set<string>; // provisional sites confirmed / left out
   geometryBySite: Record<string, string>;   // site id -> geometry id (library or case-only)
   caseGeometries: Map<string, CaseGeometry>; // sample, positioned assemblies, "No exchange" bodies (kind 'capture')
+  // components: each body's outer shell (shown, linked, aligned); bodies: each body as the file holds it ("No exchange")
   jaw: JawScan | null; jawSkipped: boolean;
   matchSurfaces: 'replacement' | 'capture';
   assembly: Mat4;                           // capture -> jaw; identity without a jaw
@@ -570,7 +571,10 @@ case?"); the parsed result waits in memory until the answer. Without downstream 
 **5.3.2 Capture scan body (mesh-only).** Card "Which scan body is in this capture?": text, a compact list of Your
 geometries (favorites first; same rows as step 2, whose main action reads "Use H6.6 cap as the capture scan body"),
 `[Load scan body file]` (`parseMesh(bytes, 'geometry')` → named → saved to the library). Picking runs detection at once,
-with no confirm button; picking another re-runs it. Unresolved component indices are shown 1-based.
+with no confirm button; picking another re-runs it. The new implant frames clear what was made for the old ones
+(`state/case.redetected`): geometry picks, "No exchange" bodies and positioned assemblies (their meshes are in the old
+frames), and the alignment with its map; the jaw scan and the set's pose stay. When an alignment goes, the toast
+`say.realign` says so. Unresolved component indices are shown 1-based.
 
 **5.3.3 Implant list.** `<ul>` of row buttons: label (600, tabular figures), small source icon, status chip — Found
 (`--xch-ok`), Check (provisional, `--xch-warn`), Rotation unknown (`--xch-warn`, info icon), From file (neutral);
@@ -592,10 +596,11 @@ Body:
 positions STL alone, or one linked to the position file), the list opens with the group `s2.fromFile` and one row,
 `s2.noExchange` "No exchange: use the bodies in the file" (meta `s2.noExchangeMeta`, label `s2.noExchangeLabel`; the
 title wraps, `.xch__libmain--wrap`: it is a sentence, where library names keep the one-line ellipsis). Picking
-it gives each target implant (All, or the selected one) its own captured body, brought to its implant frame
+it gives each target implant (All, or the selected one) its own body from the file (the cap with the insert inside it
+and its fragments, as the same STL picked as the geometry would), brought to its implant frame
 (`state/case.capturedBodies`: case-only geometries `capture:<site id>`, kind `capture`, named `s2.fileBody`), so the
-case can be aligned without choosing a replacement; toast `say.noExchange`, with Undo. Exported as is, those bodies go
-out in place (report.json geometry id `capture`). With a position file alone the row is not shown: there is no body
+case can be aligned without choosing a replacement (matched as the captured outer shells); toast `say.noExchange`,
+with Undo. Exported as is, those bodies go out in place (report.json geometry id `capture`). With a position file alone the row is not shown: there is no body
 to keep.
 
 **Apply on pick** (the client's request): activating a row applies that geometry to the target at once. There is no
@@ -675,8 +680,8 @@ need a geometry."
   `minVisible` ∧ rms ≤ `goodRmsMm` ∧ coverage ≥ `goodCoverage`), acceptable (visible ≥ `minVisible` ∧ rms ≤
   `acceptableRmsMm` ∧ coverage ≥ `acceptableCoverage`), no match (coverage < `siteUsableCoverage`), weak otherwise. The first cell is a button "Show AXO2 in the view" (camera eases to it, it pulses
   once). Numbers right-aligned, `font-variant-numeric: tabular-nums`.
-- **After an exchange** (some implant exports another body than the one it was aligned with,
-  `state/case.exchangedSites`): under the card the note `al.exchanged`, "Aligned with {aligned} · Exporting
+- **After an exchange** (some implant's geometry changed after the alignment, `state/case.exchangedSites`; aligning
+  with the captured shells is no exchange): under the card the note `al.exchanged`, "Aligned with {aligned} · Exporting
   {exported}. The exchange keeps this alignment…", the bodies named once each (the bodies of the file read
   `s2.fileBodies`). The color map is not drawn on an exchanged part (`shownDeviation`; all exchanged: no map, the map
   button and legend off); it is still drawn on the captured shells after a `capture` alignment.
@@ -1709,6 +1714,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `say.captureReplaced` | Capture replaced. | Captura reemplazada. |
 | `say.usingOnly` | Using only the {kind} file. | Se usa solo el archivo {kind}. |
 | `say.detected` | Positions found: {found}. Provisional: {provisional}. Not recognized: {unresolved}. (parts with 0 are left out) | Posiciones encontradas: {found}. Provisionales: {provisional}. No reconocidas: {unresolved}. (se omiten las partes en 0) |
+| `say.realign` | Positions detected again: the alignment was cleared. Align again in step 4. | Posiciones detectadas de nuevo: se borró la alineación. Vuelve a alinear en el paso 4. |
 | `say.applied` | {name} applied to {target}. | Se aplicó {name} a {target}. |
 | `say.noExchange` {target} | No exchange on {target}: the bodies of the file stay. | Sin intercambio en {target}: se quedan los cuerpos del archivo. |
 | `say.undo` | Undo | Deshacer |

@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { isXchangeError } from '../core/errors';
-import { identity } from '../core/mat4';
-import { transformMesh } from '../core/mesh';
+import { fromTranslation, identity, multiply } from '../core/mat4';
+import { countTriangles, mergeMeshes, transformMesh } from '../core/mesh';
 import { writeBinarySTL } from '../core/stl-writer';
 import type { AlignmentResult, ImplantSite } from '../core/types';
 import { makeFrames, makeScanBody, makeSyntheticCase, placeBodies, randomRigid } from '../test/fixtures';
-import { capWithInsert } from '../test/fixtures/detect';
+import { capWithInsert, speck } from '../test/fixtures/detect';
 import { encodeMicronMapperCSV, encodeMicronMapperExport, encodeScanAdaptorXML, utf8 } from '../test/fixtures/positions';
 import type { WorkerLike } from '../align/client';
 import {
   alignedBody, alignmentParts, bodyOf, canMatchCapture, capturedBodies, captureGeometryId, chosenBodies, exchangedSites, exportBlocker,
   freshCase, guidedTargets, matchedBodies, measuredBodies, mergeMeasured, mergePositionFiles, missingGeometry, pushUndo, reachable,
-  shownDeviation, siteStatus, step1Blocker, stepAfterGeometry, UNDO_LIMIT, type CaseState,
+  redetected, shownDeviation, siteStatus, step1Blocker, stepAfterGeometry, UNDO_LIMIT, type CaseState,
 } from './case';
 import { captureOnly, createJobsHandler, readCapture, readGeometry, UiError, type JobRequest } from './jobs-handler';
 import { JobsClient } from './jobs';
@@ -136,7 +136,7 @@ describe('workflow 2: "No exchange" and the alignedWith rule', () => {
     };
   };
 
-  it('each implant keeps its own body from the positions file, in its implant frame (back at the site it is the shell)', () => {
+  it('each implant keeps its own body from the positions file, in its implant frame (back at the site it is the body of the file)', () => {
     expect([...own.keys()]).toEqual(capture.sites.map((x) => x.id));
     capture.sites.forEach((site) => {
       const g = own.get(site.id)!;
@@ -190,6 +190,33 @@ describe('workflow 2: "No exchange" and the alignedWith rule', () => {
     expect(matchedBodies(withG, names, 'x')['site-1']).toEqual({ id: 'g', name: 'G' });
     // without an alignment, what is exported
     expect(matchedBodies({ ...after, alignment: null }, names, 'x')['site-1']).toEqual({ id: 'lib-healing-cap', name: 'Healing cap' });
+  });
+
+  it('"No exchange" is aligned as the captured shells: the pieces inside them are never in the scan', () => {
+    const shells = capture.components!.map((x) => x.shell);
+    const own2 = capturedBodies(capture.sites, components, 'x'); // components: the whole bodies
+    const parts = alignmentParts(capture.sites, (id) => own2.get(id)?.mesh, shells, 'replacement', () => true);
+    parts.forEach((p, i) => expect(p.mesh).toBe(shells[capture.sites[i]!.componentIndex!]));
+    const placed = alignmentParts(capture.sites, (id) => own2.get(id)?.mesh, shells, 'replacement'); // any other geometry: placed whole
+    expect(countTriangles(placed[0]!.mesh)).toBe(countTriangles(body));
+  });
+
+  it('a new detection drops what was made for the old frames (picks, "No exchange" bodies, assemblies, the alignment); the jaw and the pose stay', () => {
+    const pose = multiply(fromTranslation([1, 2, 3]), identity());
+    const sample = { id: 'sample-body', name: 'S', mesh: body, kind: 'sample' as const, group: 'sample' };
+    const assembly = { id: 'asm-1-site-1', name: 'A', mesh: body, kind: 'assembly' as const, group: 'asm-1' };
+    const before: CaseState = {
+      ...aligned({ 'site-2': 'lib-healing-cap' }), jaw: { mesh: c.jaw, originalBytes: new Uint8Array(1), format: 'stl' }, assembly: pose,
+      lastAlignedPose: pose, lastAttempt: result, deviation: new Map(), referenceId: 'ref-1', excluded: new Set(['site-4']),
+    };
+    before.caseGeometries = new Map([...before.caseGeometries, [sample.id, sample], [assembly.id, assembly]]);
+    const sites = capture.sites.map((x) => ({ ...x, matrix: multiply(x.matrix, fromTranslation([0, 0, 0.5])) }));
+    const { patch, dropped } = redetected(before, sites, [5]);
+    expect(patch).toMatchObject({ sites, unresolved: [5], geometryBySite: {}, alignment: null, alignedWith: null, lastAttempt: null, lastAlignedPose: null, deviation: null, needsReference: false });
+    expect(patch.excluded!.size).toBe(0);
+    expect([...patch.caseGeometries!.keys()]).toEqual(['sample-body']);
+    expect(dropped.sort()).toEqual([...capture.sites.map((x) => captureGeometryId(x.id)), 'asm-1-site-1'].sort());
+    expect(['jaw', 'assembly', 'surfaces', 'components', 'bodies'].filter((k) => k in patch)).toEqual([]);
   });
 
   it('a pick for all implants goes on to step 3, or back to step 4 once step 3 is done', () => {
@@ -291,6 +318,23 @@ describe('jobs', () => {
     // The same STL picked as the geometry: one body (cap + insert) at every position.
     expect(readGeometry(files[1]!, r.sites).plan.kind).toBe('normalized');
   });
+  it('each body as the file holds it (cap, insert, a fragment beside it) and its outer shell, on the same vertices', () => {
+    const { cap, body } = capWithInsert();
+    const fragment = transformMesh(speck, multiply(c.frames[0]!, fromTranslation([3.5, 0, 2]))); // a speck beside body 1
+    const files = [{ bytes: utf8(encodeMicronMapperExport(c.frames, 'BTH')), extension: 'csv' }, { bytes: writeBinarySTL(mergeMeshes([placeBodies(c.frames, body), fragment])), extension: 'stl' }];
+    const r = readCapture(files);
+    expect(r.components!.map((x) => x.fragment)).toEqual([false, false, false, false, true]);
+    expect(r.components!.slice(0, 4).map((x) => countTriangles(x.mesh))).toEqual([1, 0, 0, 0].map((k) => countTriangles(body) + k * countTriangles(speck)));
+    for (const x of r.components!.slice(0, 4)) {
+      expect(countTriangles(x.shell)).toBe(countTriangles(cap)); // what is shown, linked and aligned
+      expect(x.shell.positions).toBe(x.mesh.positions); // the same vertices: a colour map of the shell fits the body
+      expect(Array.from(x.shell.indices)).toEqual(Array.from(x.mesh.indices.subarray(0, x.shell.indices.length)));
+      expect(x.normals.length).toBe(x.mesh.positions.length);
+    }
+    expect(r.components![4]!.shell).toBe(r.components![4]!.mesh);
+    expect(r.sites.map((s) => s.componentIndex)).toEqual([0, 1, 2, 3]);
+  });
+
   it('files in different frames: no position is linked, framesDiffer, and the STL as geometry is not at the sites', () => {
     const moved = transformMesh(c.captureMesh, randomRigid(3, Math.PI, 40));
     const files = [{ bytes: csv, extension: 'csv' }, { bytes: writeBinarySTL(moved), extension: 'stl' }];

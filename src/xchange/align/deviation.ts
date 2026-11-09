@@ -43,13 +43,21 @@ export function deviationMap(meshA: TriMesh, meshB: TriMesh, transformA?: Mat4, 
 }
 
 /**
+ * How far the colour map looks for the scan (mm). A vertex farther from every scanned triangle is not judged: it reads
+ * maxUm, far off. Deeper than what Fernando's scan bodies hide under the gum (3.3 mm at most), and the search stays
+ * short while the set is dragged in from far away (the CSV's capture frame arrives 43-91 mm from the jaw).
+ */
+export const JUDGED_WITHIN_MM = 5;
+
+/**
  * The colour map of the parts (UI): µm per vertex of each part (after `transform`) to the jaw, clamped to maxUm, and
  * NaN where the scan cannot see the vertex (hidden behind the scanned surface, as measureFit leaves it out), so the map
- * colours what the quality label measures.
+ * colours what the quality label measures, within JUDGED_WITHIN_MM of the scan.
  */
 export function partDeviations(parts: readonly AssemblyPart[], surface: TriangleTree, transform: Mat4 = identity(), toleranceMm = DEFAULT_TOLERANCE_MM, maxUm = DEFAULT_MAX_UM): Float32Array<ArrayBuffer>[] {
   if (!(maxUm > 0)) throw new XchangeError('INVALID_ARGUMENT', { reason: 'maxUm' });
   const t = validateRigid(transform);
-  const probes = jawDistances(parts.map((p) => ({ points: p.mesh.positions, normals: computeVertexNormals(p.mesh) })), surface, t, toleranceMm);
+  const clouds = parts.map((p) => ({ points: p.mesh.positions, normals: computeVertexNormals(p.mesh) }));
+  const probes = jawDistances(clouds, surface, t, toleranceMm, Math.max(JUDGED_WITHIN_MM, maxUm / 1000));
   return probes.map(({ mm, hidden }) => Float32Array.from(mm, (d, i) => (hidden[i] ? Number.NaN : Math.min(maxUm, d * 1000))));
 }

@@ -18,6 +18,7 @@ import en from '../../ui/i18n/en';
 import es from '../../ui/i18n/es';
 import { GeometryStep } from '../../ui/step-geometry';
 import { AlignStep } from '../../ui/step-align';
+import { CaptureStep } from '../../ui/step-capture';
 import { makeRevolutionBody, makeSyntheticCase } from '../fixtures';
 import { fakeElement, installFakeDom, renderedChildren, type FakeElement } from '../adversarial/fake-dom';
 
@@ -196,6 +197,29 @@ describe('workflow 2: align with the bodies of the file, then exchange', () => {
     await (kept.step as unknown as { doExport(): Promise<void> }).doExport();
     const keptJob = (kept.app.jobs.run as ReturnType<typeof vi.fn>).mock.calls[0]![0] as Extract<JobRequest, { type: 'export' }>;
     expect(Object.values(keptJob.request.geometryBySite).map((g) => [g.id, g.name])).toEqual(c.sites.map(() => ['capture', 'Body from the file']));
-    expect((await import('../../export/bundle')).buildBundle(keptJob.request).report.notes.some((n) => n.includes('exchanged'))).toBe(false);
+    expect((await import('../../export/bundle')).buildBundle(keptJob.request).report.notes.some((n) => n.includes('measured with'))).toBe(false);
+  });
+});
+
+describe('step 1: another capture scan body picked after "No exchange" and an alignment (new implant frames)', () => {
+  it('clears the alignment with a note, drops the bodies made for the old frames, keeps the jaw and the pose', async () => {
+    const { app, store } = workspace('en', true);
+    const capture = Object.create(CaptureStep.prototype) as CaptureStep;
+    Object.assign(capture, { app, pane: fakeElement(), warnings: [], mixed: null, rowsKey: '', job: null });
+    const moved = c.sites.map((s) => ({ ...s, matrix: multiply(s.matrix, fromTranslation([0, 0, 0.5])) }));
+    Object.assign(app, {
+      capture, loadGeometry: vi.fn(async () => ({ mesh: c.body, normals: new Float32Array(c.body.positions.length) })),
+      jobs: { run: vi.fn(async () => ({ sites: moved, unresolved: [], warnings: [] })) },
+    });
+    Object.assign(app.viewer!, { view: vi.fn() });
+    app.parts(); // the "No exchange" meshes are cached
+    const { assembly, jaw } = store.state;
+    await capture.detect('ref-2');
+    expect(store.state).toMatchObject({ sites: moved, alignment: null, alignedWith: null, lastAlignedPose: null, geometryBySite: {}, jaw, referenceId: 'ref-2' });
+    expect(store.state.assembly).toBe(assembly); // the set stays where it was: aligning again starts there
+    expect(store.state.caseGeometries.size).toBe(0);
+    expect([...app.meshCache.keys()].filter((k) => k.startsWith('capture:'))).toEqual([]);
+    expect(app.toasts.show).toHaveBeenCalledWith('Positions detected again: the alignment was cleared. Align again in step 4.');
+    expect(es.say.realign).toBe('Posiciones detectadas de nuevo: se borró la alineación. Vuelve a alinear en el paso 4.');
   });
 });

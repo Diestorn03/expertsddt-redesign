@@ -5,7 +5,7 @@ import type { ImplantSite, TriMesh } from '../core/types';
 import { distance } from '../core/vec3';
 import { pcaOfSurface } from '../geometry/pca';
 import { addNoise, makeFrames, makeRevolutionBody, makeScanBody, placeBodies } from '../test/fixtures';
-import { capWithInsert, expectFrames, speck } from '../test/fixtures/detect';
+import { capWithInsert, expectFrames, speck, withoutTrianglesAt } from '../test/fixtures/detect';
 import { linkSitesToComponents, recoverSitesFromMesh, splitComponents } from './sites';
 
 const DEG = Math.PI / 180;
@@ -129,6 +129,27 @@ describe('one body = the outer shell plus the pieces inside it', () => {
 
   it('links each position to its body, never to the insert', () => {
     expect(linkSitesToComponents(sites, splitComponents(capture)).map((s) => s.componentIndex)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('folds the insert into a cap whose index flat moves its centroid and leans its principal axes off the cap axis', () => {
+    const open = (m: TriMesh): TriMesh => withoutTrianglesAt(m, m.positions.length / 3 - 2);
+    const insert = (height: number): TriMesh => transformMesh(makeRevolutionBody({ radius: 1.25, height, chamfer: 0.3 }), fromTranslation([0, 0, 0.35]));
+    // the review's sweep: 0.5 mm flats on caps 4.5-5.5 mm tall (about as tall as wide: undecided principal axes)
+    for (const height of [4.5, 5, 5.5]) {
+      expect(splitComponents(mergeMeshes([open(makeScanBody({ flatDepth: 0.5, height, heightSegments: 8 })), insert(height - 2)])).map((c) => c.inner.length)).toEqual([1]);
+    }
+    // a wide outer part with a deep flat (its centroid 0.5 mm off the axis), the insert well inside its round outline
+    const wide = open(makeScanBody({ radius: 3.5, height: 8.5, flatDepth: 1.5, heightSegments: 10 }));
+    expect(distance(pcaOfSurface(wide).centroid, [0, 0, pcaOfSurface(wide).centroid[2]])).toBeGreaterThan(0.4);
+    expect(splitComponents(mergeMeshes([wide, insert(6)])).map((c) => c.inner.length)).toEqual([1]);
+  });
+
+  it('never folds a piece that stands out of the top of the cap (a stacked part), nor one off the round axis', () => {
+    const stacked = transformMesh(makeRevolutionBody({ radius: 1.25, height: 5 }), fromTranslation([0, 0, 3])); // up to 8 mm, the cap 6.6
+    expect(splitComponents(mergeMeshes([cap, stacked])).map((c) => c.inner.length)).toEqual([0, 0]);
+    const flatCap = withoutTrianglesAt(makeScanBody({ flatDepth: 0.8 }), makeScanBody({ flatDepth: 0.8 }).positions.length / 3 - 2);
+    const beside = transformMesh(makeRevolutionBody({ radius: 1.0, height: 4 }), fromTranslation([-1.2, 0, 0.5])); // inside, 1.2 mm off the axis
+    expect(splitComponents(mergeMeshes([flatCap, beside])).map((c) => c.inner.length)).toEqual([0, 0]);
   });
 
   it('folds in only a shell that is on the axis and inside the box', () => {

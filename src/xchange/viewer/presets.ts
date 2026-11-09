@@ -72,19 +72,62 @@ export function presetView(preset: Preset, arch: Arch | null, frame: ArchFrame |
 
 /** What archFrame needs from the jaw scan: its mean vertex normal (its length says how coherent) and some of its points. */
 export interface JawShape {
+  /** Mean vertex normal, turned to the scan's outside (its convex side), whatever the file's winding. */
   normal: Vec3;
   points: Float32Array;
 }
 
 export function jawShape(positions: ArrayLike<number>, normals: ArrayLike<number>, maxPoints = 20_000): JawShape {
   const n = Math.floor(positions.length / 3), step = Math.max(1, Math.ceil(n / maxPoints));
-  const points = new Float32Array(3 * Math.ceil(n / step));
+  const points = new Float32Array(3 * Math.ceil(n / step)), at = new Float32Array(points.length);
   let nx = 0, ny = 0, nz = 0;
   for (let v = 0; v < n; v++) {
     nx += normals[3 * v] ?? 0; ny += normals[3 * v + 1] ?? 0; nz += normals[3 * v + 2] ?? 0;
-    if (v % step === 0) for (let c = 0; c < 3; c++) points[3 * (v / step) + c] = positions[3 * v + c]!;
+    if (v % step === 0) for (let c = 0; c < 3; c++) { points[3 * (v / step) + c] = positions[3 * v + c]!; at[3 * (v / step) + c] = normals[3 * v + c] ?? 0; }
   }
-  return { normal: n ? [nx / n, ny / n, nz / n] : [0, 0, 0], points };
+  const s = n ? convexSide(points, at) / n : 0;
+  return { normal: [s * nx, s * ny, s * nz], points };
+}
+
+/** Neighbourhood of the convexity test (mm): crowns, scan bodies and the ridge bulge on this scale; a palate does not win. */
+const CONVEX_RADIUS_MM = 3;
+
+/**
+ * +1 when the normals point to the surface's convex side, -1 when they point to its concave side: whether the points
+ * stand, on the whole, in front of the centroid of their neighbours within CONVEX_RADIUS_MM. A jaw scan's outside is its
+ * convex side (Fernando's 8 arches, either winding), so the occlusal view never looks from inside the tissue.
+ */
+function convexSide(points: Float32Array, normals: Float32Array): number {
+  const m = points.length / 3, r = CONVEX_RADIUS_MM;
+  if (!m) return 1;
+  const lo: Vec3 = [Infinity, Infinity, Infinity], hi: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < m; i++) for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c]!, points[3 * i + c]!); hi[c] = Math.max(hi[c]!, points[3 * i + c]!); }
+  const dims = [0, 1, 2].map((c) => Math.floor((hi[c]! - lo[c]!) / r) + 1);
+  const cell = (i: number, c: number): number => Math.floor((points[3 * i + c]! - lo[c]!) / r);
+  const key = (x: number, y: number, z: number): number => (x * dims[1]! + y) * dims[2]! + z;
+  const grid = new Map<number, number[]>();
+  for (let i = 0; i < m; i++) {
+    const k = key(cell(i, 0), cell(i, 1), cell(i, 2));
+    const list = grid.get(k);
+    if (list) list.push(i); else grid.set(k, [i]);
+  }
+  let sum = 0;
+  for (let i = 0; i < m; i++) {
+    const x = points[3 * i]!, y = points[3 * i + 1]!, z = points[3 * i + 2]!, cx = cell(i, 0), cy = cell(i, 1), cz = cell(i, 2);
+    let sx = 0, sy = 0, sz = 0, count = 0;
+    for (let a = Math.max(0, cx - 1); a <= Math.min(dims[0]! - 1, cx + 1); a++) {
+      for (let b = Math.max(0, cy - 1); b <= Math.min(dims[1]! - 1, cy + 1); b++) {
+        for (let c = Math.max(0, cz - 1); c <= Math.min(dims[2]! - 1, cz + 1); c++) {
+          for (const j of grid.get(key(a, b, c)) ?? []) {
+            const dx = points[3 * j]! - x, dy = points[3 * j + 1]! - y, dz = points[3 * j + 2]! - z;
+            if (dx * dx + dy * dy + dz * dz <= r * r) { sx += dx; sy += dy; sz += dz; count++; }
+          }
+        }
+      }
+    }
+    if (count > 3) sum += (sx * normals[3 * i]! + sy * normals[3 * i + 1]! + sz * normals[3 * i + 2]!) / count;
+  }
+  return sum > 0 ? -1 : 1;
 }
 
 /** Implants whose connections lie this close to the jaw scan (median over the set) sit on it: aligned, or arrived in place. */
@@ -113,8 +156,16 @@ function medianDistance(points: readonly Vec3[], cloud: Float32Array): number {
   return d[(d.length - 1) >> 1] ?? Infinity;
 }
 
-/** Anterior from the implant arch, or null without one: across the line through the two farthest apart, toward the others. */
-function implantArch(origins: readonly Vec3[], occlusal: Vec3): Vec3 | null {
+/** A set whose two end segments turn by less than this stays on one side of the arch: it has no front of its own. */
+const ARCH_TURN_COS = Math.cos((80 * Math.PI) / 180);
+
+/**
+ * The implant arch, or null without one: anterior across the line through the two implants farthest apart, toward the
+ * others, and whether the set reaches around the front of the arch (the segments at its two ends turn by 80° or more;
+ * Fernando's full arches turn 86-140°). A set on one side, from a molar to an incisor say, turns 15-79°: its "others"
+ * bulge toward the cheek, so that anterior is 25-60° off.
+ */
+function implantArch(origins: readonly Vec3[], occlusal: Vec3): { anterior: Vec3; aroundFront: boolean } | null {
   if (origins.length < 3) return null;
   const flat = origins.map((p) => sub(p, scale(occlusal, dot(p, occlusal))));
   let ends: [number, number] = [0, 1], far = -1;
@@ -126,7 +177,9 @@ function implantArch(origins: readonly Vec3[], occlusal: Vec3): Vec3 | null {
   const across = normalize(cross(occlusal, sub(b, a))), mid = scale(add(a, b), 0.5);
   const offsets = flat.filter((_, i) => i !== ends[0] && i !== ends[1]).map((p) => dot(sub(p, mid), across));
   if (Math.max(...offsets.map(Math.abs)) < ARCH_OFFSET_MM) return null;
-  return offsets.reduce((s, o) => s + o, 0) < 0 ? scale(across, -1) : across;
+  const nearest = (e: Vec3): Vec3 => flat.filter((p) => p !== e).reduce((best, p) => (length(sub(p, e)) < length(sub(best, e)) ? p : best));
+  const first = sub(nearest(a), a), last = sub(b, nearest(b));
+  return { anterior: offsets.reduce((s, o) => s + o, 0) < 0 ? scale(across, -1) : across, aroundFront: dot(first, last) <= ARCH_TURN_COS * length(first) * length(last) };
 }
 
 /** Anterior from the jaw's outline on the occlusal plane, or null when it is too round or too even to tell. */
@@ -172,8 +225,11 @@ export function archFrame(implants: readonly { origin: Vec3; axis: Vec3 }[], jaw
   }
   if (!occlusal && jaw && length(jaw.normal) >= JAW_COHERENCE) occlusal = normalize(jaw.normal);
   if (!occlusal) return null;
-  const anterior = (onJaw ? implantArch(origins, occlusal) : null)
+  // the implants' front when they reach around it (or there is no jaw to ask), else the jaw outline's
+  const arch = onJaw ? implantArch(origins, occlusal) : null;
+  const anterior = (arch && (arch.aroundFront || !jaw) ? arch.anterior : null)
     ?? (jaw ? jawAnterior(jaw.points, occlusal) : null)
+    ?? arch?.anterior
     ?? inPlane([0, -1, 0], occlusal) ?? inPlane([0, 0, 1], occlusal)!;
   return { occlusal, anterior };
 }

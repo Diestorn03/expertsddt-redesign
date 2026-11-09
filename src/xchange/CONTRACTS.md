@@ -259,6 +259,8 @@ export interface MeshComponent {
 }
 /** weld + connectedComponents + extractComponents, inner pieces folded into their body. Order = lowest triangle index, so body i of placeBodies is component i. */
 export function splitComponents(captureMesh: TriMesh, options?: { weldToleranceMm?: number }): MeshComponent[];
+/** Each body's meshes as the file holds them: outer shell, inner pieces, the fragments nearest to it (planAssembly, "No exchange"). */
+export function bodyMeshes(components: readonly MeshComponent[]): TriMesh[][];
 
 export interface RecoverOptions {
   seed?: number;
@@ -286,9 +288,13 @@ export function linkSitesToComponents(sites: readonly ImplantSite[], components:
   `SITE_PROVISIONAL {count}`; worse -> `unresolved`. Fragments -> `COMPONENT_FRAGMENTS {count}`.
   A centroid alone is never a datum (spec 4.1.5).
 - **One body = the outer shell plus what sits inside it.** A non-fragment shell B is folded into A (`A.inner`, out of
-  the list, indices renumbered) when A is the bigger one (diagonal; the lower index for twins), B's centroid lies on
-  A's axis (the principal axis whose variance stands apart) and B lies inside A's box, axis-aligned and in A's
-  principal frame, all within 2 % of A's diagonal. So a positions STL whose caps each carry an insert counts one body
+  the list, indices renumbered) when A is the bigger one (diagonal; the lower index for twins), B lies inside A's
+  axis-aligned box and either B's centroid lies on A's axis (the principal axis whose variance stands apart, through
+  A's centroid) with B inside A's box in A's principal frame, or B lies inside A's round outline seen along A's or B's
+  principal axis (the smallest circle around A's vertices: B's centroid on its axis, every vertex of B within it and
+  within A's length). All within 2 % of A's diagonal. The round outline keeps a cap's insert when an index flat moves
+  the cap's centroid off its axis (0.8 mm flat: 0.19 mm) or its principal axes lean (caps about as tall as wide;
+  library part L01 leaned 21°). So a positions STL whose caps each carry an insert counts one body
   per implant, detection fits only the caps (no duplicate implants, no "wrong scan body"), linking never picks the
   insert, and `planAssembly` exports each cap with its insert. Neighbours stick out of each other's box and a body on
   an arch strip is far from the strip's axis, so neither is folded in. The pair test is skipped above 1,024 shells.
@@ -307,8 +313,9 @@ export function linkSitesToComponents(sites: readonly ImplantSite[], components:
   axis recovered, `indexAmbiguous` true; the arch strip as an extra component -> `unresolved`; tiny fragment flagged;
   `closestPoint` / `raycast` match brute force; `weld` merges a split mesh; `linkSitesToComponents` on shuffled sites;
   caps with an insert (`test/fixtures/detect.capWithInsert`) -> one body each, found once with the cap or the cap and
-  insert as reference, linked to the cap; an off-axis shell inside the box stays apart; a body 47 mm along a site's
-  axis is never linked; files in different frames -> `framesDiffer`, the STL as geometry `fixed` with `atSites` false.
+  insert as reference, linked to the cap; inserts in caps with an index flat (0.5-0.8 mm, caps 4.5-6.6 mm tall) and in
+  a wide cap with a deep flat folded; an off-axis shell inside the box and a piece standing out of the top stay apart;
+  a body 47 mm along a site's axis is never linked; files in different frames -> `framesDiffer`, the STL as geometry `fixed` with `atSites` false.
 
 ## 4. align (builder 4)
 
@@ -419,7 +426,9 @@ export function measureManualPose(parts: readonly AssemblyPart[], target: IcpTar
 // align/deviation.ts
 /** Unsigned distance in µm from every vertex of meshA (after transformA) to the SURFACE of meshB. Exact (vs brute force, 0.5 µm) below 200 µm; may be approximate above 1000 µm. */
 export function deviationMap(meshA: TriMesh, meshB: TriMesh, transformA?: Mat4): Float32Array;
-/** The colour map (the worker's 'deviation' answer): µm per vertex of each part, clamped to maxUm, NaN where hidden from the scan (as measureFit leaves it out). */
+/** How far the colour map looks for the scan: 5 mm (deeper than Fernando's bodies sit in the gum, 3.3 mm at most). */
+export const JUDGED_WITHIN_MM = 5;
+/** The colour map (the worker's 'deviation' answer): µm per vertex of each part, clamped to maxUm, NaN where hidden from the scan (as measureFit leaves it out); a vertex farther than max(JUDGED_WITHIN_MM, maxUm / 1000) from the scan is not judged and reads maxUm, so a set dragged from far away costs a bounded search (before: unbounded, ~100x the old map). */
 export function partDeviations(parts: readonly AssemblyPart[], surface: TriangleTree, transform?: Mat4, toleranceMm?: number, maxUm?: number): Float32Array[];
 
 // align/protocol.ts
@@ -493,11 +502,20 @@ export class AlignClient {
   gum read 'weak' on every correct real case, 'failed' on one): a sample is hidden when it lies more than
   3 × toleranceMm (0.3 mm, poseScore's cap) from the jaw and the scanned surface does not clearly face it (offset within
   60° of the outward normal): under the gum, where the scanner never looked. Farther samples the scan faces stick out
-  where it shows free space: visible misses. The scan's outside is the side its normals take where the parts lie on it
+  where it shows free space: visible misses. So are samples behind the scan (offset within 37° of the inward normal)
+  whose own surface the scan shows further out: the nearest scanned triangle, or one their outward normal reaches
+  within 1.5 mm (steps of 0.25 mm, hit within 0.15 mm), faces their way (outward normals within 18°). That is a top
+  pushed into the gum along the axes (a hand move): before (review finding), those tops dropped out and a 0.4-0.5 mm
+  push read good on 3 of 8 real arches, fitting better than 0.3 mm. What really lies under the gum faces it sideways
+  (walls) or away (base). The scan's outside is the side its normals take where the parts lie on it
   (samples within the tolerance, each part's normals turned outward first), so neither winding matters. rms, p95 and
   coverage are over the visible samples (rms capped at 3 × toleranceMm: a scanned screw recess the body file lacks
-  counts as a miss, not as millimetres); `visible` is their share. Known limit: a set pushed straight along the implant
-  axes slides on the scanned walls and shows only at the tops (1 mm in: weak or acceptable; 2 mm: weak or failed).
+  counts as a miss, not as millimetres); `visible` is their share. On Fernando's 8 arches his poses keep their status
+  (good on 7, acceptable on case 2 upper), no push of 0.3 mm or more into the gum reads good, and the rms grows with
+  the push up to 1.5 mm on every arch. Known limit: such a push slides on the scanned walls and shows only at the tops,
+  so 0.75-1 mm in still reads acceptable on 5 of 8 arches (out of the gum, 1 mm reads weak or failed). Pieces inside a
+  library part (an insert) face its outer shell: they count as misses where parallel to it, hidden where not (on the
+  real nested design, aligned whole, the labels did not change); captured bodies are aligned as their outer shells.
 - **Status** (`DEFAULT_QUALITY`): `failed` (coverage < usableCoverage: nothing usable) -> `ambiguous` (flag
   `ambiguousAlternative`, or nearly isotropic source PCA within 1 % -> `symmetricSource`) -> `good` (visible >=
   minVisible, rms <= goodRmsMm and coverage >= goodCoverage) -> `acceptable` (visible >= minVisible, rms <=
@@ -524,8 +542,9 @@ export class AlignClient {
   rival flagged; wall radius of several bodies and windings, seeds with half the jaw wound the other way, none
   without round walls. Visible part (`metrics.test.ts`, `deviation.test.ts`; `test-utils.buriedJaw`): four bodies 2 mm
   deep under a gum line -> the exact pose good (the whole-body metric read weak), 2 mm / 3° off in six directions and
-  ±2 mm along the axes failed, the same numbers with the jaw or the parts wound the other way; `partDeviations` NaN
-  under the gum line, whatever the windings.
+  ±2 mm along the axes failed, a push of 0.3-1.5 mm into the gum never good and never fitting better the deeper it
+  goes, the same numbers with the jaw or the parts wound the other way; `partDeviations` NaN under the gum line,
+  whatever the windings, maxUm beyond `JUDGED_WITHIN_MM`; `test/adversarial-engine` (review of the engine slices).
 
 ## 5. export (builder 5)
 
@@ -630,7 +649,7 @@ export function safeFilename(label: string, fallback: string): string;
   "jaw": null | { "file": "jaw.stl | jaw.ply", "format": "stl | ply", "preservation": "exact-original-bytes",
                   "bytes": 123, "crc32": "1a2b3c4d", "triangles": 456 },
   "files": [{ "name": "lower_implant_position.stl", "bytes": 123, "crc32": "1a2b3c4d" }],   // every entry except report.json and README.txt, main file first
-  "notes": ["<fixed English sentences: no Boolean/cut, visual check required, index ambiguity when present, exchanged after aligning when present, not a clinical validation>"]
+  "notes": ["<fixed English sentences: no Boolean/cut, visual check required, index ambiguity when present, another geometry exported than the one the alignment was measured with (matchedWith) when present, not a clinical validation>"]
 }
 ```
 
@@ -652,25 +671,39 @@ export function safeFilename(label: string, fallback: string): string;
 - `state/`: typed store, case lifecycle (a new valid capture replaces the case; invalid keeps it), geometry library
   in IndexedDB (versioned schema, size and entry limits, never deletes silently), favourite applies at once to all
   implants or to one, multi-file capture (position file + mesh -> `linkSitesToComponents`). Workflow 2
-  (`state/case.ts`, workflow2-export): `capturedBodies(sites, components, name)` = "No exchange", each site's own
-  captured body in its implant frame (case geometry `capture:<site id>`, kind `capture`); `alignedWith` (the surfaces
-  and geometry of each site when the alignment was made) is set and cleared with `alignment`; `chosenBodies` (what a
-  new alignment uses) and `measuredBodies` (what a re-measure and the color map use: `alignedWith`, else the choice);
-  `exchangedSites`, `shownDeviation` (no map on an exchanged part), `matchedBodies` (report.json matchedWith) and
-  `stepAfterGeometry` (a pick for all implants goes on to step 3, or back to step 4 once step 3 is done). Tests
-  (`state.test.ts`, `test/ux/workflow2.ux.test.ts`): a BTH CSV + STL of caps with inserts, each body back at its site
-  is the captured shell, exchanges of all or one implant, the old re-measure of a healing cap reads weak or failed where
-  the kept alignment stays good, a hand move measured with the file's bodies, the map leaving the exchanged parts,
-  the export request and its real bundle.
+  (`state/case.ts`, workflow2-export): `readCapture` gives each component as the file holds it (`mesh`: outer shell
+  first, then its inner pieces and nearest fragments, `bodyMeshes`) and its outer shell (`shell`: the same vertices
+  and normals, the outer shell's triangles only), so `CaseState.components` (shown, linked, aligned) are the shells and
+  `CaseState.bodies` the whole bodies; `capturedBodies(sites, bodies, name)` = "No exchange", each site's own body
+  (inserts and fragments included: exported like the same STL picked as the geometry) in its implant frame (case
+  geometry `capture:<site id>`, kind `capture`); `alignmentParts(…, own)` matches a site's own body as its captured
+  shell (the pieces inside it are never in the scan; the shell's vertex layout fits the body's colour map);
+  `alignedWith` (the surfaces and geometry of each site when the alignment was made) is set and cleared with
+  `alignment`; `chosenBodies` (what a new alignment uses) and `measuredBodies` (what a re-measure and the color map
+  use: `alignedWith`, else the choice); `exchangedSites` (the geometry changed after the alignment; aligning with the
+  captured shells is no exchange), `shownDeviation` (no map on an exchanged part), `matchedBodies` (report.json
+  matchedWith) and `stepAfterGeometry` (a pick for all implants goes on to step 3, or back to step 4 once step 3 is
+  done). `redetected(s, sites, unresolved)`: another capture scan body in step 1 gives new implant frames, so the
+  geometry picks, the case geometries made for the old sites (kinds `capture` and `assembly`: same ids, old frames)
+  and the alignment with its map go (the UI evicts their cached meshes, stops a running alignment and says so); the
+  jaw and the set's pose stay. Tests (`state.test.ts`, `test/ux/workflow2.ux.test.ts`, `test/adversarial-engine`): a
+  BTH CSV + STL of caps with inserts, each body back at its site is the body of the file and exports its insert, the
+  shells share the body's vertices, exchanges of all or one implant, the old re-measure of a healing cap reads weak or
+  failed where the kept alignment stays good, a hand move measured with the file's bodies, the map leaving the
+  exchanged parts, the export request and its real bundle, a re-detection after "No exchange" and an alignment.
 - `viewer/`: three.js scene, exocad mouse preset, picking, assembly manipulation (drag, Ctrl + rotate, arrows, flip),
   markers, opacity, FOV, colour map legend (grey = not seen by the scan: NaN from `partDeviations`). Builds its own
   buffers once; never re-uploads per render. View presets per case (`viewer/presets.ts`, quality-views):
   `archFrame(implants, jawShape)` -> `{ occlusal, anterior }` in world axes, `presetView(preset, arch, frame)`;
   occlusal = the implants' mean axis averaged with the normal of the plane through their connections (3 or more in an
-  arch), anterior = across the line through the two implants farthest apart, toward the others; implants that do not
-  sit on the jaw (median connection > 6 mm from it) or too few leave it to the jaw (mean normal; outline main axis,
-  front at its narrow end); nothing -> the world table (+Z occlusal on the lower arch, -Y anterior). On Fernando's 8
-  arches every preset lands within 8.6° of the jaw's normal and mirror axis (the world table: 57-178° off).
+  arch), anterior = across the line through the two implants farthest apart, toward the others, when the set reaches
+  around the front (its two end segments turn by 80° or more; Fernando's full arches 86-140°; a set on one side of the
+  arch, 15-79°, takes the jaw's outline instead: its implants bulge toward the cheek, 25-60° off); implants that do not
+  sit on the jaw (median connection > 6 mm from it) or too few leave it to the jaw (mean normal, turned to the scan's
+  convex side so the file's winding does not matter: the centroid of the points within 3 mm lies behind each point on
+  the whole, on 8 of 8 real jaws; outline main axis, front at its narrow end); nothing -> the world table (+Z occlusal
+  on the lower arch, -Y anterior). On Fernando's 8 arches every preset lands within 8.6° of the jaw's normal and mirror
+  axis (the world table: 57-178° off).
 - `ui/`: four-step wizard in the site's style, ES/EN, keyboard alternative for guided clicks, privacy copy, the
   optional marketing e-mail (the only network call).
 

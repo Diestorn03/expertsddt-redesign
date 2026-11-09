@@ -191,8 +191,22 @@ export function icpFlags(result: IcpResult, samples: number, trimFraction: numbe
   return flags;
 }
 
-/** A point beyond the gate counts as visible only when the scan's outward normal is within 60° of its offset. */
+/** A point beyond the gate counts as visible only when the scan's outward normal is within 60° of its offset ... */
 const FACING_COS = 0.5;
+/**
+ * ... or when it lies behind the scan (the offset within 37° of the inward normal) and the scan shows its own surface
+ * further out: the scanned triangle nearest to it, or one its outward normal reaches within COVER_MM, faces the same way
+ * (outward normals within 18°). A body pushed into the gum along its axis (a hand move) hides its top that way, behind
+ * the scanned top: a miss, not a part the scanner never saw. What really lies under the gum faces it sideways (the walls)
+ * or away from it (the base). Calibrated on Fernando's 8 arches: his poses keep their status, and a push of 0.3-1.5 mm
+ * into the gum no longer fits better the deeper it goes.
+ */
+const BEHIND_COS = 0.8;
+const PARALLEL_COS = 0.95;
+const COVER_MM = 1.5;
+/** The walk along the normal: a scanned triangle within COVER_HIT_MM of a step counts as reached. */
+const COVER_STEP_MM = 0.25;
+const COVER_HIT_MM = 0.15;
 
 /** Points on one part (xyz flat) with their normals (any winding, one per part). */
 export interface PartPoints {
@@ -200,20 +214,41 @@ export interface PartPoints {
   normals: ArrayLike<number>;
 }
 
+/** cos(raw jaw normal of `triangle`, (dx, dy, dz)), the vector of length `len` (0 when degenerate). */
+function cosToTriangle(jp: Float32Array, ji: Uint32Array, triangle: number, dx: number, dy: number, dz: number, len: number): number {
+  const a = 3 * ji[3 * triangle]!, b = 3 * ji[3 * triangle + 1]!, c = 3 * ji[3 * triangle + 2]!;
+  const ux = jp[b]! - jp[a]!, uy = jp[b + 1]! - jp[a + 1]!, uz = jp[b + 2]! - jp[a + 2]!;
+  const vx = jp[c]! - jp[a]!, vy = jp[c + 1]! - jp[a + 1]!, vz = jp[c + 2]! - jp[a + 2]!;
+  const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+  const l = len * Math.hypot(nx, ny, nz);
+  return l > 0 ? (dx * nx + dy * ny + dz * nz) / l : 0;
+}
+
 /**
  * Distance (mm) from every point, moved by `t`, to the jaw surface, and whether the scan can see it. A point more than
- * RANK_CAP_TOLERANCES × toleranceMm away is hidden unless the scanned surface clearly faces it (the offset within 60° of
- * that triangle's outward normal): behind the scan, under the gum, where the scanner never looked, or past an edge of it.
- * Facing points stick out where the scan shows free space: visible misses. The scan's outside is the side its normals
- * take where the parts lie on it (points within the tolerance, each part's normals turned outward first), so neither the
- * jaw's nor a part's winding matters. Points beyond `maxMm`: Infinity, visible.
+ * RANK_CAP_TOLERANCES × toleranceMm away is hidden unless the scan clearly faces it (the offset within 60° of that
+ * triangle's outward normal: it sticks out where the scan shows free space) or shows its surface further out (see
+ * BEHIND_COS): those are visible misses. The rest is behind the scan, under the gum, where the scanner never looked, or
+ * past an edge of it. The scan's outside is the side its normals take where the parts lie on it (points within the
+ * tolerance, each part's normals turned outward first), so neither the jaw's nor a part's winding matters. Points beyond
+ * `maxMm`: Infinity, visible.
  */
 export function jawDistances(clouds: readonly PartPoints[], surface: TriangleTree, transform: Mat4, toleranceMm: number, maxMm = Infinity): { mm: Float64Array; hidden: Uint8Array }[] {
   const t = transform;
   const m0 = t[0]!, m1 = t[1]!, m2 = t[2]!, m3 = t[3]!, m4 = t[4]!, m5 = t[5]!;
   const m6 = t[6]!, m7 = t[7]!, m8 = t[8]!, m9 = t[9]!, m10 = t[10]!, m11 = t[11]!;
   const jp = surface.mesh.positions, ji = surface.mesh.indices, hit = new Float64Array(4);
+  const at = (p: ArrayLike<number>, i: number): Vec3 => {
+    const x = p[3 * i]!, y = p[3 * i + 1]!, z = p[3 * i + 2]!;
+    return [m0 * x + m1 * y + m2 * z + m3, m4 * x + m5 * y + m6 * z + m7, m8 * x + m9 * y + m10 * z + m11];
+  };
+  const turned = (q: ArrayLike<number>, i: number, s: number): Vec3 => {
+    const x = s * q[3 * i]!, y = s * q[3 * i + 1]!, z = s * q[3 * i + 2]!;
+    return [m0 * x + m1 * y + m2 * z, m4 * x + m5 * y + m6 * z, m8 * x + m9 * y + m10 * z];
+  };
+  const flips: number[] = [];
   const facing = clouds.map((c) => new Float32Array(c.points.length / 3)); // cos(offset, raw jaw normal)
+  const parallel = clouds.map((c) => new Float32Array(c.points.length / 3)); // cos(outward part normal, raw jaw normal)
   let agree = 0;
   const out = clouds.map((cloud, k) => {
     const p = cloud.points, nb = cloud.normals, n = p.length / 3;
@@ -223,29 +258,48 @@ export function jawDistances(clouds: readonly PartPoints[], surface: TriangleTre
     cx /= n; cy /= n; cz /= n;
     for (let i = 0; i < n; i++) outward += (p[3 * i]! - cx) * nb[3 * i]! + (p[3 * i + 1]! - cy) * nb[3 * i + 1]! + (p[3 * i + 2]! - cz) * nb[3 * i + 2]!;
     const flip = outward < 0 ? -1 : 1;
+    flips.push(flip);
     const mm = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      const x = p[3 * i]!, y = p[3 * i + 1]!, z = p[3 * i + 2]!;
-      const px = m0 * x + m1 * y + m2 * z + m3, py = m4 * x + m5 * y + m6 * z + m7, pz = m8 * x + m9 * y + m10 * z + m11;
+      const [px, py, pz] = at(p, i);
       const d = Math.sqrt(closestOnSurface(surface, px, py, pz, maxMm, hit));
       mm[i] = d;
       if (!(d < Infinity)) continue;
-      const tri = hit[3]!, a = 3 * ji[3 * tri]!, b = 3 * ji[3 * tri + 1]!, c = 3 * ji[3 * tri + 2]!;
-      const ux = jp[b]! - jp[a]!, uy = jp[b + 1]! - jp[a + 1]!, uz = jp[b + 2]! - jp[a + 2]!;
-      const vx = jp[c]! - jp[a]!, vy = jp[c + 1]! - jp[a + 1]!, vz = jp[c + 2]! - jp[a + 2]!;
-      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-      const len = d * Math.hypot(nx, ny, nz);
-      facing[k]![i] = len > 0 ? ((px - hit[0]!) * nx + (py - hit[1]!) * ny + (pz - hit[2]!) * nz) / len : 0;
-      if (d <= toleranceMm) {
-        const qx = nb[3 * i]!, qy = nb[3 * i + 1]!, qz = nb[3 * i + 2]!;
-        agree += flip * Math.sign((m0 * qx + m1 * qy + m2 * qz) * nx + (m4 * qx + m5 * qy + m6 * qz) * ny + (m8 * qx + m9 * qy + m10 * qz) * nz);
-      }
+      const tri = hit[3]!;
+      facing[k]![i] = cosToTriangle(jp, ji, tri, px - hit[0]!, py - hit[1]!, pz - hit[2]!, d);
+      const [ox, oy, oz] = turned(nb, i, flip);
+      const along = cosToTriangle(jp, ji, tri, ox, oy, oz, Math.hypot(ox, oy, oz));
+      parallel[k]![i] = along;
+      if (d <= toleranceMm) agree += Math.sign(along);
     }
     return mm;
   });
   const outside = agree < 0 ? -1 : 1; // no point on the scan at all: assume outward jaw normals
   const gate = RANK_CAP_TOLERANCES * toleranceMm;
-  return out.map((mm, k) => ({ mm, hidden: Uint8Array.from(mm, (d, i) => (d > gate && d < Infinity && outside * facing[k]![i]! < FACING_COS ? 1 : 0)) }));
+  /** Behind the scan: does the outward normal of point i of cloud k reach a scanned triangle that faces its way? */
+  const covered = (k: number, i: number): boolean => {
+    const [px, py, pz] = at(clouds[k]!.points, i);
+    const [ox, oy, oz] = turned(clouds[k]!.normals, i, flips[k]!);
+    const len = Math.hypot(ox, oy, oz);
+    if (!(len > 0)) return false;
+    for (let s = COVER_STEP_MM; s <= COVER_MM + 1e-9; s += COVER_STEP_MM) {
+      const f = s / len;
+      if (closestOnSurface(surface, px + f * ox, py + f * oy, pz + f * oz, COVER_HIT_MM, hit) < Infinity) {
+        return outside * cosToTriangle(jp, ji, hit[3]!, ox, oy, oz, len) >= PARALLEL_COS;
+      }
+    }
+    return false;
+  };
+  return out.map((mm, k) => ({
+    mm,
+    hidden: Uint8Array.from(mm, (d, i) => {
+      if (!(d > gate && d < Infinity)) return 0;
+      const f = outside * facing[k]![i]!;
+      if (f >= FACING_COS) return 0;
+      // a scanned triangle the normal reaches within COVER_MM lies within COVER_MM + COVER_HIT_MM of the point: d, no farther
+      return f <= -BEHIND_COS && (outside * parallel[k]![i]! >= PARALLEL_COS || (d <= COVER_MM + COVER_HIT_MM && covered(k, i))) ? 0 : 1;
+    }),
+  }));
 }
 
 /**

@@ -48,8 +48,13 @@ export interface CaseState {
   /** Merged, ids site-1..n. */
   sites: ImplantSite[];
   captureMesh: TriMesh | null;
-  /** splitComponents(captureMesh) meshes, indexed like site.componentIndex. */
+  /**
+   * The outer shell of each splitComponents(captureMesh) body, indexed like site.componentIndex: what is shown, linked
+   * and aligned (CaptureResult.components[].shell, the body's vertices with the outer shell's triangles).
+   */
   components: TriMesh[];
+  /** Each body as the file holds it (outer shell, the pieces inside it, its fragments), indexed like `components`: what "No exchange" keeps. */
+  bodies: TriMesh[];
   /** Mesh-only capture still waiting for its capture scan body. */
   needsReference: boolean;
   referenceId: string | null;
@@ -85,7 +90,7 @@ export const CROSS_FILE_TOLERANCE = 1e-7;
 
 export function freshCase(arch: Arch | null = null): CaseState {
   return {
-    arch, sources: [], format: null, sites: [], captureMesh: null, components: [], needsReference: false, referenceId: null,
+    arch, sources: [], format: null, sites: [], captureMesh: null, components: [], bodies: [], needsReference: false, referenceId: null,
     unresolved: [], confirmed: new Set(), excluded: new Set(), geometryBySite: {}, caseGeometries: new Map(), jaw: null,
     jawColors: false, jawSkipped: false, surfaces: 'replacement', assembly: identity(), alignment: null, alignedWith: null, lastAttempt: null,
     lastAlignedPose: null, undo: [], deviation: null, measuring: false, step: 1, sample: false, exportedSinceChange: false,
@@ -158,19 +163,22 @@ export const canMatchCapture = (sites: readonly ImplantSite[], components: reado
 
 /**
  * The surfaces that stand for each implant during alignment, in capture coordinates: the replacement
- * geometry placed at the site, or the captured shell. Sites without a surface are skipped.
+ * geometry placed at the site, or the captured shell. A site whose geometry is its own body from the file (`own`, "No
+ * exchange") is matched as its captured shell too: the pieces inside the shell are never in the scan. Sites without a
+ * surface are skipped.
  */
 export function alignmentParts(
   sites: readonly ImplantSite[],
   geometryOf: (siteId: string) => TriMesh | undefined,
   components: readonly TriMesh[],
   surfaces: Surfaces,
+  own: (siteId: string) => boolean = () => false,
 ): AssemblyPart[] {
   const parts: AssemblyPart[] = [];
   for (const site of sites) {
-    if (surfaces === 'capture') {
-      const mesh = site.componentIndex === undefined ? undefined : components[site.componentIndex];
-      if (mesh) parts.push({ siteId: site.id, mesh });
+    const shell = site.componentIndex === undefined ? undefined : components[site.componentIndex];
+    if (surfaces === 'capture' || (shell && own(site.id))) {
+      if (shell) parts.push({ siteId: site.id, mesh: shell });
     } else {
       const g = geometryOf(site.id);
       if (g) parts.push({ siteId: site.id, mesh: transformMesh(g, site.matrix) });
@@ -184,12 +192,30 @@ export const chosenBodies = (s: Pick<CaseState, 'surfaces' | 'geometryBySite'>):
 /** What a re-measure and the color map use: the alignment's bodies, else the choice in place (a first pose moved by hand). */
 export const measuredBodies = (s: Pick<CaseState, 'surfaces' | 'geometryBySite' | 'alignedWith'>): AlignedWith => s.alignedWith ?? chosenBodies(s);
 
+/**
+ * New implant frames from a detection in step 1 (another capture scan body): what was built on the old frames goes. The
+ * geometry picks, the case geometries made for the old sites ("No exchange" bodies and positioned assemblies: their
+ * meshes are in the old implant frames, under ids that repeat) and the alignment with its map. The jaw scan and the
+ * set's pose stay, so aligning again starts where the set is. `dropped`: the case geometries that went.
+ */
+export function redetected(s: CaseState, sites: ImplantSite[], unresolved: number[]): { patch: Partial<CaseState>; dropped: string[] } {
+  const kept = new Map([...s.caseGeometries].filter(([, g]) => g.kind === 'sample'));
+  return {
+    patch: {
+      sites, unresolved, needsReference: false, confirmed: new Set(), excluded: new Set(), geometryBySite: {}, caseGeometries: kept,
+      alignment: null, alignedWith: null, lastAttempt: null, lastAlignedPose: null, deviation: null, exportedSinceChange: false,
+    },
+    dropped: [...s.caseGeometries.keys()].filter((id) => !kept.has(id)),
+  };
+}
+
 /** Case-geometry id of a site's own captured body ("No exchange"). */
 export const captureGeometryId = (siteId: string): string => `capture:${siteId}`;
 
 /**
- * "No exchange": each site's own body from the positions file, in its implant frame (placed at the site it is the
- * captured shell again), keyed by site id. Sites without a captured body are skipped.
+ * "No exchange": each site's own body from the positions file, in its implant frame (placed at the site it is the body
+ * of the file again), keyed by site id. `components`: the bodies as the file holds them (CaseState.bodies, the pieces
+ * inside a cap and its fragments included). Sites without a captured body are skipped.
  */
 export function capturedBodies(sites: readonly ImplantSite[], components: readonly TriMesh[], name: string): Map<string, CaseGeometry> {
   const out = new Map<string, CaseGeometry>();
@@ -213,10 +239,14 @@ export function alignedBody(s: BodyState, siteId: string): string | undefined {
   return w.surfaces === 'capture' ? CAPTURE_BODY_ID : bodyOf(s, w.geometryBySite[siteId]);
 }
 
-/** Active sites whose exported body is not the one they were aligned with: an exchange after the alignment. */
+/**
+ * Active sites whose geometry changed after the alignment: an exchange after aligning (it keeps the alignment). Aligning
+ * with the captured shells ('capture' surfaces) is no exchange: the geometry exported is the one in place then.
+ */
 export function exchangedSites(s: BodyState): ImplantSite[] {
-  if (!s.alignment || !s.alignedWith) return [];
-  return activeSites(s).filter((x) => alignedBody(s, x.id) !== bodyOf(s, s.geometryBySite[x.id]));
+  const w = s.alignedWith;
+  if (!s.alignment || !w) return [];
+  return activeSites(s).filter((x) => bodyOf(s, w.geometryBySite[x.id]) !== bodyOf(s, s.geometryBySite[x.id]));
 }
 
 /**

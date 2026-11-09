@@ -14,7 +14,7 @@ import type { ImplantSite, TriMesh, Vec3 } from '../core/types';
 import { distance, dot, sub } from '../core/vec3';
 import { buildBvh, nearestOnSurface, type Bvh } from '../geometry/bvh';
 import { pcaOfSurface } from '../geometry/pca';
-import { describeComponents, diagonal, siteCost, type MeshComponent } from './sites';
+import { bodyMeshes, describeComponents, diagonal, siteCost, type MeshComponent } from './sites';
 
 export type AssemblyPlan =
   /** One body (possibly several shells of one part) in the implant frame: place it at every site as usual. */
@@ -83,8 +83,7 @@ export function planAssembly(mesh: TriMesh, sites: readonly ImplantSite[], optio
   if (!(spread > 1.5 * largest) && !atSites) return { kind: 'single' };
   if (!siteOfBody) return { kind: 'countMismatch', bodies: n, sites: sites.length };
 
-  const parts = bodies.map((b) => [b.mesh, ...b.inner]);
-  for (const f of components) if (f.fragment) parts[nearestBody(f, bodies)]!.push(f.mesh);
+  const parts = bodyMeshes(components);
   const local: TriMesh[] = new Array<TriMesh>(n);
   bodies.forEach((_, i) => {
     const site = siteOfBody![i]!;
@@ -94,14 +93,6 @@ export function planAssembly(mesh: TriMesh, sites: readonly ImplantSite[], optio
   const deviation = atSites ? congruence(local, tolerance, samples, seed) : null;
   if (deviation !== null) return { kind: 'normalized', mesh: local[0]!, maxDeviationMm: deviation };
   return { kind: 'fixed', meshBySite: Object.fromEntries(sites.map((s, i) => [s.id, local[i]!])), atSites };
-}
-
-function nearestBody(fragment: MeshComponent, bodies: readonly MeshComponent[]): number {
-  let best = 0;
-  bodies.forEach((b, i) => {
-    if (distance(b.centroid, fragment.centroid) < distance(bodies[best]!.centroid, fragment.centroid)) best = i;
-  });
-  return best;
 }
 
 /**

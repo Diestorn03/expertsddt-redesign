@@ -8,7 +8,7 @@ import { inverseRigid } from '../core/mat4';
 import { computeVertexNormals, transformMesh } from '../core/mesh';
 import type { ImplantSite, ReplacementGeometry, TriMesh } from '../core/types';
 import { AlignClient } from '../align/client';
-import { activeSites, alignmentParts, bodyOf, chosenBodies, freshCase, reachable, step1Blocker, Store, type AlignedWith, type CaseState, type Step } from '../state/case';
+import { activeSites, alignmentParts, bodyOf, captureGeometryId, chosenBodies, freshCase, reachable, step1Blocker, Store, type AlignedWith, type CaseState, type Step } from '../state/case';
 import { JobsClient } from '../state/jobs';
 import { UiError } from '../state/jobs-handler';
 import { Library, LibraryError } from '../state/library';
@@ -206,7 +206,7 @@ export class App {
       const gid = bodies.geometryBySite[siteId];
       return gid ? this.meshData(gid)?.mesh : undefined;
     };
-    this.partsCache = alignmentParts(activeSites(s), geometryOf, s.components, bodies.surfaces);
+    this.partsCache = alignmentParts(activeSites(s), geometryOf, s.components, bodies.surfaces, (id) => bodies.geometryBySite[id] === captureGeometryId(id));
     return this.partsCache;
   }
 

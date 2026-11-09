@@ -79,6 +79,20 @@ describe('measureFit: only the part of the bodies the scan sees', () => {
     }
   });
 
+  it('a push into the gum along the axes reads at best acceptable from 0.3 mm, and never fits better the deeper it goes', () => {
+    // the tops hidden behind the scanned tops are misses (the scanned triangle in front, or the one their normal reaches,
+    // faces their way): before, they dropped out and a 0.5 mm push fitted better than 0.3 mm (review finding)
+    for (const depth of [0.5, 2]) {
+      const target = depth === 2 ? tg : buildIcpTarget(buriedJaw(sc, depth));
+      const rms = [0.3, 0.4, 0.5, 0.75, 1, 1.25, 1.5].map((mm) => {
+        const m = measureFit(sc.parts, target, multiply(fromTranslation(scale(up, -mm)), sc.captureToJaw));
+        expect(statusOf(m, [], DEFAULT_QUALITY)).not.toBe('good');
+        return m.rmsMm;
+      });
+      rms.slice(1).forEach((r, i) => expect(r).toBeGreaterThanOrEqual(rms[i]! - 1e-3));
+    }
+  });
+
   it('does not depend on the winding of the jaw scan or of the parts', () => {
     const flippedJaw = measureFit(sc.parts, buildIcpTarget(flipWinding(gum)), sc.captureToJaw);
     expect([flippedJaw.visible, flippedJaw.coverage]).toEqual([exact.visible, exact.coverage]);

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { fromTranslation, inverseRigid } from '../core/mat4';
+import { fromTranslation, inverseRigid, multiply } from '../core/mat4';
 import { transformMesh } from '../core/mesh';
 import { addNoise, makeScanBody, makeSyntheticCase, randomRigid } from '../test/fixtures';
-import { deviationMap, partDeviations } from './deviation';
+import { deviationMap, JUDGED_WITHIN_MM, partDeviations } from './deviation';
 import { buildTriangleTree } from './kdtree';
 import { bruteDistance2, buriedJaw, flipWinding } from './test-utils';
 
@@ -61,5 +61,13 @@ describe('partDeviations (the colour map)', () => {
     const off = partDeviations(sc.parts, buildTriangleTree(jaw), fromTranslation([0, 0, 0.2]));
     expect(off.every((m) => m.every((um) => Number.isNaN(um) || (um >= 0 && um <= 1000)))).toBe(true);
     expect(() => partDeviations(sc.parts, buildTriangleTree(jaw), sc.captureToJaw, 0.1, 0)).toThrow(expect.objectContaining({ details: { reason: 'maxUm' } }));
+  });
+
+  it(`looks for the scan within ${JUDGED_WITHIN_MM} mm only: farther, a vertex is not judged and reads maxUm (a set dragged in from far away)`, () => {
+    const sc = makeSyntheticCase({ seed: 73, implants: 3, bodyOptions: { heightSegments: 12 } });
+    const tree = buildTriangleTree(buriedJaw(sc, 2));
+    const far = partDeviations(sc.parts, tree, multiply(fromTranslation([0, 0, 200]), sc.captureToJaw));
+    expect(far.every((m) => m.every((um) => um === 1000))).toBe(true);
+    expect(JUDGED_WITHIN_MM).toBeGreaterThan(3.3); // deeper than Fernando's scan bodies sit in the gum: those stay grey
   });
 });

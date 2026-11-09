@@ -506,6 +506,7 @@ const es: Copy = {
     captureReplaced: 'Captura reemplazada.',
     usingOnly: 'Se usa solo el archivo {kind}.',
     detected: { found: 'Posiciones encontradas: {found}.', provisional: 'Provisionales: {provisional}.', unresolved: 'No reconocidas: {unresolved}.' },
+    realign: 'Posiciones detectadas de nuevo: se borró la alineación. Vuelve a alinear en el paso 4.',
     applied: 'Se aplicó {name} a {target}.',
     noExchange: 'Sin intercambio en {target}: se quedan los cuerpos del archivo.',
     undo: 'Deshacer',

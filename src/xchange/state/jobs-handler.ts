@@ -5,10 +5,10 @@
  * File names never reach this module: only bytes and a lowercase extension.
  */
 import { toErrorPayload, XchangeError, type XchangeErrorPayload, type XchangeWarning } from '../core/errors';
-import { computeVertexNormals } from '../core/mesh';
+import { computeVertexNormals, mergeMeshes } from '../core/mesh';
 import type { CaptureFormat, ExportRequest, ImplantSite, MeshFormat, TriMesh } from '../core/types';
 import { planAssembly, verifyAssemblyLayout, type AssemblyPlan } from '../detect/assembly';
-import { linkSitesToComponents, recoverSitesFromMesh, splitComponents } from '../detect/sites';
+import { bodyMeshes, linkSitesToComponents, recoverSitesFromMesh, splitComponents } from '../detect/sites';
 import { buildBundle } from '../export/bundle';
 import { detectMeshFormat, parseMesh } from '../io/mesh/index';
 import { parsePositions } from '../io/positions/index';
@@ -33,8 +33,14 @@ export interface CaptureResult {
   format: CaptureFormat;
   warnings: XchangeWarning[];
   mesh?: TriMesh;
-  /** splitComponents(mesh), indexed like site.componentIndex; fragments flagged. */
-  components?: (ShownMesh & { fragment: boolean })[];
+  /**
+   * splitComponents(mesh), indexed like site.componentIndex; fragments flagged. `mesh` is the body as the file holds it:
+   * its outer shell first, then the pieces inside it and its fragments (detect/sites bodyMeshes), what "No exchange"
+   * keeps and exports. `shell` is its outer shell, what is shown, linked and aligned: the same vertices (and `normals`)
+   * with the outer shell's triangles only, so a colour map of the shell fits the body; `shell` is `mesh` when the file
+   * holds nothing more.
+   */
+  components?: (ShownMesh & { shell: TriMesh; fragment: boolean })[];
   /**
    * Position file(s) and mesh in different coordinate systems: fewer than half of the positions that could have a
    * body sit on one. The sites stay unlinked and the UI offers to keep only one of the two (captureOnly).
@@ -138,7 +144,16 @@ export function readCapture(files: readonly InFile[]): CaptureResult {
       else result.framesDiffer = true;
     }
     result.mesh = mesh;
-    result.components = components.map((c) => ({ ...shown(c.mesh), fragment: c.fragment }));
+    const whole = bodyMeshes(components);
+    let body = 0;
+    result.components = components.map((c) => {
+      const parts = c.fragment ? [c.mesh] : whole[body++]!;
+      if (parts.length === 1) return { ...shown(c.mesh), shell: c.mesh, fragment: c.fragment };
+      const all = mergeMeshes(parts); // the outer shell's vertices and triangles first
+      const shell: TriMesh = { positions: all.positions, indices: all.indices.subarray(0, c.mesh.indices.length) };
+      if (all.colors) shell.colors = all.colors;
+      return { ...shown(all), shell, fragment: false };
+    });
   }
   return result;
 }

@@ -106,7 +106,7 @@ sample jaw scan", y el paso 4 alinea solo (Good fit, unos 4 µm) y exporta el ZI
 exchange", el mismo escaneo, y después Geometría [Change] → "Sample scan body": vuelve al paso 4 con la alineación
 intacta y la nota.
 
-**Probado:** 577 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 595 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones
@@ -116,8 +116,13 @@ cortados.
 - No hay plantilla integrada: la H6.6 del prototipo no se copia. La detección en malla necesita un cuerpo de
   referencia de la biblioteca.
 - Los umbrales de calidad son provisionales (`align/metrics.ts` `DEFAULT_QUALITY`): salen de las 8 arcadas de Fernando
-  y los fija su tolerancia por implante. Un conjunto empujado justo a lo largo de los ejes de los implantes resbala por
-  las paredes escaneadas y solo se nota en los topes: 1 mm puede salir «aceptable».
+  y los fija su tolerancia por implante. Un conjunto empujado hacia la encía a lo largo de los ejes resbala por las
+  paredes escaneadas y solo se nota en los topes: desde 0,3 mm ya no sale «buena» y el RMS crece con el empuje, pero
+  0,75-1 mm aún sale «aceptable» en 5 de 8 arcadas.
+- Una pieza de la biblioteca con un inserto (L03, L04…) se alinea entera: las caras del inserto paralelas a la tapa
+  cuentan como fallos. En el diseño real de Fernando las etiquetas no cambian; los cuerpos del archivo de posiciones se
+  alinean solo con la tapa. Las piezas apiladas (una sobresale de la otra, L02 y L71-L76) siguen contando como dos
+  cuerpos si se importan como captura.
 - Con un solo cuerpo redondo, el giro axial queda arbitrario; se marca, no se adivina.
 - Quedan dos ICP y dos árboles de punto más cercano (`detect/` con BVH, `align/` con k-d tree). Es deuda aceptada:
   conviene unificarlos con casos reales para comparar.

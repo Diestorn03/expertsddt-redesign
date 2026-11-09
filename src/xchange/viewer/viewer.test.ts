@@ -10,6 +10,7 @@ import { cross, dot } from '../core/vec3';
 import { makeArch, makeFrames, randomRigid } from '../test/fixtures';
 import { makeSample } from '../sample';
 import { readJaw } from '../state/jobs-handler';
+import { flipWinding } from '../align/test-utils';
 import { sectionPlane } from './section';
 
 describe('color map', () => {
@@ -106,6 +107,16 @@ describe('archFrame: the presets follow each case (P8)', () => {
       }
     }
     expect(archFrame([], null)).toBeNull();
+  });
+
+  it('the jaw scan alone looks at its outside (its convex side) whatever the winding of the file, the sample case too', () => {
+    const sample = readJaw({ bytes: makeSample().jaw, extension: 'ply' }).mesh;
+    for (const [mesh, occlusal] of [[makeArch('lower'), [0, 0, 1]], [makeArch('upper'), [0, 0, -1]], [sample, [0, 0, -1]]] as const) {
+      for (const m of [mesh, flipWinding(mesh)]) {
+        const f = archFrame([], jawShape(m.positions, computeVertexNormals(m)))!;
+        expect(deg(f.occlusal, occlusal as unknown as Vec3)).toBeLessThan(10);
+      }
+    }
   });
 
   it('the sample case: occlusal -Z and anterior -Y within 10°, in the jaw and, before the jaw, in the capture', () => {

@@ -837,6 +837,15 @@ export class AlignStep {
     q(last, 'span').textContent = this.exportLine;
   }
 
+  /** New implant frames (a detection in step 1): an alignment or measurement still running would be for the old ones. */
+  stopAligning(): void {
+    this.alignJob?.abort();
+    this.alignJob = null;
+    this.stopMeasure();
+    this.leaveGuided(false);
+    this.alignedResult = null;
+  }
+
   /** Cancels every running alignment or measurement (new case, dispose). */
   cancelAll(): void {
     this.alignJob?.abort();

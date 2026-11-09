@@ -506,6 +506,7 @@ const en = {
     captureReplaced: 'Capture replaced.',
     usingOnly: 'Using only the {kind} file.',
     detected: { found: 'Positions found: {found}.', provisional: 'Provisional: {provisional}.', unresolved: 'Not recognized: {unresolved}.' },
+    realign: 'Positions detected again: the alignment was cleared. Align again in step 4.',
     applied: '{name} applied to {target}.',
     noExchange: 'No exchange on {target}: the bodies of the file stay.',
     undo: 'Undo',

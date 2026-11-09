@@ -189,7 +189,7 @@ export class GeometryStep {
     const targets = activeSites(s).filter((x) => !one || x.id === app.selected);
     const caseGeometries = new Map(s.caseGeometries);
     const geometryBySite = { ...s.geometryBySite };
-    for (const [siteId, g] of capturedBodies(targets, s.components, c.s2.fileBody)) {
+    for (const [siteId, g] of capturedBodies(targets, s.components.map((shell, i) => s.bodies[i] ?? shell), c.s2.fileBody)) {
       if (!caseGeometries.has(g.id)) caseGeometries.set(g.id, g);
       geometryBySite[siteId] = g.id;
     }

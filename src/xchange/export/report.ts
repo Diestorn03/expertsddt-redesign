@@ -91,7 +91,7 @@ const NOTES = {
   poseChanged:
     'The exported pose is not the measured alignment pose (matchesExport false): the alignment metrics do not describe these files.',
   exchanged:
-    'The geometry was exchanged after aligning: the alignment (pose and metrics) is the one measured with alignment.perSite[].matchedWith, not with the exported geometry.',
+    'The exported geometry is not the one the alignment was measured with: the alignment (pose and metrics) is the one measured with alignment.perSite[].matchedWith.',
   clinical:
     'A geometric fit is not a clinical validation: confirm units, connection, index and the result before any clinical or manufacturing use.',
 } as const;
@@ -252,7 +252,7 @@ interface ReadmeText {
   fit: (rms: string, p95: string, coverage: string, tolerance: string, visible: string) => string;
   noAlignment: string;
   poseChanged: string;
-  /** The geometry was exchanged after aligning: what the alignment used, what is exported. */
+  /** Another geometry exported than the one aligned with (an exchange after aligning, or the captured shells matched): both, and whose numbers these are. */
   exchanged: (aligned: string, exported: string) => string;
   /** How the bodies of the positions file (id 'capture') read in `exchanged`. */
   fileBodies: string;
@@ -290,7 +290,7 @@ const ES: ReadmeText = {
   noAlignment: 'Sin alineación registrada.',
   poseChanged: 'La posición exportada no es la de esta alineación: sus métricas no describen estos archivos.',
   exchanged: (aligned, exported) =>
-    `Alineado con ${aligned}; se exporta ${exported}. La geometría se intercambió después de alinear: la posición y estas métricas son las medidas con ${aligned}.`,
+    `Alineado con ${aligned}; se exporta ${exported}. La posición y estas métricas son las medidas con ${aligned}.`,
   fileBodies: 'los cuerpos del archivo de posiciones',
   limits: {
     shells:
@@ -337,7 +337,7 @@ const EN: ReadmeText = {
   noAlignment: 'No alignment recorded.',
   poseChanged: "The exported pose is not this alignment's pose: its metrics do not describe these files.",
   exchanged: (aligned, exported) =>
-    `Aligned with ${aligned}; exported with ${exported}. The geometry was exchanged after aligning: the position and these metrics are the ones measured with ${aligned}.`,
+    `Aligned with ${aligned}; exported with ${exported}. The position and these metrics are the ones measured with ${aligned}.`,
   fileBodies: 'the bodies of the positions file',
   limits: {
     shells:
