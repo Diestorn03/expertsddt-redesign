@@ -27,6 +27,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - run: npm install -g npm@11.5.2 # the lockfiles are written by npm 11; Node 22's bundled npm 10 rejects them in npm ci
       - run: npm ci
       - run: npm run build
         env:
