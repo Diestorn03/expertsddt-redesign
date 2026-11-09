@@ -265,7 +265,7 @@
 .xch__canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
 .xch__stage.is-grab .xch__canvas { cursor: grab; }
 .xch__stage.is-grabbing .xch__canvas { cursor: grabbing; }
-.xch__stage.is-guided .xch__canvas { cursor: crosshair; }
+.xch__stage:is(.is-guided, .is-measure) .xch__canvas { cursor: crosshair; }
 .xch__labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .xch__tag, .xch__pin { position: absolute; left: 0; top: 0; will-change: transform; padding: .2rem .55rem; border-radius: 999px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: 0 6px 16px -8px rgba(14,10,52,.7); color: var(--ink); font-size: .75rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .xch__tag.is-off, .xch__pin.is-off { visibility: hidden; }
@@ -279,8 +279,9 @@
 .xch__tool:hover { background: rgba(4,107,210,.1); color: var(--blue); }
 .xch__tool:active { transform: scale(.94); }
 .xch__stage .xch__tool:focus-visible { outline-offset: 1px; } /* the ring stays on the glass, off the indigo */
-.xch__tool[aria-pressed="true"], .xch__tool[aria-expanded="true"] { background: rgba(4,107,210,.14); color: var(--blue-dark); }
-[data-theme="dark"] .xch__tool:hover, [data-theme="dark"] .xch__tool[aria-pressed="true"], [data-theme="dark"] .xch__tool[aria-expanded="true"] { color: #8fc1ff; background: rgba(111,182,255,.14); }
+/* .is-on: the Section button while the cut is on, its popover closed */
+.xch__tool[aria-pressed="true"], .xch__tool[aria-expanded="true"], .xch__tool.is-on { background: rgba(4,107,210,.14); color: var(--blue-dark); }
+[data-theme="dark"] .xch__tool:hover, [data-theme="dark"] .xch__tool[aria-pressed="true"], [data-theme="dark"] .xch__tool[aria-expanded="true"], [data-theme="dark"] .xch__tool.is-on { color: #8fc1ff; background: rgba(111,182,255,.14); }
 /* the map and transparency toggles before a measurement or a jaw: shown (their tooltip says what they are), inert */
 .xch__tool[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
 .xch__tool[aria-disabled="true"]:is(:hover, :active) { background: transparent; color: var(--ink); transform: none; }
@@ -357,13 +358,28 @@
 .xch__crosshair::before, .xch__crosshair::after { content: ''; position: absolute; background: var(--xch-active); box-shadow: 0 0 0 1px #1e293b; }
 .xch__crosshair::before { left: 11px; top: 0; width: 2px; height: 24px; }
 .xch__crosshair::after { top: 11px; left: 0; height: 2px; width: 24px; }
-.xch__stage.is-guided:focus-visible .xch__crosshair, .xch__stage.is-guided.is-keyboard .xch__crosshair { display: block; }
+.xch__stage:is(.is-guided, .is-measure):focus-visible .xch__crosshair, .xch__stage:is(.is-guided, .is-measure).is-keyboard .xch__crosshair { display: block; }
 .xch__ctrlchip { position: absolute; left: 50%; top: .9rem; transform: translateX(-50%); z-index: 3; padding: .3rem .8rem; border-radius: 999px; background: var(--xch-active); color: #1e293b; font-size: .78rem; font-weight: 600; pointer-events: none; }
+/* the distance tool's hint, where the Ctrl chip shows (never both: set drags pause while measuring); it wraps clear of the icon bar */
+/* a popover (top right) would cover the chips at the top center: they wait until it closes */
+.xch__stage:has(.xch__display:not([hidden])) :is(.xch__hintchip, .xch__ctrlchip) { visibility: hidden; }
+.xch__hintchip { position: absolute; left: 50%; top: .9rem; transform: translateX(-50%); z-index: 3; width: max-content; max-width: calc(100% - 2 * (var(--xch-btn) + 2.4rem)); padding: .35rem .85rem; border-radius: 999px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: var(--xch-float); color: var(--ink); font-size: .78rem; font-weight: 600; line-height: 1.35; text-align: center; pointer-events: none; }
+/* the distance overlay (viewer.ts, labels layer): a 2 px --xch-active line with the crosshair's 1 px dark halo, 12 px
+   dots, the value pill at the midpoint; they scale in through --pop (GSAP), and hide off-screen */
+.xch__dist { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.xch__disthalo, .xch__distline { stroke-linecap: round; }
+.xch__disthalo { stroke: #1e293b; stroke-width: 4px; }
+.xch__distline { stroke: var(--xch-active); stroke-width: 2px; }
+.xch__distdot, .xch__distval { position: absolute; left: 0; top: 0; scale: var(--pop, 1); will-change: transform; }
+.xch__distdot { width: 12px; height: 12px; border-radius: 50%; background: var(--xch-active); box-shadow: 0 0 0 1px #1e293b; }
+.xch__distval { padding: .2rem .55rem; border-radius: 999px; background: var(--xch-active); color: #1e293b; box-shadow: 0 0 0 1px #1e293b, 0 6px 16px -8px rgba(14,10,52,.7); font-size: .75rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+:is(.xch__dist, .xch__distdot, .xch__distval).is-off { visibility: hidden; }
 .xch__dropover { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; background: rgba(4,107,210,.85); color: #fff; font-weight: 700; font-size: 1.1rem; clip-path: circle(0% at var(--dx, 50%) var(--dy, 50%)); transition: clip-path .5s var(--ease-out); pointer-events: none; }
 .xch__dropover.is-on { clip-path: circle(150% at var(--dx, 50%) var(--dy, 50%)); }
 /* left of the icon bar, ending above the views dial */
-.xch__display { position: absolute; top: .7rem; right: calc(.7rem + var(--xch-btn) + 18px); z-index: 5; width: 270px; max-height: calc(100% - 1.4rem - 2 * var(--dial-r) - 2 * var(--dial-b) - 44px); overflow: auto; display: grid; gap: .5rem; padding: .9rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 24px 60px -20px rgba(0,0,0,.5); transition: opacity .35s var(--ease-out), transform .35s var(--ease-out); }
+.xch__display { position: absolute; top: .7rem; right: calc(.7rem + var(--xch-btn) + 18px); z-index: 5; width: 270px; max-width: calc(100% - 1.4rem); max-height: calc(100% - 1.4rem - 2 * var(--dial-r) - 2 * var(--dial-b) - 44px); overflow: auto; display: grid; gap: .5rem; padding: .9rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 24px 60px -20px rgba(0,0,0,.5); transition: opacity .35s var(--ease-out), transform .35s var(--ease-out); }
 @starting-style { .xch__display:not([hidden]) { opacity: 0; transform: translateY(-8px); } }
+.xch__section .btn { justify-self: start; }
 .xch__switch { display: flex; justify-content: space-between; align-items: center; gap: .6rem; min-height: 36px; background: none; border: 0; padding: .2rem 0; color: var(--ink); font-size: .85rem; cursor: pointer; text-align: left; }
 /* off: a --muted edge so the track reads at 3:1 (a --line fill alone is 1.5:1) */
 .xch__switch i { width: 36px; height: 20px; border-radius: 999px; background: var(--line); box-shadow: inset 0 0 0 1.5px var(--muted); position: relative; flex: none; transition: background .3s, box-shadow .3s; }
@@ -427,6 +443,10 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
   .xch__stage, .xch__pad { --xch-btn: 44px; }
   .xch__stage { --dial-b: 44px; --dial-r: 66px; } /* 2r·sin 22.5° ≥ b + 6 */
   .xch__padhint { display: none; } /* about clicks and Shift: nothing to do with a finger */
+  /* Display and Section popovers: 44 px rows for a finger (the range's box takes the touch, its thumb stays the same) */
+  .xch__display :is(.xch__switch, .xch-btn-sm, .xch__range input) { min-height: 44px; }
+  /* the section hint is about Shift + wheel too; without it Remove the cut stays in view above the views dial */
+  .xch__section .xch__small { display: none; }
 }
 @media (max-width: 959.98px) {
   .xch__body { grid-template-columns: 1fr; }
@@ -441,7 +461,8 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
   .xch__smallscreen { display: grid; gap: 1rem; justify-items: start; }
 }
 @media (forced-colors: active) {
-  .xch-chip, .xch__toolbar, .xch__views, .xch__pad, .xch__drop, .xch__tag { border: 1px solid CanvasText; }
+  .xch-chip, .xch__toolbar, .xch__views, .xch__pad, .xch__drop, .xch__tag, .xch__hintchip { border: 1px solid CanvasText; }
+  .xch__dist, .xch__distdot, .xch__distval { forced-color-adjust: none; } /* drawn on the scene, like the crosshair */
 }
 @media (prefers-reduced-motion: reduce) {
   .xch-progress.is-indet i, .xch__bar i { animation: none; width: 100%; opacity: .5; }

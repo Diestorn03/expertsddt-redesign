@@ -5,16 +5,16 @@ stays a section of expertsddt.com. Written 2026-11-08 on `ddt-xchange` at b03dd9
 looks nothing like exocad and looks cheap. Spec only: no code changes with this file.
 
 Order of work: **1** the look panel's base commit (z-fight, preset keys) → **2** the winning look merged →
-**3** slice A (navigation) → **4** slice B (tools and picking). Slices change behaviour, never the look. Steps 1 to 3
+**3** slice A (navigation) → **4** slice B (tools and picking). Slices change behaviour, never the look. All four steps
 are done: Diego chose look A "Fiel a exocad" on 2026-11-08 and it is merged with grafts and the judges' fixes (§3.1,
-§3.5); slice A followed the same day (§4.14).
+§3.5); slice A (§4.14) and slice B (§5.10) followed the same day.
 
 Contents: 0 Why it looks cheap · 1 Sources · 2 Gap table · 3 Look · 4 Slice A · 5 Slice B · 6 Integration notes
 
 **Terms.** MUST: the slice is not done without it. SHOULD: done if the slice still fits its budget, otherwise it stays
 here as To do. WON'T: decided against, reason given. Status values: `Exists` (in b03dd97) · `Handled (look base)` ·
-`Look` (the winning look decides) · `Done (look A)` (merged with the look, §3.5) · `Done (slice A)` (§4.14) · `Slice A` ·
-`Slice B` · `To do` · `Won't`. **< 960 px**: the one-column workspace
+`Look` (the winning look decides) · `Done (look A)` (merged with the look, §3.5) · `Done (slice A)` (§4.14) ·
+`Done (slice B)` (§5.10) · `Slice A` · `Slice B` · `To do` · `Won't`. **< 960 px**: the one-column workspace
 (tablets in portrait, narrow or zoomed desktop windows down to 600 px, UI-DESIGN §4). Under 768 px on touch and under
 600 px on anything the workspace is replaced by the larger-screen card (UI-DESIGN §2.5): no viewer feature runs there.
 
@@ -96,7 +96,7 @@ scratchpad `C:\Users\Diestorn\AppData\Local\Temp\claude\C--Users-Diestorn-Deskto
 | G4 | Cursor keys move (translate) the view | HK, OV | Arrows turn 10°; Shift + arrows pan | Arrows pan; Shift + arrows turn | Done (slice A): A4 |
 | G5 | PageUp / PageDown rotate horizontally about the pivot | HK | Not handled: the page scrolls | Turn 10° about the screen's vertical axis | Done (slice A): A4 |
 | G6 | Wheel zooms, centered on the mouse position | OV, HK | Same, 12 % per notch | Keep | Exists |
-| G7 | Middle click centers the view and sets the rotation point | OV, HK | Same, but the pick is a linear raycast: 243–401 ms on a 3 M-triangle jaw | Keep; GPU pick | Slice B · B1 |
+| G7 | Middle click centers the view and sets the rotation point | OV, HK | Same, but the pick is a linear raycast: 243–401 ms on a 3 M-triangle jaw | Keep; GPU pick | Done (slice B): B1 |
 | G8 | Home sets the rotation pivot at the cursor | HK | Home = Fit | Rotation center at the pointer, or at the crosshair from the keyboard | Done (slice A): A6 |
 | G9 | Numpad views: 1 Front, 2 Bottom, 3 Back, 4 Left, 5 Fit, 6 Right, 8 Top | HK | 0/Home Fit, 1 Occlusal, 2 Front, 3 Back, 4 Left, 5 Right, 6 Top; no Bottom; with motion on the keys never move the camera (bug) | exocad's map on the keypad and the number row; 0 = Default view (occlusal) | Done (slice A): A2; bug Handled (look base) |
 | G10 | Six view arrows plus a cube that fits (DentalCAD); arrows lower right plus "Default view" (webview) | OV, WV, F1 | Seven text buttons in a top toolbar | View buttons: Default view, Fit, six directions | Done (look A): views dial; Done (slice A): A7 (keys) |
@@ -107,11 +107,11 @@ scratchpad `C:\Users\Diestorn\AppData\Local\Temp\claude\C--Users-Diestorn-Deskto
 | G15 | Ctrl + middle click hides the object under the pointer; Ctrl + Shift + middle click shows it again | HK | Nothing | Same | Done (slice A): A9 |
 | G16 | Hold Alt to show all objects for a moment; "Show all" button | HK, OV | Nothing | S shows what was hidden (Alt reaches the browser menu on Windows) | Done (slice A): A9 |
 | G17 | No inertia documented | OV, HK | No inertia | Keep none | Exists |
-| G18 | Ctrl+P Sectional View: a slider moves a cut plane in; Invert; Rotate keeps it at its depth while you turn; several planes, one colour each | HK, SV | Nothing | One plane: P (Ctrl+P prints), Position slider, Show the other side, Follow the view (SHOULD) | Slice B · B2 |
+| G18 | Ctrl+P Sectional View: a slider moves a cut plane in; Invert; Rotate keeps it at its depth while you turn; several planes, one colour each | HK, SV | Nothing | One plane: P (Ctrl+P prints), Position slider, Show the other side, Follow the view (SHOULD) | Done (slice B): B2 |
 | G19 | Cut View: a 2D section window with its own measuring, set by clicks, follows the cursor, auto-rotation | CV | Nothing | Not adopted | Won't |
-| G20 | Ctrl+R Measurement tool: distance from a start and an end click, drag a point to redo it, 0.01 mm | HK, MT | Nothing | R (Ctrl+R reloads), two clicks, Enter at the crosshair, drag (SHOULD), two decimals | Slice B · B3 |
+| G20 | Ctrl+R Measurement tool: distance from a start and an end click, drag a point to redo it, 0.01 mm | HK, MT | Nothing | R (Ctrl+R reloads), two clicks, Enter at the crosshair, drag (SHOULD), two decimals | Done (slice B): B3 |
 | G21 | Angle, thickness, nearest, orthogonal, plane distance, object size | MT | Nothing | Not adopted | Won't |
-| G22 | Ctrl+D Show distances | HK | C toggles the color map (distance to the jaw scan) | D toggles it too (Ctrl+D bookmarks) | Slice B · B4 |
+| G22 | Ctrl+D Show distances | HK | C toggles the color map (distance to the jaw scan) | D toggles it too (Ctrl+D bookmarks) | Done (slice B): B4 |
 | G23 | F11 full screen | HK | Full screen button (the stage only) | Keep the button; F11 stays the browser's | Exists |
 | G24 | Ctrl+Z / Ctrl+Y undo and redo | HK | Ctrl/⌘ + Z undoes implant-set moves (20 steps) | Keep; no redo stack | Exists; redo Won't |
 | G25 | Custom views (Ctrl+F1/F2), screenshot (Ctrl+Shift+Q), kiosk and remote-view modes | HK | Nothing | Not adopted (browser keys, out of scope) | Won't |
@@ -654,12 +654,12 @@ Decision: **GPU picking** (no dependency, no build step, respects clipping). The
 
 | Id | Item | Level | Status | Min |
 |---|---|---|---|---|
-| B1 | GPU picking | MUST | To do | 15 |
-| B2 | Section plane | MUST (Follow the view: SHOULD) | To do | 18 + 4 |
-| B3 | Distance | MUST (dragging a point: SHOULD) | To do | 15 + 6 |
-| B4 | D toggles the color map | SHOULD | To do | 1 |
-| B5 | No z-fight with the cut | MUST | Handled (look base) | 0 (re-check) |
-| B6 | 3 M-triangle budget | MUST | To do | 8 |
+| B1 | GPU picking | MUST | Done (slice B) | 15 |
+| B2 | Section plane | MUST (Follow the view: SHOULD) | Done (slice B), Follow the view included | 18 + 4 |
+| B3 | Distance | MUST (dragging a point: SHOULD) | Done (slice B), dragging included | 15 + 6 |
+| B4 | D toggles the color map | SHOULD | Done (slice B) | 1 |
+| B5 | No z-fight with the cut | MUST | Handled (look base); re-checked in slice B | 0 (re-check) |
+| B6 | 3 M-triangle budget | MUST | Done (slice B) | 8 |
 | B7 | Not in this slice | WON'T | Won't | — |
 
 ### B1 · GPU picking (MUST)
@@ -786,14 +786,14 @@ Decision: **GPU picking** (no dependency, no build step, respects clipping). The
 
 ### B6 · 3 M-triangle budget (MUST)
 
-| Budget (3 M triangles, 1280×800) | Target | Baseline |
-|---|---|---|
-| Orbit, GPU-synced p95, cut and cut faces on | ≤ 6 ms | 2.3–4.8 ms without the cut |
-| Orbit, rAF headed | ≥ 95 % of the display refresh | 144.2 fps on 144 Hz |
-| Click pick p95 / first click after warm-up | ≤ 5 ms / ≤ 5 ms | 243–401 ms (raycast) |
-| Middle click to tween start | ≤ 50 ms | ≈ 0.4 s |
-| JS heap after 50 picks | ± 5 MB | — |
-| `renderer.info.memory` after dispose | 0 geometries, 0 textures | 0 |
+| Budget (3 M triangles, 1280×800) | Target | Baseline | Before slice B (f7c61f4) · headless / headed | Slice B · headless (3 runs) / headed (3 runs) |
+|---|---|---|---|---|
+| Orbit, GPU-synced p95, cut and cut faces on | ≤ 6 ms | 2.3–4.8 ms without the cut | no cut: 2.2 / 2.2 ms (no section yet) | 2.7–2.9 / 3.0–5.7 ms (p50 2.0–2.1 / 2.2–2.5); no cut 2.2–2.3 / 2.0–2.4; flipped + Follow the view 2.5–3.0 / 2.4–4.0 |
+| Orbit, rAF headed | ≥ 95 % of the display refresh | 144.2 fps on 144 Hz | 144 fps | 144 fps with the cut on (p50 6.9, p95 7.0 ms) in every run |
+| Click pick p95 / first click after warm-up | ≤ 5 ms / ≤ 5 ms | 243–401 ms (raycast) | raycast 229.7 / 358.3 ms; first 198.5 / 292.4 ms | GPU 1.5–2.1 / 1.8–3.4 ms; first 1.3, 1.5, 5.1 / 1.4–2.2 ms |
+| Middle click to tween start | ≤ 50 ms | ≈ 0.4 s | p95 260.8 / 298.3 ms | p95 1.3–2.0 / 1.3–3.4 ms |
+| JS heap after 50 picks | ± 5 MB | — | +0 MB | +0.00–0.01 MB |
+| `renderer.info.memory` after dispose | 0 geometries, 0 textures | 0 | 0, 0 | 0, 0 (the pick target, pick and cut materials included) |
 
 - **Kept as is:** hover never touches the jaw; the adaptive pixel ratio while interacting (UI-DESIGN §3.5); parsing
   and normals in the jobs worker; the file bytes kept for the byte-identical `jaw.*` export.
@@ -861,6 +861,73 @@ already exists (fit re-measure), hence `say.distance`. Tooltips reuse `view.tip`
 - **Lifecycle.** Ten round trips to /services/ with the cut and a distance on before leaving: one canvas, no WebGL
   context warning, `renderer.info.memory` at 0 after each dispose (the pick target, pick and cut materials included).
 
+### 5.10 Slice B as built (2026-11-08)
+
+On look A and slice A (f7c61f4). B1–B4 and B6 are `Done (slice B)`, with both SHOULDs of B2 and B3 (Follow the view,
+dragging a point); B5 was re-checked. Where the build settles what the items above left open:
+
+- **B1.** `viewer/pick.ts` holds the pick shader (three's clipping chunks, so the cut clips it like the meshes) and the
+  pure `decodePick`. `Viewer.pickAt()` serves `pickSurface` and `pickObject`: the jaw on layer 1, replacements and
+  captured bodies on layer 2 (only while visible and ≥ 10 % opaque; rings, pins, labels and cut faces never), the pick
+  material's `onBeforeRender` copies each mesh's code and polygon offset. Target, clear color and alpha, override
+  material, camera layers and view offset end as they were and no frame is scheduled. The warm-up pick runs at the
+  stage center in `requestIdleCallback` (timeout 1 s; `setTimeout` 200 ms where missing) after a jaw loads and after
+  every cut on/off change: with and without a plane the pick shader is another program, and a warm-up still pending
+  when the cut changes runs with the state of that moment. Without `EXT_color_buffer_float` the raycast fallback also
+  respects the cut and maps a cut face to its object. Hover (`pickPart`) stays a raycast over the parts.
+- **B2.** The Section button sits after Jaw transparency in the icon bar. Its icon is a block on a section line, the
+  removed half faint and the kept half hatched (a cut cylinder read as a database icon at 20 px). `aria-expanded`
+  says whether the popover is open, so while the cut is on the button keeps the look's pressed style (`.is-on`) and is
+  named `section.titleOn` ("Section (on)" / "Corte (activado)"). Opening the popover focuses Position. The slider spans
+  ±r rounded up to 0.1 mm and Shift + wheel stays inside it. One `THREE.Plane` is shared by the jaw, the parts, the
+  captured bodies, the highlight ring (mask and copies: it outlines what is left of a cut part), the cut faces and the
+  pick material. While the cut is on, the jaw and the captured bodies draw their front side only (the parts always do),
+  and each cut mesh gets a child `cut` mesh: the same geometry, back side, one `MeshBasicMaterial` in `--xch-cut`
+  (not tone mapped), on no pick layer. A label hides when the cut removes its part's center. Follow the view re-aims the
+  plane every frame (through the target, along the view, at its offset). A new case, the sample, Exit sample and a
+  viewer restart remove the cut silently (`Stage.resetTools()`). While a popover is open, the chips at the top center
+  (Ctrl chip, distance hint) wait hidden: at 960 px they would sit under it. On a coarse pointer the rows of both
+  popovers (switches, ranges, buttons) are 44 px, and the section hint (half of it is about Shift + wheel) hides so
+  Remove the cut stays in view above the views dial with no inner scroll; the Display popover scrolls inside, as before.
+- **B3.** `Stage` keeps the points with the implant-set pose they were taken on (`s.assembly`, by identity: only a real
+  pose change replaces it). `Stage.update()` ends the tool, and announces it, when that pose changes. Starting the tool
+  first completes a running pose tween (`finishPose`). Guided points end it silently; meanwhile the button is
+  `aria-disabled`, its tooltip is `dist.busy`, and a click says it. The viewer creates the overlay in the labels
+  layer on first use: a 2 px `--xch-active` line over a 4 px `#1e293b` one, 12 px dots with the 1 px halo, and the
+  pill. Dots and pill scale in through `--pop` (.45 s `back.out(1.6)`, like a guided pin, in the viewer's GSAP
+  context); with reduced motion they just appear. A press within 12 px of a dot (24 px on touch, where no hold starts)
+  drags it with one GPU pick per animation frame. The release picks once more and announces the value; over nothing
+  the point stays. A press on a dot without moving is a click, so it places a point (a third one starts a new pair).
+  R closing the tool says `say.distOff`, as Esc does. `dist.title` was not added: nothing shows it, and the button's
+  name is `dist.button`. The live region merges messages within 300 ms, so two quick clicks are heard as one message
+  ("First point placed. Now the second. Distance: 17.16 mm.").
+- **B4.** D calls `onToggleMap` like C; Ctrl/⌘ + D stays the browser's bookmark.
+- **B5.** `zcut.ts` (scratchpad): the real Viewer's bias on an implant coincident with the 3 M jaw's scan body at 1° FOV.
+  Cap and wall are 100 % part pixels with the cut off and with the cut on away from the part. With the cut through
+  the pair, the wall window is 100 % cut-face blue (no part or stone pixel), and the kept half's cap is 100 % part.
+  Control: with the part hidden, 100 % stone. The sample in step 4 with the cut through the four scan bodies, at Fit
+  and focused on AXO01, cut on and off, light and dark, shows no stripes.
+
+**Checks** (2026-11-08): `typecheck:xchange` clean; `test:xchange` 494/494 (+48: `test/ux/viewer-tools.ux.test.ts` 23 in
+the real Viewer with a recording renderer stand-in, `controls-keys` +13, `viewer/viewer.test.ts` +8 for `decodePick` and
+`sectionPlane`, `contrast` +4 for the pill and the hint chip). Timing tests in files this slice does not touch (detect, mesh-io,
+privacy) failed in some full runs while other processes held the CPU at 45–100 %; each of those files passes alone. Build and `npm test` green.
+Browser, headless system Chrome, renderer ANGLE (NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0, D3D11): the slice B
+probe passes 30/30 with 0 console messages. It covers the section (popover, slider, Shift + wheel, flip, follow, Esc, P,
+Remove, popovers exclusive, tooltips) and the distance (button, clicks, value against the scale bar, drag, Enter,
+Backspace, Esc, R, pose change, guided points), both with motion on. It also runs reduced motion (no scale-in), Spanish
+and dark at 960 × 700 (decimal comma), and taps and a 24 px touch drag at 768 × 1024. L13 is clean at 1280 × 800,
+960 × 700, 768 × 1024 touch and 1024 × 768 touch, both languages, plain, with either popover, measuring, and measuring
+with the section popover. With touch at 768 × 1024 every popover row is 44 px or more (16–46 px with a mouse, unchanged).
+Ten ClientRouter round trips with a cut and a distance on leave one canvas, 11 mounts and no
+WebGL warning. An orbit with the cut on runs at rAF p50 / p95 / max 6.9 / 7.0–7.1 / 7.1 ms over two runs, nothing over 50 ms.
+`shoot.mjs` (`looks/slice-b`): 12 shots, 0 errors, orbit 6.9 / 7.1 / 7.2 ms. Against slice A, only the icon bar
+(two buttons more), the sub-pixel framing of s1 and s7 and the s5 entrance differ, as slice A saw. Bench in the B6 table
+above. Every pick agrees with three's raycast within 0.05 mm (9/9, and 9/9 with the cut against a raycast that skips
+the removed half). The first rAF window after the benchmark's synchronous loops holds one 0.9–1.1 s stall (0.46–0.52 s
+before): the first present after 360 synchronous renders instead of 180, which the app never does; the steady window
+is 144 fps. Not run: axe (not installed) and a screen reader.
+
 ---
 
 ## 6. Integration notes (outside `src/xchange`)
@@ -868,12 +935,15 @@ already exists (fit re-measure), hence `say.distance`. Tooltips reuse `view.tip`
 - **`src/pages/ddt-xchange.astro`** (the tool's own page): stage markup only.
   - The view buttons group: done with look A (the views dial and the Occlusal pill, `data-view` for all eight).
   - Section and Distance buttons in the look's icon bar (top right, vertical: Display · Color map · Jaw transparency |
-    Shortcuts · Full screen): after Jaw transparency, before the separator, drawn from `ICO` in the page like the others.
-  - The section popover (`id="xch-section"`, server-rendered `hidden`, `data-lenis-prevent`).
-  - Inside `.xch__labels`: the distance overlay (one `<svg>` line, two dots, the value pill). Slice A needed no markup:
-    the touch & hold ring is `.xch__stage::after` and the tooltips are the look's CSS `data-tip`; `keyOf()` in the
-    page reads `VIEW_KEYS`.
-  - `<p id="xch-view-dist" class="sr-only">` for the stage description, and `aria-keyshortcuts` attributes.
+    Shortcuts · Full screen): after Jaw transparency, before the separator, drawn from `ICO` in the page like the others
+    (done in slice B, with `aria-keyshortcuts` P and R).
+  - The section popover (`id="xch-section"`, server-rendered `hidden`, `data-lenis-prevent`) and the distance hint chip
+    (`data-disthint`, `aria-hidden`): done in slice B.
+  - The distance overlay (one `<svg>` with the line and its halo, two dots, the value pill) is not page markup: the
+    viewer creates it in `.xch__labels` on first use, as it does the labels and pins, and that layer is cleared on
+    dispose. Slice A needed no markup: the touch & hold ring is `.xch__stage::after` and the tooltips are the look's CSS
+    `data-tip`; `keyOf()` in the page reads `VIEW_KEYS`.
+  - `<p id="xch-view-dist" class="sr-only">` for the stage description: done in slice B.
   - The shortcuts dialog and the help-section table render `c.keys.rows` and need no markup change.
 - **`src/pages/es/ddt-xchange.astro`**: no change (one-line wrapper).
 - **Look merge (2026-11-08):** no site change was needed. "Try a sample case" brings the stage into view through the
@@ -881,6 +951,9 @@ already exists (fit re-measure), hence `say.distance`. Tooltips reuse `view.tip`
   For the site motion rework: `src/scripts/motion.js` line 312 reads the first entry of an `IntersectionObserver` batch
   (`([e]) => …`), the bug fixed here in `viewer.ts` and `ui/main.ts`; one callback can carry an enter and a leave, so
   the last entry is the current state.
+- **Slice B (2026-11-08):** no site change was needed. The section popover's entrance is the Display popover's CSS
+  (`@starting-style`), which `global.css` already cuts under reduced motion; the distance dots and pill animate in the
+  viewer's own GSAP context. Nothing new is fetched and no worker was added.
 - **Not touched by either slice:** `src/scripts/motion.js` (another branch is reworking the site motion),
   `src/layouts/*`, `src/styles/global.css` and every other global style, other pages, the site dictionaries
   `src/i18n/*`, `public/.htaccess` (nothing new is fetched, no new worker), `package.json` and the lockfile (three

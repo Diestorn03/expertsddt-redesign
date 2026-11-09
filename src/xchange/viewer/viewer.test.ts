@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { Vec3 } from '../core/types';
 import { buildLut, LUT_SIZE, MAP_STOPS, srgbToOklab } from './colormap';
+import { decodePick, PICK_CAPTURE, PICK_JAW, PICK_PART } from './pick';
 import { presetView, VIEW_KEYS, viewForKey, type Preset } from './presets';
+import { sectionPlane } from './section';
 
 describe('color map', () => {
   const { srgb } = buildLut();
@@ -77,5 +80,64 @@ describe('view keys: exocad numpad map on the number row and the keypad', () => 
     const views = Object.values(VIEW_KEYS);
     expect(new Set(views).size).toBe(views.length);
     expect([...views].sort()).toEqual(['back', 'bottom', 'fit', 'front', 'left', 'occlusal', 'right', 'top']);
+  });
+});
+
+describe('GPU pick decode (VIEWER-POLISH B1)', () => {
+  const sites = ['AXO1', 'AXO2', 'AXO3'];
+  it('code 0 (the clear) is nothing, whatever rgb holds', () => {
+    expect(decodePick([0, 0, 0, 0], sites)).toBeNull();
+    expect(decodePick([5, 6, 7, 0], sites)).toBeNull();
+    expect(decodePick([5, 6, 7, 0.4], sites)).toBeNull(); // codes are whole numbers
+  });
+  it('1 is the jaw scan, 2 a captured scan body, rgb the world point', () => {
+    expect(decodePick(new Float32Array([1.5, -2.25, 30.125, PICK_JAW]), sites)).toEqual({ point: [1.5, -2.25, 30.125], object: 'jaw', siteId: null });
+    expect(decodePick([-4, 0, 9, PICK_CAPTURE], sites)).toEqual({ point: [-4, 0, 9], object: 'capture', siteId: null });
+  });
+  it('3 + i is the implant drawn i-th: its site id', () => {
+    expect(decodePick([0, 1, 2, PICK_PART], sites)).toEqual({ point: [0, 1, 2], object: 'part', siteId: 'AXO1' });
+    expect(decodePick([0, 1, 2, PICK_PART + 2], sites)!.siteId).toBe('AXO3');
+    expect(decodePick([0, 1, 2, PICK_PART + 2.0001], sites)!.siteId, 'float noise').toBe('AXO3');
+    expect(decodePick([0, 1, 2, PICK_PART + 7], sites)).toEqual({ point: [0, 1, 2], object: 'part', siteId: null });
+  });
+  it('a non-finite position is no hit', () => {
+    expect(decodePick([NaN, 0, 0, PICK_JAW], sites)).toBeNull();
+    expect(decodePick([0, Infinity, 0, PICK_PART], sites)).toBeNull();
+  });
+});
+
+describe('section plane (VIEWER-POLISH B2)', () => {
+  /** three removes a point whose signed distance is negative. */
+  const signed = (pl: ReturnType<typeof sectionPlane>, p: Vec3): number => pl.normal[0] * p[0] + pl.normal[1] * p[1] + pl.normal[2] * p[2] + pl.constant;
+  const view: Vec3 = [0, 0, -3]; // camera at +Z looking down (any length)
+  const target: Vec3 = [10, -5, 2];
+
+  it('through the target, facing away from the camera: what lies toward the camera is removed', () => {
+    const pl = sectionPlane(view, target, 0, false);
+    expect(pl.normal).toEqual([0, 0, -1]);
+    expect(signed(pl, target)).toBeCloseTo(0, 12);
+    expect(signed(pl, [10, -5, 7])).toBeLessThan(0); // between the plane and the camera
+    expect(signed(pl, [10, -5, -3])).toBeGreaterThan(0); // behind it: kept
+    expect(signed(pl, [99, 40, 2.01])).toBeLessThan(0); // the plane is infinite
+  });
+  it('flip swaps the halves, at the same place', () => {
+    const pl = sectionPlane(view, target, 0, true);
+    expect(signed(pl, [10, -5, 7])).toBeGreaterThan(0);
+    expect(signed(pl, [10, -5, -3])).toBeLessThan(0);
+    expect(signed(pl, target)).toBeCloseTo(0, 12);
+  });
+  it('positive offsets go deeper (away from the camera), in mm along the view, flipped or not', () => {
+    for (const flipped of [false, true]) {
+      const pl = sectionPlane(view, target, 2.5, flipped);
+      expect(signed(pl, [0, 0, -0.5]), `flipped ${flipped}`).toBeCloseTo(0, 12);
+      expect(Math.abs(signed(pl, target))).toBeCloseTo(2.5, 12);
+    }
+    expect(signed(sectionPlane(view, target, 2.5, false), target)).toBeLessThan(0); // the target is on the removed side now
+  });
+  it('any view direction: the normal is the unit view direction', () => {
+    const d: Vec3 = [1, -2, 2];
+    const pl = sectionPlane(d, [0, 0, 0], 3, false);
+    expect(pl.normal.map((x) => +x.toFixed(12))).toEqual([1 / 3, -2 / 3, 2 / 3].map((x) => +x.toFixed(12)));
+    expect(signed(pl, [1, -2, 2])).toBeCloseTo(0, 12); // 3 mm along d
   });
 });

@@ -2,8 +2,9 @@
  * Slice A of VIEWER-POLISH.md (navigation): exocad's view keys (A1, A2), arrows pan and Shift + arrows / PageUp / PageDown
  * turn (A4), Ctrl/⌘ + drag anywhere turns the implant set (A5), Home sets the rotation center (A6), touch & hold (A8),
  * per-object middle clicks and S (A9), camera input clears the views' pressed state and keyboard views are announced
- * (A10). The real attachControls runs on EventTarget stand-ins for the canvas and the stage (the pattern of
- * controls-touch.ux.test.ts); picking is stubbed. No DOM library, no WebGL.
+ * (A10). Slice B's keys and pointer paths: P and Shift + wheel (B2), the distance tool (B3), D (B4). The real
+ * attachControls runs on EventTarget stand-ins for the canvas and the stage (the pattern of controls-touch.ux.test.ts);
+ * picking is stubbed. No DOM library, no WebGL.
  */
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
@@ -49,11 +50,14 @@ function setup(mode: ControlMode) {
     mmPerPixel: () => 0.05, stopCameraTween: vi.fn(), interacting(): void {}, invalidate(): void {}, setOrbitCenter: vi.fn(), finishPose: vi.fn(),
     pickPart: vi.fn((): PartHit | null => null), pickSurface: vi.fn((): Vec3 | null => [1, 2, 3]), pickObject: vi.fn((): SceneObject | null => 'jaw'),
     assembly: { matrix: new THREE.Matrix4(), matrixWorldNeedsUpdate: false }, setCenter: () => new THREE.Vector3(),
+    measureDotAt: vi.fn((_x: number, _y: number, _r: number): number => -1),
   };
   const cb = {
     mode: () => mode, onSelect: vi.fn(), onGuidedPoint: vi.fn(), onGuidedMiss: vi.fn(), onSetChange: vi.fn(), onHover: vi.fn(), onPreset: vi.fn(),
     onToggleJawOpacity: vi.fn(), onToggleMap: vi.fn(), onShortcuts: vi.fn(), onGuidedKey: vi.fn(), onCtrl: vi.fn(),
     onPivot: vi.fn(), onPivotMiss: vi.fn(), onToggleOpacity: vi.fn(), onHide: vi.fn(), onShowAll: vi.fn(), onCameraInput: vi.fn(),
+    onToggleSection: vi.fn(), onSectionNudge: vi.fn((_mm: number): boolean => false), onToggleMeasure: vi.fn(), onMeasurePoint: vi.fn(), onMeasureMiss: vi.fn(),
+    onMeasureKey: vi.fn(), onMeasureDrag: vi.fn(),
   } satisfies ControlCallbacks;
   const ac = new AbortController();
   attachControls(viewer as unknown as Viewer, stage as unknown as HTMLElement, cb, ac.signal);
@@ -505,5 +509,218 @@ describe('Stage: hide, show all, the pressed view and keyboard announcements', (
     const es1 = fake('es');
     proto.preset!.call(es1.f, 'occlusal', true);
     expect(es1.said).toEqual(['Vista: Oclusal.']);
+  });
+});
+
+describe('B2 · P toggles the cut; Shift + wheel moves it', () => {
+  const wheel = (canvas: EventTarget, props: Record<string, unknown>): Event => {
+    const e = Object.assign(new Event('wheel', { cancelable: true }), { deltaY: 0, deltaX: 0, deltaMode: 0, clientX: 400, clientY: 300, shiftKey: false, ...props });
+    canvas.dispatchEvent(e);
+    return e;
+  };
+
+  it("P (any mode, held: once) toggles the cut and leaves the camera; Ctrl + P stays the browser's", () => {
+    for (const mode of ['camera', 'set', 'guided', 'measure'] as const) {
+      const { viewer, cb, ac, key } = setup(mode);
+      expect(key('p', { code: 'KeyP' }).defaultPrevented, mode).toBe(true);
+      key('p', { code: 'KeyP', repeat: true });
+      key('P', { code: 'KeyP', shiftKey: true });
+      expect(key('p', { code: 'KeyP', ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(cb.onToggleSection, mode).toHaveBeenCalledTimes(2);
+      expect(viewer.stopCameraTween).not.toHaveBeenCalled();
+      expect(cb.onCameraInput).not.toHaveBeenCalled();
+      ac.abort();
+    }
+  });
+
+  it('with a cut, Shift + wheel moves it 0.5 mm a notch (up goes deeper) and does not zoom', () => {
+    const { viewer, cb, ac, canvas } = setup('camera');
+    cb.onSectionNudge.mockReturnValue(true);
+    expect(wheel(canvas, { deltaY: -100, shiftKey: true }).defaultPrevented).toBe(true);
+    expect(cb.onSectionNudge).toHaveBeenLastCalledWith(0.5);
+    wheel(canvas, { deltaY: 200, shiftKey: true });
+    expect(cb.onSectionNudge).toHaveBeenLastCalledWith(-1);
+    wheel(canvas, { deltaY: -3, deltaMode: 1, shiftKey: true }); // 3 lines = 48 px
+    expect(cb.onSectionNudge.mock.lastCall![0]).toBeCloseTo(0.24);
+    wheel(canvas, { deltaX: 100, shiftKey: true }); // macOS: Shift turns the wheel sideways
+    expect(cb.onSectionNudge).toHaveBeenLastCalledWith(-0.5);
+    expect(viewer.dist).toBe(100);
+    expect(cb.onCameraInput).not.toHaveBeenCalled();
+    ac.abort();
+  });
+
+  it('without a cut, Shift + wheel zooms as before; a plain wheel never asks', () => {
+    const { viewer, cb, ac, canvas } = setup('camera');
+    wheel(canvas, { deltaY: 100, shiftKey: true });
+    expect(cb.onSectionNudge).toHaveBeenCalledTimes(1);
+    expect(viewer.dist).toBeCloseTo(112);
+    wheel(canvas, { deltaY: 100 });
+    expect(cb.onSectionNudge).toHaveBeenCalledTimes(1);
+    expect(viewer.dist).toBeCloseTo(112 * 1.12);
+    expect(cb.onCameraInput).toHaveBeenCalledTimes(2);
+    ac.abort();
+  });
+});
+
+describe('B4 · D toggles the color map, as C does', () => {
+  it("d → onToggleMap once (held too); Ctrl + D stays the browser's bookmark", () => {
+    const { cb, ac, key } = setup('set');
+    expect(key('d', { code: 'KeyD' }).defaultPrevented).toBe(true);
+    key('d', { code: 'KeyD', repeat: true });
+    expect(cb.onToggleMap).toHaveBeenCalledTimes(1);
+    key('D', { code: 'KeyD', shiftKey: true });
+    expect(cb.onToggleMap).toHaveBeenCalledTimes(2);
+    expect(key('d', { code: 'KeyD', ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(cb.onToggleMap).toHaveBeenCalledTimes(2);
+    ac.abort();
+  });
+});
+
+describe('B3 · the distance tool (measure mode)', () => {
+  const click = (s: ReturnType<typeof setup>, x: number, y: number): void => {
+    s.mouse('pointerdown', { clientX: x, clientY: y });
+    s.mouse('pointerup', { clientX: x, clientY: y, buttons: 0 });
+  };
+
+  it("R toggles the tool (held: once); during guided points R is ignored; Ctrl + R stays the browser's", () => {
+    for (const mode of ['camera', 'set', 'measure'] as const) {
+      const { cb, ac, key } = setup(mode);
+      expect(key('r', { code: 'KeyR' }).defaultPrevented, mode).toBe(true);
+      key('r', { code: 'KeyR', repeat: true });
+      expect(key('r', { code: 'KeyR', ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(cb.onToggleMeasure, mode).toHaveBeenCalledTimes(1);
+      ac.abort();
+    }
+    const { cb, ac, key } = setup('guided');
+    expect(key('r', { code: 'KeyR' }).defaultPrevented).toBe(false);
+    expect(cb.onToggleMeasure).not.toHaveBeenCalled();
+    ac.abort();
+  });
+
+  it('two clicks give the two pickSurface results (any visible surface, not only the jaw); nothing under a click: nothing', () => {
+    const s = setup('measure');
+    s.viewer.pickSurface.mockReturnValueOnce([1, 2, 3]).mockReturnValueOnce([4, 6, 3]).mockReturnValueOnce(null);
+    click(s, 120, 90);
+    click(s, 300, 200);
+    click(s, 500, 500);
+    expect(s.viewer.pickSurface.mock.calls).toEqual([[120, 90, false], [300, 200, false], [500, 500, false]]);
+    expect(s.cb.onMeasurePoint.mock.calls).toEqual([[[1, 2, 3]], [[4, 6, 3]]]);
+    expect(s.cb.onSelect).not.toHaveBeenCalled();
+    expect(s.cb.onGuidedPoint).not.toHaveBeenCalled();
+    s.ac.abort();
+  });
+
+  it('a tap places a point too; a drag turns the view and places nothing', async () => {
+    const s = setup('measure');
+    s.touch('pointerdown', 300, 200);
+    await new Promise((r) => setTimeout(r, 30));
+    s.touch('pointerup', 300, 200);
+    expect(s.cb.onMeasurePoint).toHaveBeenCalledWith([1, 2, 3]);
+    s.mouse('pointerdown');
+    s.mouse('pointermove', { clientX: 460 });
+    s.mouse('pointerup', { clientX: 460, buttons: 0 });
+    expect(s.cb.onMeasurePoint).toHaveBeenCalledTimes(1);
+    expect(s.viewer.q.equals(new THREE.Quaternion())).toBe(false);
+    s.ac.abort();
+  });
+
+  it('Enter picks at the canvas center (the crosshair); a miss reports it; Backspace and Esc reach onMeasureKey', () => {
+    const { viewer, cb, ac, key } = setup('measure');
+    key('Enter', { code: 'Enter' });
+    expect(viewer.pickSurface).toHaveBeenLastCalledWith(400, 300, false);
+    expect(cb.onMeasurePoint).toHaveBeenLastCalledWith([1, 2, 3]);
+    key('Enter', { code: 'Enter', repeat: true }); // held: once
+    expect(cb.onMeasurePoint).toHaveBeenCalledTimes(1);
+    viewer.pickSurface.mockReturnValue(null);
+    key('Enter', { code: 'Enter' });
+    expect(cb.onMeasureMiss).toHaveBeenCalledTimes(1);
+    expect(key('Backspace').defaultPrevented).toBe(true);
+    expect(key('Escape').defaultPrevented).toBe(true);
+    expect(cb.onMeasureKey.mock.calls).toEqual([['Backspace'], ['Escape']]);
+    expect(cb.onGuidedKey).not.toHaveBeenCalled();
+    expect(cb.onGuidedPoint).not.toHaveBeenCalled();
+    ac.abort();
+  });
+
+  it('outside measure mode Enter, Backspace and Esc keep their meaning (guided points, or nothing)', () => {
+    const g = setup('guided');
+    g.key('Enter');
+    g.key('Backspace');
+    expect(g.viewer.pickSurface).toHaveBeenLastCalledWith(400, 300, true);
+    expect(g.cb.onGuidedPoint).toHaveBeenCalledTimes(1);
+    expect(g.cb.onGuidedKey).toHaveBeenCalledWith('Backspace');
+    expect(g.cb.onMeasurePoint).not.toHaveBeenCalled();
+    expect(g.cb.onMeasureKey).not.toHaveBeenCalled();
+    g.ac.abort();
+    const c = setup('camera');
+    expect(c.key('Enter').defaultPrevented).toBe(false);
+    expect(c.key('Escape').defaultPrevented).toBe(false);
+    c.ac.abort();
+  });
+
+  it('measuring pauses set drags: a drag on an implant or a Ctrl + drag turns the view, never the set', () => {
+    const { viewer, cb, ac, mouse } = setup('measure');
+    viewer.pickPart.mockReturnValue({ siteId: 'site-1', um: null });
+    mouse('pointerdown');
+    mouse('pointermove', { clientX: 460 });
+    mouse('pointerup', { clientX: 460, buttons: 0 });
+    mouse('pointerdown', { ctrlKey: true });
+    mouse('pointermove', { clientX: 520, ctrlKey: true });
+    mouse('pointerup', { clientX: 520, buttons: 0, ctrlKey: true });
+    expect(cb.onSetChange).not.toHaveBeenCalled();
+    expect(viewer.finishPose).not.toHaveBeenCalled();
+    expect(viewer.q.equals(new THREE.Quaternion())).toBe(false);
+    ac.abort();
+  });
+
+  it('a press on a point (12 px with a mouse) drags it along the surfaces, one pick a frame; the release gives the last spot', () => {
+    vi.useFakeTimers();
+    const { viewer, cb, ac, mouse } = setup('measure');
+    viewer.measureDotAt.mockImplementation((x, y, r) => (Math.hypot(x - 400, y - 300) <= r ? 1 : -1));
+    mouse('pointerdown', { clientX: 405, clientY: 300 });
+    expect(viewer.measureDotAt).toHaveBeenCalledWith(405, 300, 12);
+    mouse('pointermove', { clientX: 430, clientY: 310 });
+    mouse('pointermove', { clientX: 440, clientY: 320 }); // same frame: one pick
+    viewer.pickSurface.mockReturnValue([7, 8, 9]);
+    vi.advanceTimersByTime(20);
+    expect(viewer.pickSurface).toHaveBeenCalledTimes(1);
+    expect(viewer.pickSurface).toHaveBeenLastCalledWith(440, 320);
+    expect(cb.onMeasureDrag).toHaveBeenLastCalledWith(1, [7, 8, 9], false);
+    viewer.pickSurface.mockReturnValue(null); // over nothing: the point stays (the stage keeps it)
+    mouse('pointerup', { clientX: 470, clientY: 330, buttons: 0 });
+    expect(cb.onMeasureDrag).toHaveBeenLastCalledWith(1, null, true);
+    vi.advanceTimersByTime(40);
+    expect(cb.onMeasureDrag).toHaveBeenCalledTimes(2);
+    expect(cb.onMeasurePoint).not.toHaveBeenCalled(); // a drag places no point
+    expect(viewer.q.equals(new THREE.Quaternion()), 'the view stays').toBe(true);
+    expect(cb.onCameraInput).not.toHaveBeenCalled();
+    ac.abort();
+  });
+
+  it('on touch the radius is 24 px and no hold starts; a press on a point without moving is a plain click', () => {
+    vi.useFakeTimers();
+    const { viewer, cb, ac, touch, mouse } = setup('measure');
+    viewer.measureDotAt.mockReturnValue(0);
+    touch('pointerdown', 300, 200);
+    expect(viewer.measureDotAt).toHaveBeenCalledWith(300, 200, 24);
+    touch('pointermove', 340, 200);
+    vi.advanceTimersByTime(600);
+    expect(viewer.setOrbitCenter).not.toHaveBeenCalled(); // no touch & hold on a point
+    touch('pointerup', 340, 200);
+    expect(cb.onMeasureDrag).toHaveBeenLastCalledWith(0, [1, 2, 3], true);
+    mouse('pointerdown', { clientX: 300, clientY: 200 });
+    mouse('pointerup', { clientX: 300, clientY: 200, buttons: 0 });
+    expect(cb.onMeasurePoint).toHaveBeenCalledWith([1, 2, 3]);
+    ac.abort();
+  });
+
+  it('outside measure mode no point is ever looked for', () => {
+    const { viewer, ac, mouse, touch } = setup('camera');
+    mouse('pointerdown');
+    mouse('pointerup', { buttons: 0 });
+    touch('pointerdown', 300, 200);
+    touch('pointerup', 300, 200);
+    expect(viewer.measureDotAt).not.toHaveBeenCalled();
+    ac.abort();
   });
 });

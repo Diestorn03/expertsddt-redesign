@@ -15,7 +15,7 @@ import type { AlignStage } from '../align/multistart';
 import { activeSites, canMatchCapture, exportBlocker, guidedTargets, mergeMeasured, missingGeometry, pushUndo, siteStatus } from '../state/case';
 import type { ExportResult, JawResult } from '../state/jobs-handler';
 import { markSent, needsEmail, retryPending, submitLead, type LeadEnv, type StorageLike } from '../state/lead';
-import { rotatePose, translatePose, type ControlCallbacks } from '../viewer/controls';
+import { rotatePose, translatePose, type ControlCallbacks, type ControlMode } from '../viewer/controls';
 import { toEngine } from '../viewer/viewer';
 import type { App } from './app';
 import { LIMITS } from '../core/limits';
@@ -100,8 +100,10 @@ export class AlignStep {
 
   /* ---------------- viewer input ---------------- */
 
-  mode(): 'camera' | 'set' | 'guided' {
+  /** Guided points win; the distance tool pauses set drags; step 4 with a jaw drags the set. */
+  mode(): ControlMode {
     if (this.guided) return 'guided';
+    if (this.app.stage?.measuring) return 'measure';
     return this.app.shown === 4 && this.app.s.jaw ? 'set' : 'camera';
   }
 
@@ -134,6 +136,13 @@ export class AlignStep {
       onHide: (o) => app.stage.hide(o),
       onShowAll: () => app.stage.showAll(),
       onCameraInput: () => app.stage.cameraMoved(),
+      onToggleSection: () => app.stage.toggleSection(true),
+      onSectionNudge: (mm) => app.stage.nudgeSection(mm),
+      onToggleMeasure: () => app.stage.toggleMeasure(),
+      onMeasurePoint: (p) => app.stage.measurePoint(p),
+      onMeasureMiss: () => app.say.say(app.c.dist.miss),
+      onMeasureKey: (k) => app.stage.measureKey(k),
+      onMeasureDrag: (i, p, end) => app.stage.measureDrag(i, p, end),
     };
   }
 

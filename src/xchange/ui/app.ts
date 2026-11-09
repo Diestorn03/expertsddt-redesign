@@ -129,6 +129,7 @@ export class App {
   }
 
   restartViewer(): void {
+    this.stage.resetTools(); // a restart removes the cut and the distance
     this.viewer?.dispose();
     this.viewer = null;
     this.createViewer();
@@ -449,6 +450,7 @@ export class App {
     for (const n of [1, 2, 3, 4] as Step[]) { this.clearAlerts(n); this.notes(n, []); }
     this.capture?.clearWarnings();
     this.stage?.showAll(false); // what a middle click hid comes back with the new case
+    this.stage?.resetTools(); // no cut, no distance
     this.rebuildViewer();
   }
 

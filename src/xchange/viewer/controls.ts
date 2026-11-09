@@ -4,7 +4,9 @@
  * (Shift: transparency of what is under it, Ctrl/⌘: hide it, Ctrl/⌘ + Shift: show it again), touch & hold sets it on a
  * tablet, double-click fits. In 'set' mode a left-drag on an implant moves the whole set; Ctrl/⌘ + drag anywhere rotates it
  * about its center (Shift: one axis). Keys: exocad's numpad views on the keypad and the number row, the arrows pan,
- * Shift + arrows and PageUp/PageDown turn, Home sets the rotation center at the pointer (or at the center).
+ * Shift + arrows and PageUp/PageDown turn, Home sets the rotation center at the pointer (or at the center). Slice B: P
+ * toggles the cut and Shift + wheel moves it, D toggles the color map like C, R the distance tool ('measure' mode: clicks,
+ * taps or Enter place its points, a dot can be dragged along the surfaces).
  * Every listener lives until the caller's AbortSignal or the viewer's dispose (a restart after a lost context).
  */
 import * as THREE from 'three';
@@ -12,7 +14,7 @@ import type { Vec3 } from '../core/types';
 import { viewForKey, type Preset } from './presets';
 import type { PartHit, SceneObject, Viewer } from './viewer';
 
-export type ControlMode = 'camera' | 'set' | 'guided';
+export type ControlMode = 'camera' | 'set' | 'guided' | 'measure';
 
 export interface ControlCallbacks {
   mode(): ControlMode;
@@ -42,6 +44,19 @@ export interface ControlCallbacks {
   onShowAll?(): void;
   /** A drag, the wheel, a pinch, the arrows, PageUp/PageDown or a zoom key moved the camera off the last view. */
   onCameraInput?(): void;
+  /** P: the cut on or off. */
+  onToggleSection?(): void;
+  /** Shift + wheel: move the cut by `mm` (deeper when positive); false when there is no cut (the wheel zooms then). */
+  onSectionNudge?(mm: number): boolean;
+  /** R (not during guided points): the distance tool on or off. */
+  onToggleMeasure?(): void;
+  /** A click, a tap or Enter put a distance point on a surface. */
+  onMeasurePoint?(point: Vec3): void;
+  /** Enter in measure mode with nothing under the crosshair. */
+  onMeasureMiss?(): void;
+  onMeasureKey?(key: 'Backspace' | 'Escape'): void;
+  /** A dragged distance point: its new spot once per frame (null: nothing there, it stays), `end` on release. */
+  onMeasureDrag?(index: number, point: Vec3 | null, end: boolean): void;
 }
 
 const DEG = Math.PI / 180;
@@ -59,7 +74,7 @@ export function rotatePose(pose: THREE.Matrix4, axis: THREE.Vector3, angle: numb
   return to.multiply(r).multiply(back).multiply(pose);
 }
 
-type Drag = { kind: 'rotate' | 'pan' | 'moveSet' | 'rotateSet'; x: number; y: number; x0: number; y0: number; t0: number; button: number; pose?: THREE.Matrix4; pivot?: THREE.Vector3; moved: boolean; shift: boolean; ctrl: boolean; held?: boolean };
+type Drag = { kind: 'rotate' | 'pan' | 'moveSet' | 'rotateSet' | 'dot'; x: number; y: number; x0: number; y0: number; t0: number; button: number; pose?: THREE.Matrix4; pivot?: THREE.Vector3; moved: boolean; shift: boolean; ctrl: boolean; held?: boolean; dot?: number };
 
 export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCallbacks, outer: AbortSignal): void {
   const signal = viewer.signal ? AbortSignal.any([outer, viewer.signal]) : outer;
@@ -72,6 +87,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
   let pinch: { d: number; cx: number; cy: number } | null = null;
   let lastTap = 0;
   let hoverRaf = 0;
+  let dotRaf = 0;
   /** The mouse over the canvas (null once it leaves): where Home sets the rotation center. */
   let hoverAt: { x: number; y: number } | null = null;
   let over = false;
@@ -136,6 +152,18 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     hold = null;
   };
 
+  /** A distance point under the press (12 px with a mouse, 24 px on touch): -1 for none or outside measure mode. */
+  const dotAt = (x: number, y: number, touch: boolean): number => (cb.mode() === 'measure' ? viewer.measureDotAt?.(x, y, touch ? 24 : 12) ?? -1 : -1);
+  /** A dragged distance point follows the surface under the pointer, one pick per frame; over nothing it stays. */
+  const dragDot = (d: Drag): void => {
+    if (!dotRaf) dotRaf = requestAnimationFrame(() => { dotRaf = 0; if (drag === d) cb.onMeasureDrag?.(d.dot!, viewer.pickSurface(d.x, d.y), false); });
+  };
+  const dropDot = (d: Drag, x: number, y: number): void => {
+    cancelAnimationFrame(dotRaf);
+    dotRaf = 0;
+    cb.onMeasureDrag?.(d.dot!, viewer.pickSurface(x, y), true);
+  };
+
   on(canvas, 'contextmenu', (e) => e.preventDefault());
   on(canvas, 'pointerdown', (e) => {
     stage.focus({ preventScroll: true });
@@ -145,8 +173,9 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       endHold(); // a second finger cancels a hold
       if (touches.size === 2) { drag = null; const [a, b] = [...touches.values()]; pinch = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), cx: (a!.x + b!.x) / 2, cy: (a!.y + b!.y) / 2 }; }
       else {
-        drag = { kind: 'rotate', x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), button: 0, moved: false, shift: false, ctrl: false };
-        if (touches.size === 1) startHold(e.clientX, e.clientY);
+        const dot = touches.size === 1 ? dotAt(e.clientX, e.clientY, true) : -1;
+        drag = { kind: dot >= 0 ? 'dot' : 'rotate', x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), button: 0, moved: false, shift: false, ctrl: false, dot };
+        if (touches.size === 1 && dot < 0) startHold(e.clientX, e.clientY);
       }
       return;
     }
@@ -159,8 +188,11 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       stage.classList.add('is-grabbing');
       return { kind, ...base, pose: viewer.assembly.matrix.clone(), pivot: viewer.setCenter() };
     };
-    // step 4: Ctrl/⌘ + drag anywhere turns the set (Shift then keeps one axis); a plain drag on an implant moves it
-    if (set && base.ctrl) drag = setDrag('rotateSet');
+    const dot = e.button === 0 ? dotAt(e.clientX, e.clientY, false) : -1;
+    // step 4: Ctrl/⌘ + drag anywhere turns the set (Shift then keeps one axis); a plain drag on an implant moves it;
+    // measuring, a press on a distance point drags it
+    if (dot >= 0) drag = { kind: 'dot', ...base, dot };
+    else if (set && base.ctrl) drag = setDrag('rotateSet');
     else if (e.buttons === 3 || e.button === 1 || (e.button === 0 && e.shiftKey)) drag = { kind: 'pan', ...base };
     else if (e.button === 2) drag = { kind: 'rotate', ...base };
     else if (set && viewer.pickPart(e.clientX, e.clientY)) drag = setDrag('moveSet');
@@ -200,6 +232,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       if (drag.pose) cb.onSetChange(drag.pose, 'start');
     }
     if (!drag.moved) return;
+    if (drag.kind === 'dot') { dragDot(drag); return; }
     if (drag.kind === 'rotate') rotateCamera(dx, dy);
     else if (drag.kind === 'pan') pan(dx, dy);
     else {
@@ -225,11 +258,13 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     cameraInput();
   });
 
-  /** A click (or tap) with the primary button: a guided point, else selection. */
+  /** A click (or tap) with the primary button: a guided point, a distance point (on nothing: nothing), else selection. */
   const primaryClick = (x: number, y: number): void => {
-    if (cb.mode() === 'guided') {
-      const p = viewer.pickSurface(x, y, true);
-      if (p) cb.onGuidedPoint(p);
+    const mode = cb.mode();
+    if (mode === 'guided' || mode === 'measure') {
+      const p = viewer.pickSurface(x, y, mode === 'guided');
+      if (p && mode === 'guided') cb.onGuidedPoint(p);
+      else if (p) cb.onMeasurePoint?.(p);
     } else cb.onSelect(viewer.pickPart(x, y)?.siteId ?? null);
   };
 
@@ -248,8 +283,9 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
       touches.delete(e.pointerId);
       if (touches.size < 2) pinch = null;
       endHold();
+      if (drag?.kind === 'dot' && drag.moved && touches.size === 0) dropDot(drag, e.clientX, e.clientY);
       // a one-finger tap (never part of a pinch: drag is null then; never after a hold) acts like a click; a double tap fits
-      if (drag && !drag.moved && !drag.held && touches.size === 0 && e.type === 'pointerup') {
+      else if (drag && !drag.moved && !drag.held && touches.size === 0 && e.type === 'pointerup') {
         const now = performance.now();
         if (now - lastTap < 300) { cb.onPreset('fit'); lastTap = 0; }
         else { lastTap = now; if (now - drag.t0 < 500) primaryClick(e.clientX, e.clientY); }
@@ -262,6 +298,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     stage.classList.remove('is-grabbing');
     if (!d) return;
     if (d.moved && d.pose) cb.onSetChange(viewer.assembly.matrix.clone(), 'end');
+    if (d.moved && d.kind === 'dot') dropDot(d, e.clientX, e.clientY);
     const click = !d.moved && performance.now() - d.t0 < 300;
     if (!click) return;
     if (d.button === 1) middleClick(d, e.clientX, e.clientY);
@@ -273,8 +310,10 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
   on(canvas, 'dblclick', () => cb.onPreset('fit'));
   on(canvas, 'wheel', (e) => {
     e.preventDefault();
-    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-    zoomAt(e.clientX, e.clientY, Math.pow(1.12, Math.max(-3, Math.min(3, dy / 100))));
+    const notches = (d: number): number => Math.max(-3, Math.min(3, (e.deltaMode === 1 ? d * 16 : d) / 100));
+    // Shift + wheel moves the cut 0.5 mm per notch, pushing the wheel (up) goes deeper; macOS turns a Shift wheel sideways
+    if (e.shiftKey && cb.onSectionNudge?.(-0.5 * notches(e.deltaY || e.deltaX))) return;
+    zoomAt(e.clientX, e.clientY, Math.pow(1.12, notches(e.deltaY)));
     cameraInput();
   }, { passive: false });
 
@@ -290,6 +329,7 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     // a held key repeats only the camera steps; a view, Home, a toggle or Enter acts once (a held Home would pick again
     // every repeat, a held Enter would stack guided points)
     const once = (fn: () => void): void => { if (!e.repeat) fn(); };
+    const mode = cb.mode();
     const view = viewForKey(e.code ?? '', k);
     if (view) once(() => cb.onPreset(view, true));
     else if (k.startsWith('Arrow')) {
@@ -302,16 +342,20 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
     else if (k === '-' || k === '_') { zoomAt(...center(), 1.15); moves = true; }
     else if (k === 'Home') once(() => { if (pivotAt(...(pointerAt() ?? center()))) cb.onPivot?.(); else cb.onPivotMiss?.(); });
     else if (k === 't' || k === 'T') once(() => cb.onToggleJawOpacity());
-    else if (k === 'c' || k === 'C') once(() => cb.onToggleMap());
+    else if (k === 'c' || k === 'C' || k === 'd' || k === 'D') once(() => cb.onToggleMap()); // D: exocad's Ctrl+D (Ctrl+D bookmarks)
     else if (k === 's' || k === 'S') once(() => cb.onShowAll?.());
+    else if (k === 'p' || k === 'P') once(() => cb.onToggleSection?.()); // exocad's Ctrl+P prints in a browser
+    else if ((k === 'r' || k === 'R') && mode !== 'guided') once(() => cb.onToggleMeasure?.()); // Ctrl+R reloads
     else if (k === '?') once(() => cb.onShortcuts());
-    else if (k === 'Enter' && cb.mode() === 'guided') once(() => {
+    else if (k === 'Enter' && (mode === 'guided' || mode === 'measure')) once(() => {
       const [x, y] = center();
-      const p = viewer.pickSurface(x, y, true);
-      if (p) cb.onGuidedPoint(p);
+      const p = viewer.pickSurface(x, y, mode === 'guided');
+      if (mode === 'measure') { if (p) cb.onMeasurePoint?.(p); else cb.onMeasureMiss?.(); }
+      else if (p) cb.onGuidedPoint(p);
       else cb.onGuidedMiss?.();
     });
-    else if ((k === 'Backspace' || k === 'Escape') && cb.mode() === 'guided') cb.onGuidedKey(k);
+    else if ((k === 'Backspace' || k === 'Escape') && mode === 'guided') cb.onGuidedKey(k);
+    else if ((k === 'Backspace' || k === 'Escape') && mode === 'measure') cb.onMeasureKey?.(k);
     else handled = false;
     if (handled) { e.preventDefault(); if (moves) cameraInput(); }
   });
@@ -321,5 +365,5 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
   on(window, 'keydown', (e) => { if (over && (e.key === 'Control' || e.key === 'Meta') && cb.mode() === 'set') cb.onCtrl(true); });
   on(window, 'keyup', (e) => { if (e.key === 'Control' || e.key === 'Meta') cb.onCtrl(false); });
   on(window, 'blur', () => cb.onCtrl(false));
-  signal.addEventListener('abort', () => { cancelAnimationFrame(hoverRaf); endHold(); }, { once: true });
+  signal.addEventListener('abort', () => { cancelAnimationFrame(hoverRaf); cancelAnimationFrame(dotRaf); endHold(); }, { once: true });
 }

@@ -1,13 +1,21 @@
-/** Stage chrome (UI-DESIGN §6.2-§6.8): toolbar, display popover, adjust pad, legend, readout, drop overlay. */
+/**
+ * Stage chrome (UI-DESIGN §6.2-§6.8): toolbar, display and section popovers, adjust pad, legend, readout, drop overlay,
+ * and the distance tool's state (VIEWER-POLISH B3; the viewer draws it).
+ */
+import type { Mat4, Vec3 } from '../core/types';
+import { distance } from '../core/vec3';
 import type { Step } from '../state/case';
 import type { Preset } from '../viewer/presets';
-import { DEFAULT_DISPLAY, type DisplayOptions, type PartHit, type SceneObject } from '../viewer/viewer';
+import { DEFAULT_DISPLAY, type DisplayOptions, type PartHit, type SceneObject, type Section } from '../viewer/viewer';
 import type { App } from './app';
 import { q, qa, roving } from './dom';
 import { openModal } from './feedback';
-import { fmt, num } from './i18n/format';
+import { fmt, num, type Lang } from './i18n/format';
 
 const VIEW_KEY = 'ddt-xchange:view';
+
+/** B3's value: the straight-line distance in mm with two decimals, in the page language ("12.34", "12,34"). */
+export const distanceMm = (lang: Lang, a: Vec3, b: Vec3): string => num(lang, distance(a, b), 2);
 
 function loadView(): Partial<DisplayOptions> {
   try {
@@ -29,12 +37,20 @@ export class Stage {
   private lastJawOpacity = 0.3;
   private pressed: string | null = null;
   private readonly hidden = new Set<'jaw' | 'parts' | 'capture'>();
+  private readonly secPop: HTMLElement;
+  private readonly secBtn: HTMLElement;
+  /** B2: the cut as its popover shows it (`r`: the slider's half-range, mm); null while there is none. */
+  private section: (Section & { r: number }) | null = null;
+  /** B3: the distance points and the implant-set pose they were taken on; null while the tool is off. */
+  private measure: { points: Vec3[]; pose: Mat4 } | null = null;
 
   constructor(private readonly app: App) {
     const { root, signal } = app;
     this.el = q(root, '.xch__stage');
     this.pop = q(this.el, '[data-display]');
     this.popBtn = q(this.el, '[data-display-btn]');
+    this.secPop = q(this.el, '[data-section]');
+    this.secBtn = q(this.el, '[data-section-btn]');
     roving(q(this.el, '.xch__toolbar'), signal);
     roving(q(this.el, '.xch__views'), signal);
     // Enter or Space on a view button (a click with detail 0) is announced, as a view key is; a mouse click is not
@@ -43,14 +59,22 @@ export class Stage {
     const enabled = (e: Event): boolean => (e.currentTarget as Element).getAttribute('aria-disabled') !== 'true';
     q(this.el, '[data-map-btn]').addEventListener('click', (e) => { if (enabled(e)) this.toggleMap(); }, { signal });
     q(this.el, '[data-xray-btn]').addEventListener('click', (e) => { if (enabled(e)) this.toggleJawOpacity(); }, { signal });
-    this.popBtn.addEventListener('click', () => this.togglePopover(), { signal });
-    this.pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.togglePopover(false); } }, { signal });
-    // it covers the adjust pad: focus leaving it (Tab, Shift+Tab) closes it, so nothing focused stays hidden under it
-    this.pop.addEventListener('focusout', (e) => {
-      const to = e.relatedTarget as Node | null;
-      if (to && !this.pop.contains(to) && to !== this.popBtn) this.togglePopover(false, false);
+    this.wirePopover(this.pop, this.popBtn);
+    this.wirePopover(this.secPop, this.secBtn);
+    this.popBtn.addEventListener('click', () => this.togglePopover(this.pop, this.popBtn), { signal });
+    // the Section button opens its popover and turns the cut on if it was off; closing the popover keeps the cut (exocad)
+    this.secBtn.addEventListener('click', () => {
+      if (this.secPop.hidden && !this.section) this.toggleSection();
+      this.togglePopover(this.secPop, this.secBtn);
     }, { signal });
-    document.addEventListener('pointerdown', (e) => { if (!this.pop.hidden && !this.pop.contains(e.target as Node) && e.target !== this.popBtn) this.togglePopover(false, false); }, { signal });
+    const range = q<HTMLInputElement>(this.secPop, '[data-section-range]');
+    range.addEventListener('input', () => this.changeSection({ offset: Number(range.value) }), { signal });
+    for (const sw of qa<HTMLButtonElement>(this.secPop, '[data-section-switch]')) {
+      const key = sw.dataset.sectionSwitch as 'flipped' | 'follow';
+      sw.addEventListener('click', () => this.changeSection({ [key]: !this.section?.[key] }), { signal });
+    }
+    q(this.secPop, '[data-section-off]').addEventListener('click', () => { this.toggleSection(); this.togglePopover(this.secPop, this.secBtn, false); }, { signal });
+    q(this.el, '[data-dist-btn]').addEventListener('click', (e) => { if (enabled(e)) this.toggleMeasure(); else app.say.say(app.c.dist.busy); }, { signal });
     for (const sw of qa<HTMLButtonElement>(this.pop, '[data-switch]')) {
       sw.addEventListener('click', () => {
         if (sw.getAttribute('aria-disabled') === 'true') return;
@@ -144,11 +168,26 @@ export class Stage {
     }, { signal });
   }
 
-  private togglePopover(open = this.pop.hidden, focusBack = true): void {
-    this.pop.hidden = !open;
-    this.popBtn.setAttribute('aria-expanded', String(open));
-    if (open) q<HTMLElement>(this.pop, 'button, input').focus();
-    else if (focusBack) this.popBtn.focus();
+  /**
+   * Display and Section popovers: non-modal, one open at a time. Esc closes and gives focus back to the button; an outside
+   * press closes; focus leaving closes (they cover the adjust pad: nothing focused stays hidden under them).
+   */
+  private wirePopover(pop: HTMLElement, btn: HTMLElement): void {
+    const { signal } = this.app;
+    pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.togglePopover(pop, btn, false); } }, { signal });
+    pop.addEventListener('focusout', (e) => {
+      const to = e.relatedTarget as Node | null;
+      if (to && !pop.contains(to) && !btn.contains(to)) this.togglePopover(pop, btn, false, false);
+    }, { signal });
+    document.addEventListener('pointerdown', (e) => { if (!pop.hidden && !pop.contains(e.target as Node) && !btn.contains(e.target as Node)) this.togglePopover(pop, btn, false, false); }, { signal });
+  }
+
+  private togglePopover(pop: HTMLElement, btn: HTMLElement, open = pop.hidden, focusBack = true): void {
+    if (open) for (const [p, b] of [[this.pop, this.popBtn], [this.secPop, this.secBtn]] as const) if (p !== pop && !p.hidden) this.togglePopover(p, b, false, false);
+    pop.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (open) q<HTMLElement>(pop, 'button, input').focus();
+    else if (focusBack) btn.focus();
   }
 
   setDisplay(patch: Partial<DisplayOptions>): void {
@@ -188,9 +227,15 @@ export class Stage {
   update(): void {
     const app = this.app, s = app.s;
     if (!s) return;
+    // any change of the implant-set pose (undo, reset, alignment) ends the distance tool: no number of a pose you no longer see
+    if (this.measure && s.assembly !== this.measure.pose) { this.endMeasure(); return; }
     const any = s.sites.length > 0 || !!s.captureMesh || !!s.jaw;
     q(this.el, '[data-empty]').hidden = any && !!app.viewer;
-    q(this.el, '[data-pad]').hidden = !(app.shown === 4 && s.jaw && !app.alignStep?.guided);
+    q(this.el, '[data-pad]').hidden = !(app.shown === 4 && s.jaw && !app.alignStep?.guided && !this.measure);
+    // no distance during guided points: the button says why
+    const dist = q(this.el, '[data-dist-btn]'), busy = !!app.alignStep?.guided;
+    dist.setAttribute('aria-disabled', String(busy));
+    dist.setAttribute('data-tip', busy ? app.c.dist.busy : fmt(app.lang, app.c.view.tip, { name: app.c.dist.button, key: 'R' }));
     q(this.el, '[data-legend-sub]').textContent = s.surfaces === 'capture' ? app.c.legend.onCapture : app.c.legend.onReplacement;
     q<HTMLAnchorElement>(app.root, '[data-skip-view]').href = app.shown === 4 ? '#xch-export' : '#help';
     this.syncControls();
@@ -287,9 +332,135 @@ export class Stage {
   }
 
   setGuided(on: boolean): void {
+    if (on) this.endMeasure(false); // guided points end the distance tool
     this.el.classList.toggle('is-guided', on);
-    this.el.setAttribute('aria-describedby', on ? 'xch-view-help xch-view-gp' : 'xch-view-help'); // Enter places a point only now
+    this.describe();
     this.update();
+  }
+
+  /** The stage's description: the help, plus what Enter does now (guided points or the distance tool). */
+  private describe(): void {
+    const extra = this.el.classList.contains('is-guided') ? ' xch-view-gp' : this.measure ? ' xch-view-dist' : '';
+    this.el.setAttribute('aria-describedby', `xch-view-help${extra}`);
+  }
+
+  /* ---------------- section (B2) ---------------- */
+
+  /** P or the Section button: the cut on or off; `announce` (P) says so. On, it starts through the orbit target, facing you. */
+  toggleSection(announce = false): void {
+    const app = this.app, v = app.viewer;
+    if (!v) return;
+    if (this.section) {
+      this.section = null;
+      v.setSection(null);
+      if (!this.secPop.hidden) this.togglePopover(this.secPop, this.secBtn, false, false);
+    } else {
+      const s = { offset: 0, flipped: false, follow: false };
+      this.section = { ...s, r: v.setSection(s) };
+    }
+    this.syncSection();
+    if (announce) app.say.say(this.section ? app.c.say.sectionOn : app.c.say.sectionOff);
+  }
+
+  /** The slider, the two switches. */
+  private changeSection(patch: Partial<Section>): void {
+    if (!this.section) return;
+    Object.assign(this.section, patch);
+    this.app.viewer?.setSection(this.section);
+    this.syncSection();
+  }
+
+  /** Shift + wheel: the cut moves `mm` within the slider's range; false without a cut (the wheel zooms then). */
+  nudgeSection(mm: number): boolean {
+    const s = this.section;
+    if (!s) return false;
+    const r = Math.ceil(s.r * 10) / 10;
+    this.changeSection({ offset: Math.max(-r, Math.min(r, s.offset + mm)) });
+    return true;
+  }
+
+  /** The Section button (pressed look and name while the cut is on) and the popover's controls. */
+  private syncSection(): void {
+    const s = this.section, app = this.app, c = app.c;
+    this.secBtn.classList.toggle('is-on', !!s);
+    this.secBtn.setAttribute('aria-label', s ? c.section.titleOn : c.section.title);
+    if (!s) return;
+    const range = q<HTMLInputElement>(this.secPop, '[data-section-range]'), r = Math.ceil(s.r * 10) / 10;
+    range.min = String(-r);
+    range.max = String(r);
+    range.value = String(s.offset);
+    const text = fmt(app.lang, c.section.value, { mm: num(app.lang, Math.round(s.offset * 10) / 10 || 0, 1) });
+    range.setAttribute('aria-valuetext', text);
+    q(range.parentElement!, 'output').textContent = text;
+    for (const sw of qa(this.secPop, '[data-section-switch]')) sw.setAttribute('aria-checked', String(!!s[sw.dataset.sectionSwitch as 'flipped' | 'follow']));
+  }
+
+  /* ---------------- distance (B3) ---------------- */
+
+  get measuring(): boolean {
+    return !!this.measure;
+  }
+
+  /** R or the Distance button: the tool on or off (never during guided points). */
+  toggleMeasure(): void {
+    const app = this.app;
+    if (this.measure) return this.endMeasure();
+    if (app.alignStep?.guided) { app.say.say(app.c.dist.busy); return; }
+    if (!app.viewer) return;
+    app.viewer.finishPose(); // points go on the set as the store has it
+    this.measure = { points: [], pose: app.s.assembly };
+    this.syncMeasure();
+  }
+
+  /** Leaving the tool clears its points; `announce` says it closed. */
+  endMeasure(announce = true): void {
+    if (!this.measure) return;
+    this.measure = null;
+    this.syncMeasure();
+    if (announce) this.app.say.say(this.app.c.say.distOff);
+  }
+
+  /** A point on a surface: the first, the second (the value), or a third that starts a new pair. */
+  measurePoint(p: Vec3): void {
+    const m = this.measure, app = this.app;
+    if (!m) return;
+    if (m.points.length === 2) m.points = [];
+    m.points.push(p);
+    this.syncMeasure(m.points.length - 1);
+    const [a, b] = m.points;
+    app.say.say(a && b ? fmt(app.lang, app.c.say.distance, { mm: distanceMm(app.lang, a, b) }) : app.c.say.distFirst);
+  }
+
+  /** Backspace removes the last point; Esc ends the tool. */
+  measureKey(k: 'Backspace' | 'Escape'): void {
+    if (k === 'Escape') this.endMeasure();
+    else if (this.measure?.points.pop()) this.syncMeasure();
+  }
+
+  /** A dragged point follows the surface (null: nothing there, it stays); the release says the new value. */
+  measureDrag(i: number, p: Vec3 | null, end: boolean): void {
+    const m = this.measure, app = this.app;
+    if (!m || i >= m.points.length) return;
+    if (p) { m.points[i] = p; this.syncMeasure(); }
+    const [a, b] = m.points;
+    if (end && a && b) app.say.say(fmt(app.lang, app.c.say.distance, { mm: distanceMm(app.lang, a, b) }));
+  }
+
+  /** The viewer's overlay, the button, the hint chip (while a point is missing), the stage's mode and description. */
+  private syncMeasure(placed = -1): void {
+    const m = this.measure, app = this.app, [a, b] = m?.points ?? [];
+    app.viewer?.setMeasure(m?.points ?? [], a && b ? fmt(app.lang, app.c.dist.value, { mm: distanceMm(app.lang, a, b) }) : '', placed);
+    this.el.classList.toggle('is-measure', !!m);
+    q(this.el, '[data-dist-btn]').setAttribute('aria-pressed', String(!!m));
+    q(this.el, '[data-disthint]').hidden = !m || !!b;
+    this.describe();
+    this.update(); // the adjust pad hides while measuring
+  }
+
+  /** A new case or a viewer restart: no cut, no distance, silently. */
+  resetTools(): void {
+    if (this.section) this.toggleSection();
+    this.endMeasure(false);
   }
 
   contextLost(): void {

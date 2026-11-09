@@ -140,6 +140,8 @@ describe('text on the indigo stage and its chrome (the stage is dark in both the
     ['"Occlusal" (default view) under the views dial', '.xch__tool', ['.xch__tool.xch__home', '.xch__views', '.xch__stage']],
     ['color scale legend', '.xch__legend', ['.xch__legend', '.xch__stage']],
     ['implant labels in the scene', '.xch__tag', ['.xch__tag', '.xch__stage']],
+    ['distance value pill (slice B)', '.xch__distval', ['.xch__distval', '.xch__stage']],
+    ['distance hint chip (slice B)', '.xch__hintchip', ['.xch__hintchip', '.xch__stage']],
   ];
   for (const theme of ['light', 'dark'] as const) {
     for (const [what, text, grounds] of cases) {

@@ -2,15 +2,20 @@
  * three.js scene of DDT Xchange (UI-DESIGN §6): render on demand, jaw fixed in world coordinates, the
  * implant set as one group whose matrix is the capture -> jaw transform. Buffers are built once per mesh;
  * implants sharing a geometry share its attributes and own only a color attribute. Colors come from the
- * site's CSS tokens and follow <html data-theme> live. Input lives in controls.ts.
+ * site's CSS tokens and follow <html data-theme> live. Input lives in controls.ts. Slice B (VIEWER-POLISH §5): GPU
+ * picking (pick.ts), one section plane with flat cut faces (section.ts), the distance overlay.
  */
 import gsap from 'gsap';
 import * as THREE from 'three';
 import { fromColumnMajor } from '../core/mat4';
 import type { Arch, Mat4, TriMesh, Vec3 } from '../core/types';
 import { buildLut, colorize } from './colormap';
+import { decodePick, PICK_CAPTURE, PICK_FS, PICK_JAW, PICK_PART, PICK_VS, type Pick, type SceneObject } from './pick';
 import { presetView, type Preset } from './presets';
+import { sectionPlane } from './section';
 import { EASE_OUT, forget, transient } from '../ui/motion';
+
+export type { SceneObject };
 
 export interface SiteVisual {
   id: string;
@@ -65,18 +70,34 @@ const shine = (m: THREE.MeshPhongMaterial, s: Shine): void => { m.specular.setSc
 // LOOK.ringPx on screen wherever the stencil stays clear: first depth-tested (where the part shows), then over
 // everything at LOOK.ringHidden (where the scan hides it; it still shows where a buried implant is). Each copy marks the
 // pixels it draws, so every ring pixel is drawn once. Last in the frame, in the same render call: no pass, no target.
-const RING_VS = `uniform vec2 ringRes;
+// The cut clips mask and copies alike, so the ring outlines what is left of a cut part.
+const RING_VS = `#include <clipping_planes_pars_vertex>
+uniform vec2 ringRes;
 uniform vec2 ringDir;
 void main() {
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
   gl_Position.xy += ringDir * 2.0 / ringRes * gl_Position.w;
+  #include <clipping_planes_vertex>
 }`;
-const RING_FS = `uniform vec3 ringColor;
+const RING_FS = `#include <clipping_planes_pars_fragment>
+uniform vec3 ringColor;
 uniform float ringAlpha;
 void main() {
+  #include <clipping_planes_fragment>
   gl_FragColor = vec4(ringColor, ringAlpha);
   #include <colorspace_fragment>
 }`;
+
+/** Pick layers (B1): the jaw alone (guided points), or with replacements and captured bodies; nothing else is pickable. */
+const LAYER_JAW = 1, LAYER_PARTS = 2;
+
+/** Section state (B2): the plane through `origin + offset · axis` (axis: the view direction when it started). */
+export interface Section {
+  offset: number;
+  flipped: boolean;
+  follow: boolean;
+}
 
 /** The scale bar: the longest 1, 2 or 5 × 10^n mm that fits in `maxPx` pixels, and its length in pixels. */
 export function niceScale(mmPerPx: number, maxPx: number): { mm: number; px: number } {
@@ -113,9 +134,6 @@ export interface PartHit {
   /** µm at the hit point when the map is on (barycentric). */
   um: number | null;
 }
-
-/** What a modified middle click acts on: the jaw scan, a replacement or a captured scan body. */
-export type SceneObject = 'jaw' | 'part' | 'capture';
 
 interface Implant {
   site: SiteVisual;
@@ -219,7 +237,7 @@ export class Viewer {
       ringRes: this.ringRes, ringColor: this.ringColor, ringAlpha: { value: shown ? 1 : LOOK.ringHidden },
       ringDir: { value: new THREE.Vector2(Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)).multiplyScalar(LOOK.ringPx) },
     },
-    vertexShader: RING_VS, fragmentShader: RING_FS,
+    vertexShader: RING_VS, fragmentShader: RING_FS, clipping: true,
     depthTest: shown, depthWrite: false, transparent: true,
     stencilWrite: true, stencilRef: 1, stencilFunc: THREE.GreaterStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
   })));
@@ -247,11 +265,28 @@ export class Viewer {
   private poseTween: gsap.core.Tween | null = null;
   private camTween: gsap.core.Tween | null = null;
   private onLost: (e: Event) => void;
+  /** B1: a 1×1 float target and one pick material; `gpu` null until the first pick asks for float targets. */
+  private readonly pickTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.FloatType });
+  private readonly pickMat = new THREE.ShaderMaterial({ vertexShader: PICK_VS, fragmentShader: PICK_FS, uniforms: { code: { value: 0 } }, side: THREE.DoubleSide, clipping: true });
+  private readonly pickBuf = new Float32Array(4);
+  private readonly pickCode = new Map<THREE.Object3D, number>();
+  private readonly clearColor = new THREE.Color();
+  private gpu: boolean | null = null;
+  private unwarm: (() => void) | null = null;
+  /** B2: the cut's plane, shared by every material it clips; `cut` null while there is none. */
+  readonly plane = new THREE.Plane();
+  private cut: (Section & { origin: THREE.Vector3; axis: THREE.Vector3; r: number }) | null = null;
+  private readonly cutMaterial = new THREE.MeshBasicMaterial({ side: THREE.BackSide, toneMapped: false });
+  /** B3: the distance overlay (made on first use), its points and its dots' last stage px. */
+  private distEls: { root: SVGSVGElement; halo: SVGLineElement; line: SVGLineElement; dots: HTMLElement[]; pill: HTMLElement } | null = null;
+  private measure: { points: Vec3[]; text: string } = { points: [], text: '' };
+  private dotAt: [number, number][] = [];
 
   constructor(readonly stage: HTMLElement, private readonly labels: HTMLElement, private readonly opts: ViewerOptions) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.localClippingEnabled = true; // the cut (B2); materials without planes pay nothing
     this.renderer.setPixelRatio(dprCap());
     this.canvas = this.renderer.domElement;
     this.canvas.className = 'xch__canvas';
@@ -282,6 +317,15 @@ export class Viewer {
     this.io.observe(stage);
     this.mo = new MutationObserver(() => this.refreshTheme());
     this.mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    // per pick draw: the mesh's object code and its depth bias, so a replacement over the scan wins as it is drawn
+    this.pickMat.onBeforeRender = (_r, _s, _c, _g, object) => {
+      const src = (object as THREE.Mesh).material as THREE.Material, m = this.pickMat;
+      m.uniforms.code!.value = this.pickCode.get(object) ?? 0;
+      m.polygonOffset = src.polygonOffset;
+      m.polygonOffsetFactor = src.polygonOffsetFactor;
+      m.polygonOffsetUnits = src.polygonOffsetUnits;
+      m.uniformsNeedUpdate = true;
+    };
     this.refreshTheme();
     this.resize();
   }
@@ -348,6 +392,17 @@ export class Viewer {
     cam.far = d + 1.5 * r;
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
+    this.placePlane();
+  }
+
+  /** The cut's plane for this frame: fixed in the scene, or (follow) perpendicular to the view at its depth from the target. */
+  private placePlane(): void {
+    const c = this.cut;
+    if (!c) return;
+    if (c.follow) { c.origin.copy(this.target); c.axis.set(0, 0, -1).applyQuaternion(this.q); }
+    const { normal, constant } = sectionPlane(c.axis.toArray(), c.origin.toArray(), c.offset, c.flipped);
+    this.plane.normal.set(...normal);
+    this.plane.constant = constant;
   }
 
   /**
@@ -382,12 +437,41 @@ export class Viewer {
     this.colors = { jaw: v('--xch-jaw', '#d9d1c4'), part: v('--xch-part', '#d8ad77'), capture: v('--xch-capture', '#b8b5b0'), active: v('--xch-active', '#f59e0b') };
     this.pinMaterial.color.set(this.colors.active);
     this.ringColor.value.set(this.colors.active);
+    this.cutMaterial.color.set(v('--xch-cut', '#3d9ad4'));
     this.restyle();
+  }
+
+  /** The cut's plane on a material (B2); a change of the plane count recompiles it. */
+  private clip(m: THREE.Material): void {
+    const on = !!this.cut;
+    if (!!m.clippingPlanes?.length === on) return;
+    m.clippingPlanes = on ? [this.plane] : null;
+    m.needsUpdate = true;
+  }
+
+  /**
+   * B2's cut faces: while the cut is on, every cut mesh shows only its front side and draws its back side once more, flat
+   * and unlit in --xch-cut, so you look into a section rather than a lit inside. One material for all: coincident cut faces
+   * cannot stripe. Not on a pick layer.
+   */
+  private syncCutFaces(): void {
+    for (const m of [this.jaw, ...[...this.implants.values()].map((i) => i.mesh), ...this.ghosts]) {
+      if (!m) continue;
+      let f = m.getObjectByName('cut') as THREE.Mesh | undefined;
+      if (!this.cut) { if (f) m.remove(f); continue; }
+      if (!f) {
+        f = new THREE.Mesh(m.geometry, this.cutMaterial);
+        f.name = 'cut';
+        f.matrixAutoUpdate = false;
+        m.add(f);
+      }
+      f.geometry = m.geometry;
+    }
   }
 
   /** Re-applies materials from colors, display options, selection and guided state. */
   private restyle(): void {
-    const d = this.display;
+    const d = this.display, side = this.cut ? THREE.FrontSide : THREE.DoubleSide;
     if (this.jaw) {
       const m = this.jaw.material;
       const colored = d.jawColor && !!this.jawLinearColors;
@@ -396,6 +480,8 @@ export class Viewer {
       m.opacity = d.jawOpacity;
       m.transparent = d.jawOpacity < 1;
       m.depthWrite = d.jawOpacity >= 1;
+      m.side = side;
+      this.clip(m);
       m.needsUpdate = true;
       this.jaw.visible = d.jaw;
       this.jaw.renderOrder = d.jawOpacity < 1 ? 2 : 0;
@@ -418,6 +504,7 @@ export class Viewer {
       m.opacity = opacity;
       m.transparent = opacity < 1;
       m.depthWrite = opacity >= 1;
+      this.clip(m);
       m.needsUpdate = true;
       imp.mesh.visible = d.parts;
       imp.label.hidden = !d.labels;
@@ -432,9 +519,13 @@ export class Viewer {
       m.opacity = mapped ? 1 : 0.45;
       m.transparent = !mapped;
       m.depthWrite = mapped;
+      m.side = side;
+      this.clip(m);
       m.needsUpdate = true;
       g.visible = d.capture;
     });
+    for (const m of [this.ringMask, ...this.ringCopies, this.cutMaterial]) this.clip(m);
+    this.syncCutFaces();
     this.invalidate();
   }
 
@@ -467,6 +558,7 @@ export class Viewer {
     }
     this.updateSphere();
     this.restyle();
+    if (mesh) this.warmPick();
   }
 
   get hasJawColors(): boolean {
@@ -757,11 +849,7 @@ export class Viewer {
    * than the bounding sphere, which left the arch at about half the stage.
    */
   private frame(q: THREE.Quaternion): { center: THREE.Vector3; dist: number } {
-    this.updateSphere(); // also brings every matrixWorld up to date
-    const box = new THREE.Box3();
-    if (this.jaw?.visible) box.expandByObject(this.jaw);
-    for (const imp of this.implants.values()) if (imp.mesh.visible) box.expandByObject(imp.mesh);
-    for (const g of this.ghosts) if (g.visible) box.expandByObject(g);
+    const box = this.visibleBox();
     if (box.isEmpty()) return { center: this.sphere.center.clone(), dist: this.fitDistance(this.sphere.radius) };
     const center = box.getCenter(new THREE.Vector3()), inv = q.clone().invert(), c = new THREE.Vector3();
     const ty = Math.tan(THREE.MathUtils.degToRad(this.display.fovDeg) / 2) * LOOK.frame, tx = ty * Math.max(0.2, this.camera.aspect);
@@ -772,6 +860,38 @@ export class Viewer {
       dist = Math.max(dist, c.z + Math.max(Math.abs(c.x) / tx, Math.abs(c.y) / ty));
     }
     return { center, dist: Math.max(dist, this.fitDistance(1)) };
+  }
+
+  /** Bounding box of what is shown. */
+  private visibleBox(): THREE.Box3 {
+    this.updateSphere(); // also brings every matrixWorld up to date
+    const box = new THREE.Box3();
+    if (this.jaw?.visible) box.expandByObject(this.jaw);
+    for (const imp of this.implants.values()) if (imp.mesh.visible) box.expandByObject(imp.mesh);
+    for (const g of this.ghosts) if (g.visible) box.expandByObject(g);
+    return box;
+  }
+
+  /**
+   * The cut (B2); null removes it. It starts through the orbit target, perpendicular to the view, removing what lies
+   * between it and the camera, and stays put in the scene (turn the view to see it from the side) unless `follow` keeps it
+   * perpendicular to the view at its depth from the target. Returns the half-range of the position slider: the radius of
+   * what was shown when the cut started.
+   */
+  setSection(s: Section | null): number {
+    const was = !!this.cut;
+    if (!s) this.cut = null;
+    else if (this.cut) Object.assign(this.cut, s);
+    else {
+      const box = this.visibleBox();
+      const r = box.isEmpty() ? this.sphere.radius : box.getBoundingSphere(new THREE.Sphere()).radius;
+      this.cut = { ...s, origin: this.target.clone(), axis: new THREE.Vector3(0, 0, -1).applyQuaternion(this.q), r };
+    }
+    // with and without a plane the pick shader is another program: the next idle moment compiles the one now in use
+    if (was !== !!this.cut) this.warmPick();
+    this.placePlane();
+    this.restyle();
+    return this.cut?.r ?? 0;
   }
 
   /** Frames everything visible (or only some sites), keeping the direction. */
@@ -831,33 +951,111 @@ export class Viewer {
     return { siteId: imp.site.id, um };
   }
 
-  /** Jaw or any visible surface, world point. ponytail: plain three raycast (linear in triangles); fine per click, never on hover. */
+  /** The surface point drawn under (x, y) (`jawOnly`: on the jaw scan), world coordinates; never on a removed half. */
   pickSurface(x: number, y: number, jawOnly = false): Vec3 | null {
-    this.updateCamera();
-    this.raycaster.setFromCamera(this.ndc(x, y), this.camera);
-    const targets: THREE.Object3D[] = [];
-    if (this.jaw?.visible) targets.push(this.jaw);
-    if (!jawOnly) for (const i of this.implants.values()) if (i.mesh.visible) targets.push(i.mesh);
-    const hit = this.raycaster.intersectObjects(targets, false)[0];
-    return hit ? [hit.point.x, hit.point.y, hit.point.z] : null;
+    return this.pickAt(x, y, jawOnly)?.point ?? null;
+  }
+
+  /** The object drawn under (x, y): the jaw scan, a replacement or a captured body (A9's modified middle clicks). */
+  pickObject(x: number, y: number): SceneObject | null {
+    return this.pickAt(x, y, false)?.object ?? null;
   }
 
   /**
-   * The object drawn under (x, y): visible, at least 10 % opaque; a part or captured body within DEPTH_BIAS_MM behind the
-   * scan counts as on top, as it is drawn. ponytail: three raycast, linear in triangles (≈ 0.4 s on a 3 M-triangle jaw),
-   * fine for a rare modified middle click; slice B's GPU pick replaces it.
+   * Pickable: the jaw scan, replacements and captured bodies that are visible and at least 10 % opaque (`jawOnly`: the jaw
+   * alone), as drawn: the cut removes, and a part within DEPTH_BIAS_MM behind the scan is on top.
    */
-  pickObject(x: number, y: number): SceneObject | null {
+  private pickAt(x: number, y: number, jawOnly: boolean): Pick | null {
+    return this.gpuPicks ? this.gpuPick(x, y, jawOnly) : this.raycastPick(x, y, jawOnly);
+  }
+
+  /** GPU picks need float render targets (EXT_color_buffer_float); without them the raycast stays. */
+  private get gpuPicks(): boolean {
+    return (this.gpu ??= !!this.renderer.extensions?.has?.('EXT_color_buffer_float'));
+  }
+
+  /**
+   * B1: one render into the 1×1 float target framed on the CSS pixel (x, y), world position in rgb and the object code in
+   * a (pick.ts), every mesh with its depth bias and the cut. Target, layers, view offset, override material and clear
+   * color end as they were; no frame is scheduled.
+   */
+  private gpuPick(x: number, y: number, jawOnly: boolean): Pick | null {
+    const r = this.canvas.getBoundingClientRect(), rnd = this.renderer, cam = this.camera, mat = this.pickMat;
+    this.updateCamera();
+    this.biasDepth();
+    this.clip(mat);
+    const sites: string[] = [];
+    this.pickCode.clear();
+    const pickable = (m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>, code: number, layer: number): void => {
+      m.layers.set(0);
+      if (m.visible && m.material.opacity >= 0.1) { m.layers.enable(layer); this.pickCode.set(m, code); }
+    };
+    if (this.jaw) pickable(this.jaw, PICK_JAW, LAYER_JAW);
+    for (const imp of this.implants.values()) pickable(imp.mesh, PICK_PART + sites.push(imp.site.id) - 1, LAYER_PARTS);
+    for (const g of this.ghosts) pickable(g, PICK_CAPTURE, LAYER_PARTS);
+    const mask = cam.layers.mask, target = rnd.getRenderTarget(), alpha = rnd.getClearAlpha(), override = this.scene.overrideMaterial;
+    rnd.getClearColor(this.clearColor);
+    cam.setViewOffset(r.width, r.height, x - r.left - 0.5, y - r.top - 0.5, 1, 1);
+    cam.layers.mask = (1 << LAYER_JAW) | (jawOnly ? 0 : 1 << LAYER_PARTS);
+    this.scene.overrideMaterial = mat;
+    this.pickBuf.fill(0);
+    try {
+      rnd.setRenderTarget(this.pickTarget);
+      rnd.setClearColor(0x000000, 0);
+      rnd.render(this.scene, cam);
+      rnd.readRenderTargetPixels(this.pickTarget, 0, 0, 1, 1, this.pickBuf);
+    } finally {
+      rnd.setRenderTarget(target);
+      rnd.setClearColor(this.clearColor, alpha);
+      this.scene.overrideMaterial = override;
+      cam.layers.mask = mask;
+      cam.clearViewOffset();
+    }
+    return decodePick(this.pickBuf, sites);
+  }
+
+  /**
+   * Without float render targets. ponytail: three's Raycaster is linear in triangles, ≈ 0.25–0.4 s per click on a
+   * 3 M-triangle jaw; upgrade path: an RGBA8 target with the depth packed into it, unprojected back to a point.
+   */
+  private raycastPick(x: number, y: number, jawOnly: boolean): Pick | null {
     this.updateCamera();
     this.raycaster.setFromCamera(this.ndc(x, y), this.camera);
-    const kind = new Map<THREE.Object3D, SceneObject>();
-    const add = (m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>, k: SceneObject): void => { if (m.visible && m.material.opacity >= 0.1) kind.set(m, k); };
+    // a mesh, or its cut faces (the back side the cut shows), stands for its owner
+    const kind = new Map<THREE.Object3D, [SceneObject, THREE.Object3D]>();
+    const add = (m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>, k: SceneObject): void => {
+      if (!m.visible || m.material.opacity < 0.1) return;
+      kind.set(m, [k, m]);
+      const f = m.getObjectByName('cut');
+      if (f) kind.set(f, [k, m]);
+    };
     if (this.jaw) add(this.jaw, 'jaw');
-    for (const i of this.implants.values()) add(i.mesh, 'part');
-    for (const g of this.ghosts) add(g, 'capture');
-    const hits = this.raycaster.intersectObjects([...kind.keys()], false);
-    const top = hits.find((h) => kind.get(h.object) !== 'jaw' && h.distance <= hits[0]!.distance + DEPTH_BIAS_MM) ?? hits[0];
-    return top ? kind.get(top.object)! : null;
+    if (!jawOnly) {
+      for (const i of this.implants.values()) add(i.mesh, 'part');
+      for (const g of this.ghosts) add(g, 'capture');
+    }
+    const hits = this.raycaster.intersectObjects([...kind.keys()], false).filter((h) => !this.cut || this.plane.distanceToPoint(h.point) >= 0);
+    const top = hits.find((h) => kind.get(h.object)![0] !== 'jaw' && h.distance <= hits[0]!.distance + DEPTH_BIAS_MM) ?? hits[0];
+    if (!top) return null;
+    const [object, owner] = kind.get(top.object)!;
+    return { point: [top.point.x, top.point.y, top.point.z], object, siteId: (owner.userData.siteId as string | undefined) ?? null };
+  }
+
+  /** B1: one pick at the stage center while the browser is idle, so compiling the pick shader never lands on a click. */
+  private warmPick(): void {
+    if (this.unwarm || !this.gpuPicks) return;
+    const run = (): void => {
+      this.unwarm = null;
+      const r = this.canvas.getBoundingClientRect();
+      if (!this.disposed && r.width > 0) this.gpuPick(r.left + r.width / 2, r.top + r.height / 2, false);
+    };
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(run, { timeout: 1000 });
+      this.unwarm = () => cancelIdleCallback(id);
+    } else {
+      const id = window.setTimeout(run, 200);
+      this.unwarm = () => clearTimeout(id);
+    }
   }
 
   /* ---------------- labels ---------------- */
@@ -876,21 +1074,41 @@ export class Viewer {
       pin.el.classList.toggle('is-off', !at);
       if (at) pin.el.style.transform = `translate(${at[0]}px, ${at[1]}px) translate(-50%, -130%)`;
     }
+    const p = new THREE.Vector3();
+    const d = this.distEls;
+    if (d) {
+      // the distance overlay (B3); all of it hides when a point leaves the stage
+      const spots = this.measure.points.map((q) => { const s = px(p.set(...q)); return s && s[0] >= 0 && s[0] <= w && s[1] >= 0 && s[1] <= h ? s : null; });
+      const on = spots.every((s) => !!s);
+      this.dotAt = on ? (spots as [number, number][]) : [];
+      d.dots.forEach((el, i) => {
+        const s = on ? spots[i] : null;
+        el.classList.toggle('is-off', !s);
+        if (s) el.style.transform = `translate(${s[0]}px, ${s[1]}px) translate(-50%, -50%)`;
+      });
+      const [a, b] = this.dotAt;
+      d.root.classList.toggle('is-off', !b);
+      d.pill.classList.toggle('is-off', !b);
+      if (a && b) {
+        for (const l of [d.halo, d.line]) { l.setAttribute('x1', String(a[0])); l.setAttribute('y1', String(a[1])); l.setAttribute('x2', String(b[0])); l.setAttribute('y2', String(b[1])); }
+        d.pill.style.transform = `translate(${(a[0] + b[0]) / 2}px, ${(a[1] + b[1]) / 2}px) translate(-50%, -50%)`;
+      }
+    }
     if (!this.display.labels) return;
     const parts: { imp: Implant; box: { x0: number; y0: number; x1: number; y1: number }; axis: [number, number] }[] = [];
-    const p = new THREE.Vector3();
     for (const imp of this.implants.values()) {
       if (!imp.mesh.visible) continue;
       const b = imp.mesh.geometry.boundingBox!, m = imp.mesh.matrixWorld;
       const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
-      let off = false;
-      for (let i = 0; i < 8; i++) {
+      const cx = (b.min.x + b.max.x) / 2, cy = (b.min.y + b.max.y) / 2;
+      // a part whose middle the cut removed loses its label
+      let off = !!this.cut && this.plane.distanceToPoint(p.set(cx, cy, (b.min.z + b.max.z) / 2).applyMatrix4(m)) < 0;
+      for (let i = 0; i < 8 && !off; i++) {
         const at = px(p.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(m));
         if (!at) { off = true; break; }
         box.x0 = Math.min(box.x0, at[0]); box.x1 = Math.max(box.x1, at[0]); box.y0 = Math.min(box.y0, at[1]); box.y1 = Math.max(box.y1, at[1]);
       }
       // the part's axis on screen, base → free end (+Z of the implant frame)
-      const cx = (b.min.x + b.max.x) / 2, cy = (b.min.y + b.max.y) / 2;
       const base = off ? null : px(p.set(cx, cy, b.min.z).applyMatrix4(m)), end = base && px(p.set(cx, cy, b.max.z).applyMatrix4(m));
       imp.label.classList.toggle('is-off', !end);
       if (base && end) parts.push({ imp, box, axis: [end[0] - base[0], end[1] - base[1]] });
@@ -901,6 +1119,48 @@ export class Viewer {
       const s = labelSpot(box, axis, [(box.x0 + box.x1) / 2 - mx, (box.y0 + box.y1) / 2 - my]);
       imp.label.style.transform = `translate(${s.x}px, ${s.y}px) translate(${(s.ox - 1) * 50}%, ${(s.oy - 1) * 50}%)`;
     }
+  }
+
+  /* ---------------- distance (B3) ---------------- */
+
+  /**
+   * The distance overlay: up to two world points, the value pill's text, and the index of a point just placed (it scales
+   * in like a guided pin; reduced motion: it is just there). Drawn in the labels layer by placeLabels.
+   */
+  setMeasure(points: readonly Vec3[], text: string, placed = -1): void {
+    const d = (this.distEls ??= this.distOverlay());
+    this.measure = { points: points.map((q) => [...q] as Vec3), text };
+    d.pill.textContent = text;
+    // from an inline 0 (a fromTo would leave its startAt tween in the context)
+    const pop = (el: HTMLElement): void => {
+      el.style.setProperty('--pop', '0');
+      transient(this.ctx, () => gsap.to(el, { '--pop': 1, duration: 0.45, ease: 'back.out(1.6)' }));
+    };
+    if (placed >= 0 && !this.opts.reducedMotion) {
+      pop(d.dots[placed]!);
+      if (placed === 1) pop(d.pill);
+    }
+    this.invalidate();
+  }
+
+  /** Which distance point is drawn within `radius` px of (x, y) (client px); -1 for none. */
+  measureDotAt(x: number, y: number, radius: number): number {
+    const r = this.canvas.getBoundingClientRect();
+    return this.dotAt.findIndex(([sx, sy]) => Math.hypot(sx + r.left - x, sy + r.top - y) <= radius);
+  }
+
+  /** Two dots and a line in --xch-active with the crosshair's dark halo, and the value pill (aria-hidden: the live region speaks). */
+  private distOverlay(): NonNullable<Viewer['distEls']> {
+    const ns = 'http://www.w3.org/2000/svg';
+    const root = document.createElementNS(ns, 'svg'), halo = document.createElementNS(ns, 'line'), line = document.createElementNS(ns, 'line');
+    root.setAttribute('class', 'xch__dist is-off');
+    halo.setAttribute('class', 'xch__disthalo');
+    line.setAttribute('class', 'xch__distline');
+    root.append(halo, line);
+    const span = (cls: string): HTMLElement => { const e = document.createElement('span'); e.className = `${cls} is-off`; return e; };
+    const dots = [span('xch__distdot'), span('xch__distdot')], pill = span('xch__distval');
+    this.labels.append(root, ...dots, pill);
+    return { root, halo, line, dots, pill };
   }
 
   /* ---------------- thumbnails ---------------- */
@@ -957,6 +1217,7 @@ export class Viewer {
     this.life.abort();
     cancelAnimationFrame(this.raf);
     clearTimeout(this.restoreTimer);
+    this.unwarm?.();
     this.ctx.revert();
     this.ro.disconnect();
     this.io.disconnect();
@@ -973,6 +1234,9 @@ export class Viewer {
     this.pinMaterial.dispose();
     this.ringMask.dispose();
     for (const m of this.ringCopies) m.dispose();
+    this.pickTarget.dispose();
+    this.pickMat.dispose();
+    this.cutMaterial.dispose();
     this.scene.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); (m.material as THREE.Material | undefined)?.dispose?.(); });
     this.renderer.dispose();
     this.renderer.forceContextLoss();
