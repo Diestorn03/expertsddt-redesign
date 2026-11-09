@@ -4,7 +4,7 @@
  */
 import type { Mat4, Vec3 } from '../core/types';
 import { distance } from '../core/vec3';
-import type { Step } from '../state/case';
+import { shownDeviation, type Step } from '../state/case';
 import type { Preset } from '../viewer/presets';
 import { DEFAULT_DISPLAY, type DisplayOptions, type PartHit, type SceneObject, type Section } from '../viewer/viewer';
 import type { App } from './app';
@@ -221,18 +221,20 @@ export class Stage {
   /** Every control that mirrors the display options, the legend included: whatever changed the map (C, the map button, the Display switch), the legend follows. */
   private syncControls(): void {
     const d = this.display, app = this.app, c = app.c;
-    const mapped = d.map && !!app.s?.deviation;
+    // what the viewer can draw: a part exchanged after the alignment has no map (state/case shownDeviation)
+    const drawable = !!app.s && !!shownDeviation(app.s);
+    const mapped = d.map && drawable;
     q(this.el, '[data-legend]').hidden = !mapped;
     const map = q(this.el, '[data-map-btn]'), xray = q(this.el, '[data-xray-btn]');
     map.setAttribute('aria-pressed', String(mapped));
-    map.setAttribute('aria-disabled', String(!app.s?.deviation));
+    map.setAttribute('aria-disabled', String(!drawable));
     xray.setAttribute('aria-pressed', String(d.jawOpacity < 1));
     xray.setAttribute('aria-disabled', String(!app.s?.jaw));
     for (const sw of qa(this.pop, '[data-switch]')) {
       const key = sw.dataset.switch as keyof DisplayOptions;
       sw.setAttribute('aria-checked', String(!!d[key]));
       if (key === 'jawColor') sw.hidden = !app.viewer?.hasJawColors;
-      if (key === 'map') sw.setAttribute('aria-disabled', String(!app.s?.deviation));
+      if (key === 'map') sw.setAttribute('aria-disabled', String(!drawable));
       if (key === 'capture') sw.hidden = !app.s?.components.length;
     }
     for (const r of qa<HTMLInputElement>(this.pop, '[data-range]')) {
@@ -348,7 +350,7 @@ export class Stage {
   }
 
   toggleMap(): void {
-    if (this.app.s.deviation) this.setDisplay({ map: !this.display.map });
+    if (shownDeviation(this.app.s)) this.setDisplay({ map: !this.display.map });
     this.update();
   }
 

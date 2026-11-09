@@ -153,6 +153,12 @@ export interface AlignmentResult {
   flags: AlignmentFlag[];
 }
 
+/** A body by id and name, as report.json writes geometries. The id 'capture' is a site's own body from the positions file. */
+export interface MatchedBody {
+  id: string;
+  name: string;
+}
+
 export interface ExportRequest {
   arch: Arch;
   captureFormat: CaptureFormat;
@@ -164,6 +170,8 @@ export interface ExportRequest {
   jaw?: JawScan;
   /** Last alignment shown to the user, if any. */
   alignment?: AlignmentResult;
+  /** Per site id, the body the alignment was made with; a site missing here was aligned with its exported geometry. */
+  matchedWith?: Readonly<Record<string, MatchedBody>>;
   /** ISO 8601 time written to report.json (passed in so bundles are reproducible). */
   createdAt: string;
   appVersion: string;

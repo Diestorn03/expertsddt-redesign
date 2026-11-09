@@ -206,6 +206,7 @@
 .xch__thumb img { width: 48px; height: 48px; }
 .xch__libtext { display: grid; min-width: 0; gap: .1rem; }
 .xch__libname { font-weight: 600; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xch__libmain--wrap .xch__libname { white-space: normal; }
 .xch__libmeta { font-size: .76rem; color: var(--muted); }
 .xch__libconfirm { display: grid; gap: .5rem; padding: .7rem .8rem; border-radius: 14px; background: var(--surface); border: 1.5px solid var(--xch-bad); font-size: .85rem; }
 .xch__field { display: grid; gap: .4rem; font-size: .85rem; font-weight: 600; color: var(--ink); }
@@ -235,7 +236,7 @@
 .is-now .xch__gpnum, .is-placed .xch__gpnum { background: var(--xch-active); border-color: var(--xch-active); color: #1e293b; }
 .xch__gpstate { margin-left: auto; font-size: .78rem; color: var(--xch-quiet); }
 .xch__summary { margin: 0; display: grid; gap: .35rem; font-size: .88rem; }
-.xch__summary div { display: flex; justify-content: space-between; gap: 1rem; }
+.xch__summary div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
 .xch__summary dt { color: var(--muted); }
 .xch__summary dd { margin: 0; color: var(--ink); font-weight: 600; text-align: right; }
 .xch__what summary { cursor: pointer; font-size: .88rem; font-weight: 600; color: var(--blue); min-height: 32px; }

@@ -327,7 +327,8 @@ describe('buildBundle', () => {
     const bundle = buildBundle(request);
     expect(bundle.zipName).toBe('DDT-Xchange_lower_export.zip');
     const entries = readZip(bundle.zip);
-    const names = ['combined.stl', 'replacements.stl', 'replacement_S1.stl', 'replacement_S2.stl', 'replacement_S3.stl',
+    // the main file first, named as Fernando names his (workflow-map G7)
+    const names = ['lower_implant_position.stl', 'combined.stl', 'replacement_S1.stl', 'replacement_S2.stl', 'replacement_S3.stl',
       'jaw.ply', 'report.json', 'README.txt'];
     expect(entries.map((e) => e.name)).toEqual(names);
     expect(bundle.files.map((f) => f.name)).toEqual(names);
@@ -342,13 +343,13 @@ describe('buildBundle', () => {
     expect(same(buildBundle(request).zip, bundle.zip)).toBe(true); // deterministic
   });
 
-  it('combined = jaw (re-serialised) + replacements = jaw + every per-site file; vertices are T · frame · geometry', () => {
+  it('combined = jaw (re-serialised) + the main file = jaw + every per-site file; vertices are T · frame · geometry', () => {
     const { c, cap, post, request } = caseRequest(true);
     const entries = readZip(buildBundle(request).zip);
     const body = (bytes: Uint8Array): Uint8Array => bytes.subarray(84);
     const perSite = ['replacement_S1.stl', 'replacement_S2.stl', 'replacement_S3.stl'].map((n) => entry(entries, n));
-    expect(same(body(entry(entries, 'replacements.stl')), concat(perSite.map(body)))).toBe(true);
-    expect(same(body(entry(entries, 'combined.stl')), concat([body(writeBinarySTL(c.jaw)), body(entry(entries, 'replacements.stl'))]))).toBe(true);
+    expect(same(body(entry(entries, 'lower_implant_position.stl')), concat(perSite.map(body)))).toBe(true);
+    expect(same(body(entry(entries, 'combined.stl')), concat([body(writeBinarySTL(c.jaw)), body(entry(entries, 'lower_implant_position.stl'))]))).toBe(true);
     expect(stlVertices(entry(entries, 'combined.stl')).length / 9).toBe(
       countTriangles(c.jaw) + 2 * countTriangles(cap.mesh) + countTriangles(post.mesh),
     );
@@ -375,7 +376,8 @@ describe('buildBundle', () => {
     expect(Object.keys(report.capture)).toEqual(['format', 'siteCount']);
     expect(Object.keys(report.alignment!)).toEqual(['method', 'status', 'rmsMm', 'p95Mm', 'coverage', 'visible', 'toleranceMm', 'flags',
       'matchesExport', 'perSite']);
-    expect(Object.keys(report.alignment!.perSite[0]!)).toEqual(['siteId', 'label', 'rmsMm', 'coverage', 'visible', 'samples']);
+    expect(Object.keys(report.alignment!.perSite[0]!)).toEqual(['siteId', 'label', 'rmsMm', 'coverage', 'visible', 'samples', 'matchedWith']);
+    expect(Object.keys(report.alignment!.perSite[0]!.matchedWith)).toEqual(['id', 'name']);
     expect(Object.keys(report.sites[0]!)).toEqual(['id', 'label', 'source', 'indexAmbiguous', 'provisional',
       'implantToCapture', 'implantToOutput', 'geometry', 'file']);
     expect(Object.keys(report.sites[0]!.geometry)).toEqual(['id', 'name']);
@@ -396,6 +398,10 @@ describe('buildBundle', () => {
       alignment: { method: 'auto', status: 'good', rmsMm: 0.012, matchesExport: true, flags: ['visualCheckRequired'] },
     });
     expect(report.alignment!.perSite.map((s) => s.label)).toEqual(['S1', 'S2', 'S3']);
+    // no matchedWith in the request: every site was aligned with the geometry it exports
+    expect(report.alignment!.perSite.map((s) => s.matchedWith)).toEqual([
+      { id: 'geo-cap', name: 'Cap 5 mm' }, { id: 'geo-post', name: 'Post' }, { id: 'geo-cap', name: 'Cap 5 mm' },
+    ]);
     expect(report.sites.map((s) => [s.id, s.label, s.file, s.geometry.id])).toEqual([
       ['site-1', 'S1', 'replacement_S1.stl', 'geo-cap'],
       ['site-2', 'S2', 'replacement_S2.stl', 'geo-post'],
@@ -456,7 +462,7 @@ describe('buildBundle', () => {
     const english = text.indexOf('DDT Xchange: lower arch export\r\n');
     expect(english).toBeGreaterThan(text.indexOf('Privacidad'));
     for (const half of [text.slice(0, english), text.slice(english)]) {
-      for (const name of ['combined.stl', 'replacements.stl', 'replacement_S1.stl', 'replacement_S3.stl', 'jaw.ply', 'report.json']) {
+      for (const name of ['lower_implant_position.stl', 'combined.stl', 'replacement_S1.stl', 'replacement_S3.stl', 'jaw.ply', 'report.json']) {
         expect(half).toContain(name);
       }
     }
@@ -479,6 +485,7 @@ describe('buildBundle', () => {
       ),
       jaw: Object.assign({}, request.jaw!, { name: `${SECRET}.ply`, originalFile: SECRET }),
       alignment: Object.assign({}, request.alignment!, { inputFiles: [SECRET] }),
+      matchedWith: Object.fromEntries(request.sites.map((s) => [s.id, Object.assign({ id: 'capture', name: 'Body from the file' }, { fileName: `${SECRET}.stl` })])),
     });
     const bundle = buildBundle(poisoned);
     expect(new TextDecoder('latin1').decode(bundle.zip)).not.toContain(SECRET); // report, README, names, data
@@ -492,7 +499,7 @@ describe('buildBundle', () => {
     const bundle = buildBundle({ ...request, sites, geometryBySite: Object.fromEntries(sites.map((s) => [s.id, cap])) });
     const expected = ['replacement_x.stl', 'replacement__CON.stl', 'replacement_a_o.stl', 'replacement_a_o_2.stl',
       'replacement_A_O_3.stl', 'replacement_x_2.stl', 'replacement_implant_7.stl', 'replacement_implant_8.stl'];
-    expect(readZip(bundle.zip).map((e) => e.name)).toEqual(['combined.stl', 'replacements.stl', ...expected, 'report.json', 'README.txt']);
+    expect(readZip(bundle.zip).map((e) => e.name)).toEqual(['lower_implant_position.stl', 'combined.stl', ...expected, 'report.json', 'README.txt']);
     expect(bundle.report.sites.map((s) => s.file)).toEqual(expected);
   });
 
@@ -534,5 +541,51 @@ describe('buildBundle', () => {
       code: 'INVALID_ARGUMENT',
       details: { reason: 'alignmentSite', index: 0 },
     });
+    const badBody = { 'site-2': { id: 7, name: 'x' } } as unknown as ExportRequest['matchedWith'];
+    expect(thrown(() => buildBundle({ ...request, matchedWith: badBody }))).toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      details: { reason: 'matchedWith', index: 1 },
+    });
+  });
+
+  it('names the main file after the arch: <upper|lower>_implant_position.stl, first, every placed geometry (= combined.stl without a jaw)', () => {
+    const { request } = caseRequest(false);
+    const upper = buildBundle({ ...request, arch: 'upper' });
+    const entries = readZip(upper.zip);
+    expect(entries.map((e) => e.name).slice(0, 2)).toEqual(['upper_implant_position.stl', 'combined.stl']);
+    expect(upper.zipName).toBe('DDT-Xchange_upper_export.zip');
+    const body = (bytes: Uint8Array): Uint8Array => bytes.subarray(84);
+    const perSite = ['replacement_S1.stl', 'replacement_S2.stl', 'replacement_S3.stl'].map((n) => body(entry(entries, n)));
+    expect(same(body(entry(entries, 'upper_implant_position.stl')), concat(perSite))).toBe(true);
+    expect(same(entry(entries, 'upper_implant_position.stl'), entry(entries, 'combined.stl'))).toBe(true);
+    expect(upper.report.files.map((f) => f.name)).toEqual(['upper_implant_position.stl', 'combined.stl', 'replacement_S1.stl', 'replacement_S2.stl', 'replacement_S3.stl']);
+    const readme = decode(entry(entries, 'README.txt'));
+    expect(readme).toContain('upper_implant_position.stl: todas las geometrías de reemplazo colocadas, en un solo archivo');
+    expect(readme).toContain('upper_implant_position.stl: every placed replacement geometry in one file');
+    expect(readme).toContain('without a jaw scan it equals upper_implant_position.stl');
+    expect(upper.report.alignment).toBeNull(); // without a jaw: a normal export, nothing about an alignment
+  });
+
+  it('matchedWith: the bodies the alignment used; an exchange after aligning is said in report.json and README', () => {
+    const { request } = caseRequest(true);
+    // workflow 2: aligned with the bodies of the positions file (id 'capture'), then exchanged to the cap and the post
+    const fileBody = { id: 'capture', name: 'Body from the file' };
+    const matchedWith = Object.fromEntries(request.sites.map((s) => [s.id, { ...fileBody, extra: 'never copied' }]));
+    const bundle = buildBundle({ ...request, matchedWith });
+    const { report } = bundle;
+    expect(report.alignment!.perSite.map((p) => p.matchedWith)).toEqual([fileBody, fileBody, fileBody]);
+    expect(report.sites.map((s) => s.geometry.id)).toEqual(['geo-cap', 'geo-post', 'geo-cap']);
+    expect(report.alignment).toMatchObject({ status: 'good', rmsMm: 0.012, matchesExport: true }); // the alignment's own numbers
+    expect(report.notes.some((n) => n.startsWith('The geometry was exchanged after aligning'))).toBe(true);
+    const readme = decode(entry(readZip(bundle.zip), 'README.txt'));
+    expect(readme).toContain('Alineado con los cuerpos del archivo de posiciones; se exporta Cap 5 mm, Post.');
+    expect(readme).toContain('Aligned with the bodies of the positions file; exported with Cap 5 mm, Post.');
+    // the same bodies exported as aligned (no exchange): no note, no line
+    const kept = buildBundle({ ...request, geometryBySite: Object.fromEntries(request.sites.map((s) => [s.id, { ...fileBody, mesh: request.geometryBySite[s.id]!.mesh }])), matchedWith });
+    expect(kept.report.notes.some((n) => n.includes('exchanged'))).toBe(false);
+    expect(decode(entry(readZip(kept.zip), 'README.txt'))).not.toContain('Aligned with');
+    // one implant exchanged: only it is named
+    const one = buildBundle({ ...request, matchedWith: { 'site-2': { id: 'geo-cap', name: 'Cap 5 mm' } } });
+    expect(decode(entry(readZip(one.zip), 'README.txt'))).toContain('Aligned with Cap 5 mm; exported with Post.');
   });
 });

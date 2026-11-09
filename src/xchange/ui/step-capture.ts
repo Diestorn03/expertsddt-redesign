@@ -102,7 +102,7 @@ export class CaptureStep {
     this.warnings = r.warnings;
     this.mixed = r.framesDiffer ? r : null;
     app.store.set({
-      sources: sample ? r.sources.map((s) => ({ ...s, kind: 'sample' as const })) : r.sources,
+      sources: r.sources,
       format: sample ? 'demo' : r.format,
       sites: r.sites,
       captureMesh: mesh,
@@ -177,7 +177,7 @@ export class CaptureStep {
     fillKeep(q(this.pane, '[data-list="sources"]'), s.sources.map((src) => {
       const fmtName = (c.format as Record<string, string>)[src.format] ?? src.format;
       const text = src.kind === 'mesh' ? app.plural(c.s1.sourceMesh, src.count, { format: fmtName }) : app.plural(c.s1.sourcePositions, src.count, { format: fmtName });
-      return h('li', 'xch__src', {}, h('span', '', { text }), src.kind === 'sample' ? app.chip('info', c.s1.sampleChip, 'info') : null);
+      return h('li', 'xch__src', {}, h('span', '', { text }), s.sample ? app.chip('info', c.s1.sampleChip, 'info') : null);
     }));
     const ref = q(this.pane, '[data-ref]');
     ref.hidden = !s.captureMesh || (!s.needsReference && !s.referenceId);

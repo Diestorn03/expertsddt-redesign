@@ -1,7 +1,8 @@
 /**
  * The in-browser sample case (UI-DESIGN §10): deterministic, within its triangle and time budgets, an All-on-4 upper
- * arch, and a believable case for the real pipeline: 4/4 positions read from the CSV, the jaw's scanned scan bodies
- * detected 4/4 as the offered geometry, auto align good at a few µm, export with the jaw byte for byte.
+ * arch, and a believable case for the real pipeline: 4/4 positions read from the CSV, each linked to its body in the
+ * positions STL, the jaw's scanned scan bodies detected 4/4 as the offered geometry, auto align good at a few µm with
+ * the offered geometry and with the bodies of the file ("No exchange"), export with the jaw byte for byte.
  */
 import { describe, expect, it } from 'vitest';
 import { getColumn, rotationAngleBetween, transformPoint } from '../core/mat4';
@@ -11,7 +12,7 @@ import { buildIcpTarget } from '../align/icp';
 import { multiStartAlign } from '../align/multistart';
 import { recoverSitesFromMesh } from '../detect/sites';
 import { buildBundle } from '../export/bundle';
-import { alignmentParts } from '../state/case';
+import { alignmentParts, capturedBodies } from '../state/case';
 import { readCapture, readJaw } from '../state/jobs-handler';
 import { makeSample } from './index';
 
@@ -31,6 +32,7 @@ describe('sample case generator', () => {
   it('is deterministic: the same bytes every time', () => {
     const again = makeSample();
     expect(sameBytes(again.csv, sample.csv)).toBe(true);
+    expect(sameBytes(again.stl, sample.stl)).toBe(true);
     expect(sameBytes(again.jaw, sample.jaw)).toBe(true);
     expect(Array.from(again.body.positions)).toEqual(Array.from(sample.body.positions));
   });
@@ -80,10 +82,14 @@ describe('sample case generator', () => {
 
 describe('sample case through the real pipeline', () => {
   it('reads 4/4 positions, detects the 4 scanned scan bodies, aligns them at a few µm and exports', { timeout: 120_000 }, () => {
-    const capture = readCapture([{ bytes: sample.csv, extension: 'csv' }]);
+    const capture = readCapture([{ bytes: sample.csv, extension: 'csv' }, { bytes: sample.stl, extension: 'stl' }]);
     expect(capture.format).toBe('micronmapper-csv');
     expect(capture.warnings).toEqual([]);
     expect(capture.sites.map((s) => s.label)).toEqual(['AXO01', 'AXO02', 'AXO03', 'AXO04']);
+    // the positions STL is the same capture: one body per position, each linked (so "No exchange" is offered)
+    expect(capture.sources.map((s) => [s.kind, s.count])).toEqual([['positions', 4], ['mesh', 4]]);
+    expect(capture.framesDiffer).toBeUndefined();
+    expect(capture.sites.map((s) => s.componentIndex).sort()).toEqual([0, 1, 2, 3]);
     const jaw = readJaw({ bytes: sample.jaw, extension: 'ply' });
 
     // the scan bodies in the jaw scan are the offered geometry, standing where the truth puts them
@@ -97,7 +103,8 @@ describe('sample case through the real pipeline', () => {
     }
 
     const parts = alignmentParts(capture.sites, () => sample.body, [], 'replacement');
-    const auto = multiStartAlign(parts, buildIcpTarget(jaw.mesh));
+    const target = buildIcpTarget(jaw.mesh);
+    const auto = multiStartAlign(parts, target);
     expect(auto.status).toBe('good');
     expect(auto.rmsMm).toBeLessThan(0.01);
     expect(auto.coverage).toBeGreaterThan(0.95);
@@ -106,6 +113,12 @@ describe('sample case through the real pipeline', () => {
       const placed = transformPoint(auto.transform, getColumn(s.matrix, 3));
       expect(distance(placed, getColumn(sample.truth.frames[i]!, 3))).toBeLessThan(0.02);
     });
+    // workflow 2: "No exchange" aligns with the bodies of the file just as well
+    const components = capture.components!.map((c) => c.mesh);
+    const own = capturedBodies(capture.sites, components, 'Body from the file');
+    const kept = multiStartAlign(alignmentParts(capture.sites, (id) => own.get(id)?.mesh, components, 'replacement'), target);
+    expect(kept.status).toBe('good');
+    expect(rotationAngleBetween(kept.transform, sample.truth.captureToJaw)).toBeLessThan(0.05 * DEG);
 
     const geometry = { id: 'sample-body', name: 'Sample scan body', mesh: sample.body };
     const bundle = buildBundle({

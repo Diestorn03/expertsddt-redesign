@@ -8,7 +8,7 @@ import { inverseRigid } from '../core/mat4';
 import { computeVertexNormals, transformMesh } from '../core/mesh';
 import type { ImplantSite, ReplacementGeometry, TriMesh } from '../core/types';
 import { AlignClient } from '../align/client';
-import { activeSites, alignmentParts, freshCase, reachable, step1Blocker, Store, type CaseState, type Step } from '../state/case';
+import { activeSites, alignmentParts, bodyOf, chosenBodies, freshCase, reachable, step1Blocker, Store, type AlignedWith, type CaseState, type Step } from '../state/case';
 import { JobsClient } from '../state/jobs';
 import { UiError } from '../state/jobs-handler';
 import { Library, LibraryError } from '../state/library';
@@ -179,10 +179,10 @@ export class App {
     return this.s.caseGeometries.get(id)?.name ?? this.library.meta(id)?.name ?? '';
   }
 
-  /** Library or case-only geometry as the engine expects it. */
+  /** Library or case-only geometry as the engine expects it; a site's own captured body ("No exchange") is id 'capture'. */
   replacement(id: string): ReplacementGeometry | null {
     const data = this.meshData(id);
-    return data ? { id, name: this.geometryName(id), mesh: data.mesh } : null;
+    return data ? { id: bodyOf(this.s, id)!, name: this.geometryName(id), mesh: data.mesh } : null;
   }
 
   /** Mesh of a site's geometry in the implant frame. */
@@ -193,13 +193,20 @@ export class App {
 
   private partsKey: unknown[] = [];
   private partsCache: ReturnType<typeof alignmentParts> = [];
-  /** Alignment surfaces, built once per change of sites, geometry or surfaces. */
-  parts(): ReturnType<typeof alignmentParts> {
+  /**
+   * Alignment surfaces of `bodies` (default: the choice in place, what a new alignment uses; a re-measure passes the
+   * alignment's own bodies), built once per change of sites, geometry or surfaces.
+   */
+  parts(bodies: AlignedWith = chosenBodies(this.s)): ReturnType<typeof alignmentParts> {
     const s = this.s;
-    const key = [s.sites, s.excluded, s.geometryBySite, s.surfaces, s.components];
+    const key = [s.sites, s.excluded, bodies.geometryBySite, bodies.surfaces, s.components];
     if (key.every((k, i) => k === this.partsKey[i])) return this.partsCache;
     this.partsKey = key;
-    this.partsCache = alignmentParts(activeSites(s), this.siteGeometry, s.components, s.surfaces);
+    const geometryOf = (siteId: string): TriMesh | undefined => {
+      const gid = bodies.geometryBySite[siteId];
+      return gid ? this.meshData(gid)?.mesh : undefined;
+    };
+    this.partsCache = alignmentParts(activeSites(s), geometryOf, s.components, bodies.surfaces);
     return this.partsCache;
   }
 

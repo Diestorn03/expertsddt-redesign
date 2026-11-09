@@ -2,15 +2,18 @@
  * In-browser sample case (UI-DESIGN §10): an edentulous upper arch restored All-on-4 style (two straight anterior
  * implants, two posterior ones tilted 30° distally), each carrying a scan body that was "scanned" standing in the
  * gingiva. Synthetic and deterministic: no network, no patient. It reaches the app as files, through the real parsers:
- * a MicronMapper V1.4 CSV (capture coordinates) and a binary PLY with per-vertex colors (scanner coordinates of an
- * upper arch: occlusal toward -Z, anterior toward -Y, the patient's left toward +X, as viewer/presets.ts expects).
+ * a MicronMapper V1.4 CSV with a positions STL of the same capture (the scan bodies at the implants, as photogrammetry
+ * exports deliver them: "No exchange" can align with them) and a binary PLY with per-vertex colors (scanner coordinates
+ * of an upper arch: occlusal toward -Z, anterior toward -Y, the patient's left toward +X, as viewer/presets.ts expects).
  * The replacement of step 2 is the same scan body as clean CAD; the scanned ones carry 5 µm noise, so auto align ends
  * at a few µm RMS. The scan body is our own generic shape (cylinder, full-height index flat on +X, chamfered top).
  * Upper rather than lower: Fernando's cases are upper arches, and the palate (vault, rugae, papilla) is what makes a
  * scan read as a mouth at a glance, where an edentulous lower arch is a bare horseshoe. Units: mm.
  */
 import { fromAxes, fromAxisAngle, getColumn, inverseRigid, multiply, transformDirection, transformPoint } from '../core/mat4';
+import { transformMesh } from '../core/mesh';
 import { createRng, gaussian, hash3 } from '../core/sampling';
+import { writeBinarySTL } from '../core/stl-writer';
 import type { Arch, Mat4, TriMesh, Vec3 } from '../core/types';
 import { add, cross, dot, normalize, scale, sub } from '../core/vec3';
 
@@ -18,6 +21,8 @@ export interface Sample {
   arch: Arch;
   /** MicronMapper V1.4 CSV: the four implant positions in capture coordinates. */
   csv: Uint8Array;
+  /** Binary STL of the same capture: the scan body (clean CAD) at each of the four positions. */
+  stl: Uint8Array;
   /** Binary little-endian PLY with per-vertex colors: gingiva and the four scanned scan bodies, jaw coordinates. */
   jaw: Uint8Array;
   /** Replacement geometry of step 2: the scan body as clean CAD, in the implant frame. */
@@ -551,11 +556,14 @@ export function makeSample(): Sample {
   const scan = scannedBody();
   const jaw = merge([gingiva(lut, implants, 7), ...frames.map((f, i) => placeScanned(scan, f, LAYOUT[i]!.depth, rng))]);
   const jawToCapture = inverseRigid(CAPTURE_TO_JAW);
+  const inCapture = frames.map((f) => multiply(jawToCapture, f));
+  const body = makeScanBodyCad();
   return {
     arch: 'upper',
-    csv: encodeMicronMapper(frames.map((f) => multiply(jawToCapture, f))),
+    csv: encodeMicronMapper(inCapture),
+    stl: writeBinarySTL(inCapture.map((f) => transformMesh(body, f))),
     jaw: encodePly(jaw),
-    body: makeScanBodyCad(),
+    body,
     truth: { frames, captureToJaw: Float64Array.from(CAPTURE_TO_JAW) },
   };
 }

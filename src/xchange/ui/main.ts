@@ -137,7 +137,8 @@ async function loadSample(a: App, opener: Element | null): Promise<void> {
   a.resetCase(sample.arch);
   a.go(1);
   try {
-    const r = await a.jobs.run<CaptureResult>({ type: 'readCapture', files: [{ bytes: sample.csv, extension: 'csv' }] }, [sample.csv.buffer as ArrayBuffer]);
+    const files = [{ bytes: sample.csv, extension: 'csv' }, { bytes: sample.stl, extension: 'stl' }];
+    const r = await a.jobs.run<CaptureResult>({ type: 'readCapture', files }, files.map((f) => f.bytes.buffer as ArrayBuffer));
     a.capture.apply(r, true);
   } catch (e) {
     a.error(1, e, 'positions');

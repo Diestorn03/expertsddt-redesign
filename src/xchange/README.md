@@ -49,8 +49,17 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
   mismo aviso).
 - Paso 2: geometría de reemplazo desde "Tus geometrías" (IndexedDB, 50 como máximo, favoritas, renombrar, eliminar
   con confirmación, copia de seguridad en JSON). Elegir una la aplica al instante a todos o al implante elegido en este
-  paso, con Deshacer; aplicada a todos, pasa sola al paso 3.
-- Paso 3: escaneo de la mandíbula (opcional) y, al cargarlo, alineación automática. La búsqueda arranca también desde
+  paso, con Deshacer; aplicada a todos, pasa sola al paso 3, o de vuelta al paso 4 si el paso 3 ya está hecho. Si cada
+  implante trae su cuerpo en el archivo de posiciones (un STL, solo o emparejado con el CSV), la lista empieza con
+  «Sin intercambio: usar los cuerpos del archivo»: cada implante conserva su cuerpo y el caso se alinea sin elegir un
+  reemplazo (workflow 2 de Fernando: alinear y después intercambiar).
+- Regla `alignedWith`: la alineación se mide con los cuerpos que había al hacerla. Un intercambio posterior solo cambia
+  lo que se exporta: no se vuelve a medir con la pieza nueva (que no está en el escaneo; antes salía «débil» y los
+  implantes «No coincide»), el avance vuelve al paso 4 con la nota «Alineado con … · Se exporta …», el mapa de color no
+  se dibuja sobre la pieza intercambiada y report.json guarda `matchedWith`. Volver a alinear usa lo que esté puesto.
+  Así los dos órdenes de Fernando (intercambiar y alinear, o alinear e intercambiar) usan los mismos 4 pasos.
+- Paso 3: escaneo de la mandíbula (opcional) y, al cargarlo, alineación automática. «Exportar sin escaneo» es un botón
+  primario, del mismo peso que cargar el escaneo: exportar sin arcada es un camino normal. La búsqueda arranca también desde
   los scan bodies que ve en el escaneo y, si no los encuentra, gira cada arranque PCA alrededor de la normal oclusal; el
   ajuste final no recorta pares. En las 8 arcadas de Fernando llega a la misma pose desde cualquier arranque y desde el
   marco de su CSV, a 0,02-0,07 mm de su alineación (caso 2 superior: 0,32 mm, el escaneo viene estirado ~1 %), con
@@ -63,7 +72,10 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
   «fallida»); ajuste a mano (arrastrar, Ctrl + arrastrar, panel de 30°/5° con Fino para pasos de 5° · 0,1 mm
   también en tablet, voltear 180°), re-medido 250 ms
   después; Deshacer y Restablecer. Exportar el ZIP para Exocad tras pedir el correo una vez (webhook
-  `PUBLIC_N8N_FORM_WEBHOOK`; nunca bloquea la descarga).
+  `PUBLIC_N8N_FORM_WEBHOOK`; nunca bloquea la descarga). El archivo principal se llama como los de Fernando,
+  `<upper|lower>_implant_position.stl` (el grupo, antes `replacements.stl`), y va primero; siguen `combined.stl`, un
+  STL por implante, la copia de la arcada, `report.json` y `README.txt`. El resumen del paso 4 muestra la geometría
+  exportada con [Cambiar] (vuelve al paso 2).
 - Visor bajo demanda (60 fps, pausa fuera de pantalla), tema claro/oscuro en vivo, movimiento reducido respetado,
   todo liberado al salir de la página (workers, WebGL, URLs blob, IndexedDB).
 - Aspecto del visor: el look A "Fiel a exocad" (fondo índigo, encía con los colores del escáner, piezas beige-dorado,
@@ -88,11 +100,13 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
 
 **Cómo probar la demo:** `npm run build` y `npx astro preview`, abrir `/ddt-xchange/` y pulsar "Try a sample case"
 (o "Probar un caso de ejemplo"). Se genera en el navegador un caso sintético (`sample/`: arcada superior desdentada
-All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángulos y archivo MicronMapper) que pasa por
-el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
-solo (Good fit, unos 4 µm) y exporta el ZIP.
+All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángulos, archivo MicronMapper y su STL de
+posiciones) que pasa por el pipeline real. Workflow 1: en el paso 2 se elige "Sample scan body", en el paso 3 "Use the
+sample jaw scan", y el paso 4 alinea solo (Good fit, unos 4 µm) y exporta el ZIP. Workflow 2: en el paso 2 "No
+exchange", el mismo escaneo, y después Geometría [Change] → "Sample scan body": vuelve al paso 4 con la alineación
+intacta y la nota.
 
-**Probado:** 564 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 577 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones
@@ -123,6 +137,9 @@ cortados.
   Detección: 30 µm y 98 %, cobertura de la referencia 50 %.
 - P1: exportaciones reales de ScanAdaptor e iCam (los lectores siguen el prototipo y su guía). De MicronMapper ya hay
   5 CSV reales y se leen todos.
+- Pregunta 16 del informe de casos reales: si le basta el STL `<arcada>_implant_position.stl` con el grupo, si sirven
+  los STL por implante, `combined.stl` y la copia de la arcada, y si sin arcada prefiere un STL directo en vez del ZIP.
+  Hoy se mantiene el paquete completo con su archivo principal primero.
 - P11: tamaños reales de mandíbulas y capturas para ajustar los límites (hoy 150 MB y 3 M triángulos; se avisa de
   unidades si una mandíbula mide menos de 15 mm).
 - P3/P4: el CAD de los cuerpos de escaneo de referencia, con su licencia, y qué hacer con el giro axial de los

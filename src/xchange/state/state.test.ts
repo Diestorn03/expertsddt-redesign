@@ -9,8 +9,9 @@ import { capWithInsert } from '../test/fixtures/detect';
 import { encodeMicronMapperCSV, encodeMicronMapperExport, encodeScanAdaptorXML, utf8 } from '../test/fixtures/positions';
 import type { WorkerLike } from '../align/client';
 import {
-  alignmentParts, canMatchCapture, exportBlocker, freshCase, guidedTargets, mergeMeasured, mergePositionFiles, missingGeometry,
-  pushUndo, reachable, siteStatus, step1Blocker, UNDO_LIMIT,
+  alignedBody, alignmentParts, bodyOf, canMatchCapture, capturedBodies, captureGeometryId, chosenBodies, exchangedSites, exportBlocker,
+  freshCase, guidedTargets, matchedBodies, measuredBodies, mergeMeasured, mergePositionFiles, missingGeometry, pushUndo, reachable,
+  shownDeviation, siteStatus, step1Blocker, stepAfterGeometry, UNDO_LIMIT, type CaseState,
 } from './case';
 import { captureOnly, createJobsHandler, readCapture, readGeometry, UiError, type JobRequest } from './jobs-handler';
 import { JobsClient } from './jobs';
@@ -113,6 +114,88 @@ describe('results', () => {
     expect(kept.flags).toEqual(['visualCheckRequired', 'landmarkAxisFree']);
     expect(kept.status).toBe('acceptable');
     expect(mergeMeasured(prev, measured, true)).toBe(measured);
+  });
+});
+
+describe('workflow 2: "No exchange" and the alignedWith rule', () => {
+  const c = makeSyntheticCase({ implants: 4, seed: 6 });
+  const { body } = capWithInsert(); // a cap with its insert: one body per implant
+  const capture = readCapture([
+    { bytes: utf8(encodeMicronMapperExport(c.frames, 'BTH')), extension: 'csv' },
+    { bytes: writeBinarySTL(placeBodies(c.frames, body)), extension: 'stl' },
+  ]);
+  const components = capture.components!.map((x) => x.mesh);
+  const own = capturedBodies(capture.sites, components, 'Body from the file');
+  const result = { status: 'good', rmsMm: 0.01 } as unknown as AlignmentResult;
+  /** A case aligned with the bodies of the file ("No exchange"), then given geometry `exported` on `sites`. */
+  const aligned = (exported: Record<string, string> = {}, surfaces: 'replacement' | 'capture' = 'replacement'): CaseState => {
+    const kept = Object.fromEntries(capture.sites.map((x) => [x.id, captureGeometryId(x.id)]));
+    return {
+      ...freshCase('lower'), sites: capture.sites, components, caseGeometries: new Map([...own.values()].map((g) => [g.id, g])),
+      geometryBySite: { ...kept, ...exported }, alignment: result, alignedWith: { surfaces, geometryBySite: kept },
+    };
+  };
+
+  it('each implant keeps its own body from the positions file, in its implant frame (back at the site it is the shell)', () => {
+    expect([...own.keys()]).toEqual(capture.sites.map((x) => x.id));
+    capture.sites.forEach((site) => {
+      const g = own.get(site.id)!;
+      expect([g.id, g.name, g.kind, g.group]).toEqual([`capture:${site.id}`, 'Body from the file', 'capture', 'capture']);
+      const back = transformMesh(g.mesh, site.matrix).positions, shell = components[site.componentIndex!]!.positions;
+      expect(back.length).toBe(shell.length);
+      expect(Math.max(...back.map((v, i) => Math.abs(v - shell[i]!)))).toBeLessThan(1e-4);
+    });
+    const { componentIndex: _, ...loose } = capture.sites[0]!; // a position without a body in the file
+    expect(capturedBodies([loose], components, 'x').size).toBe(0);
+  });
+
+  it('an exchange after the alignment: the export changes, the alignment stays measured with the bodies it was made with', () => {
+    const before = aligned();
+    expect(exchangedSites(before)).toEqual([]);
+    expect(capture.sites.map((x) => [alignedBody(before, x.id), bodyOf(before, before.geometryBySite[x.id])])).toEqual(capture.sites.map(() => ['capture', 'capture']));
+    const after = aligned(Object.fromEntries(capture.sites.map((x) => [x.id, 'lib-healing-cap'])));
+    expect(exchangedSites(after).map((x) => x.id)).toEqual(capture.sites.map((x) => x.id));
+    expect(alignedBody(after, 'site-2')).toBe('capture');
+    expect(bodyOf(after, after.geometryBySite['site-2'])).toBe('lib-healing-cap');
+    expect(measuredBodies(after)).toBe(after.alignedWith); // re-measures and the map keep using the file's bodies
+    expect(chosenBodies(after).geometryBySite['site-2']).toBe('lib-healing-cap'); // a new alignment uses what is in place
+    const one = aligned({ 'site-3': 'lib-healing-cap' });
+    expect(exchangedSites(one).map((x) => x.id)).toEqual(['site-3']);
+    // aligned with the captured shells ('capture' surfaces): only exporting something else is an exchange
+    expect(exchangedSites(aligned({}, 'capture'))).toEqual([]);
+    expect(exchangedSites(aligned({ 'site-1': 'lib-healing-cap' }, 'capture')).map((x) => x.id)).toEqual(['site-1']);
+    // no alignment, nothing exchanged; a first manual pose is measured with what is in place
+    const loose = { ...after, alignment: null, alignedWith: null };
+    expect(exchangedSites(loose)).toEqual([]);
+    expect(measuredBodies(loose)).toEqual(chosenBodies(loose));
+  });
+
+  it('the color map leaves the exchanged parts (all of them: no map), stays on the captured shells', () => {
+    const map = (s: CaseState): CaseState => ({ ...s, deviation: new Map(capture.sites.map((x) => [x.id, new Float32Array(3)])) });
+    const before = map(aligned());
+    expect(shownDeviation(before)).toBe(before.deviation);
+    expect([...shownDeviation(map(aligned({ 'site-3': 'g' })))!.keys()]).toEqual(['site-1', 'site-2', 'site-4']);
+    expect(shownDeviation(map(aligned(Object.fromEntries(capture.sites.map((x) => [x.id, 'g'])))))).toBeNull();
+    const shells = map(aligned(Object.fromEntries(capture.sites.map((x) => [x.id, 'g'])), 'capture'));
+    expect(shownDeviation(shells)).toBe(shells.deviation); // drawn on the shells, which are the aligned bodies
+    expect(shownDeviation(freshCase())).toBeNull();
+  });
+
+  it('report.json matchedWith: the body each implant was aligned with, by id and name', () => {
+    const names = (id: string): string => ({ 'lib-healing-cap': 'Healing cap', g: 'G' })[id] ?? '?';
+    const after = aligned({ 'site-1': 'lib-healing-cap' });
+    const fileBody = { id: 'capture', name: 'Body from the file' };
+    expect(matchedBodies(after, names, 'Body from the file')).toEqual(Object.fromEntries(capture.sites.map((x) => [x.id, fileBody])));
+    const withG = { ...after, alignedWith: { surfaces: 'replacement' as const, geometryBySite: Object.fromEntries(capture.sites.map((x) => [x.id, 'g'])) } };
+    expect(matchedBodies(withG, names, 'x')['site-1']).toEqual({ id: 'g', name: 'G' });
+    // without an alignment, what is exported
+    expect(matchedBodies({ ...after, alignment: null }, names, 'x')['site-1']).toEqual({ id: 'lib-healing-cap', name: 'Healing cap' });
+  });
+
+  it('a pick for all implants goes on to step 3, or back to step 4 once step 3 is done', () => {
+    expect(stepAfterGeometry(freshCase())).toBe(3);
+    expect(stepAfterGeometry({ jaw: { mesh: c.jaw, originalBytes: new Uint8Array(1), format: 'stl' }, jawSkipped: false })).toBe(4);
+    expect(stepAfterGeometry({ jaw: null, jawSkipped: true })).toBe(4); // "Export without a jaw scan" was chosen
   });
 });
 

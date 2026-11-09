@@ -265,7 +265,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   </div>
                 </div>
                 <div class="xch__skip">
-                  <button type="button" class="btn btn--outline" data-skip>{c.s3.skip} <span class="arrow">→</span></button>
+                  <button type="button" class="btn btn--primary" data-skip>{c.s3.skip} <span class="arrow">→</span></button>
                   <p class="note">{c.s3.skipNote}</p>
                 </div>
                 <div class="xch__notes" data-notes="3"></div>
@@ -304,6 +304,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <div class="xch__busy" data-busy="align" hidden></div>
                   <p class="xch__small" data-not-yet>{c.al.notYet}</p>
                   <div class="xch__result" data-result hidden></div>
+                  <p class="note" data-exchanged hidden></p>
                 </div>
 
                 <div class="xch__block" data-sec="guided" hidden>
@@ -345,6 +346,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <dl class="xch__summary">
                     <div><dt>{c.ex.sum.coords}</dt><dd data-sum="coords"></dd></div>
                     <div><dt>{c.ex.sum.implants}</dt><dd data-sum="implants"></dd></div>
+                    <div><dt>{c.ex.sum.geometry}</dt><dd><span data-sum="geometry"></span> <button type="button" class="xch__textbtn" data-change-geometry aria-label={c.ex.sum.changeLabel}>{c.ex.sum.change}</button></dd></div>
                     <div><dt>{c.ex.sum.alignment}</dt><dd data-sum="alignment"></dd></div>
                   </dl>
                   <p class="note">{c.al.flags.visualCheckRequired}</p>

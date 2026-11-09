@@ -132,7 +132,7 @@ describe('what you see is what you export (sample case)', () => {
     const perSite = countTriangles(demo.geometry.mesh);
     sites.forEach((s, i) => {
       expect(viewerVsStl(v, s.id, file(bundle.report.sites[i]!.file))).toBeLessThan(1e-4);
-      expect(viewerVsStl(v, s.id, file('replacements.stl'), i * perSite)).toBeLessThan(1e-4);
+      expect(viewerVsStl(v, s.id, file('upper_implant_position.stl'), i * perSite)).toBeLessThan(1e-4);
       expect(viewerVsStl(v, s.id, file('combined.stl'), countTriangles(demo.jaw.mesh) + i * perSite)).toBeLessThan(1e-4);
     });
     v.dispose();

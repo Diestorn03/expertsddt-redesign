@@ -43,7 +43,7 @@ reference for semantics and formats only: never copy its code or embed its data 
 
 | File | Exports |
 |---|---|
-| `core/types.ts` | `Vec3`, `Mat4`, `Bounds`, `TriMesh`, `Arch`, `MeshFormat`, `MeshPurpose`, `PositionFormat`, `CaptureFormat`, `SiteFlags`, `ImplantSite`, `Capture`, `ReferenceBody`, `ReplacementGeometry`, `JawScan`, `AssemblyPart`, `LandmarkPair`, `AlignmentStatus`, `AlignmentMethod`, `AlignmentFlag`, `SiteFit`, `AlignmentResult`, `ExportRequest` |
+| `core/types.ts` | `Vec3`, `Mat4`, `Bounds`, `TriMesh`, `Arch`, `MeshFormat`, `MeshPurpose`, `PositionFormat`, `CaptureFormat`, `SiteFlags`, `ImplantSite`, `Capture`, `ReferenceBody`, `ReplacementGeometry`, `JawScan`, `AssemblyPart`, `LandmarkPair`, `AlignmentStatus`, `AlignmentMethod`, `AlignmentFlag`, `SiteFit`, `AlignmentResult`, `MatchedBody`, `ExportRequest` |
 | `core/errors.ts` | `ERROR_CODES`, `ErrorCode`, `WARNING_CODES`, `WarningCode`, `ErrorDetails`, `XchangeWarning`, `XchangeError`, `XchangeErrorPayload`, `isXchangeError`, `toErrorPayload`, `fromErrorPayload` |
 | `core/limits.ts` | `LIMITS` (jaw / capture / geometry / positions / bundle), `maxVertices(purpose)`, `MESH_FORMATS_BY_PURPOSE`, `MAX_ABS_COORDINATE_MM`, `PLAUSIBLE_EXTENT_MM[purpose]`, `RIGID_TOLERANCE`, `PARSE_LIMITS` |
 | `core/vec3.ts` | `add`, `sub`, `scale`, `dot`, `cross`, `length`, `distance`, `normalize` |
@@ -555,6 +555,10 @@ export function zipStore(files: readonly BundleFile[]): Uint8Array;
 export function crc32(bytes: Uint8Array, crc?: number): number;
 
 // export/report.ts
+/** Geometry id of a site's own body from the positions file ("No exchange"): in sites[].geometry and matchedWith. */
+export const CAPTURE_BODY_ID = 'capture';
+/** The main file: `${arch}_implant_position.stl`. */
+export function mainFileName(arch: Arch): string;
 export interface ExportReport { /* exactly the schema below */ }
 export function buildReport(request: ExportRequest, placed: readonly PlacedReplacement[], files: readonly BundleFile[]): ExportReport;
 /** README.txt, Spanish then English, CRLF line endings. */
@@ -572,12 +576,24 @@ export function buildBundle(request: ExportRequest): ExportBundle;
 export function safeFilename(label: string, fallback: string): string;
 ```
 
-- **Bundle entries, in this order:** `combined.stl` (jaw mesh, re-serialised, plus every replacement; without a jaw it
-  equals `replacements.stl`), `replacements.stl`, `replacement_<safeFilename(label, 'implant_N')>.stl` per site in
-  site order (case-insensitive duplicates get `_2`, `_3`), `jaw.stl` or `jaw.ply` = `jaw.originalBytes` byte for byte
-  (only with a jaw), `report.json` (`JSON.stringify(report, null, 2)`), `README.txt`. STLs via `writeBinarySTL`.
-  Shells are concatenated: no Boolean, no cutting (say so in notes and README).
-- **Validation:** every site needs a geometry (`EXPORT_GEOMETRY_MISSING {site: index}`); `validateRigid`
+- **Bundle entries, in this order:** the main file `<upper|lower>_implant_position.stl` (every placed replacement, the
+  group to open in Exocad; named as Fernando names his files, workflow-map G7; it was `replacements.stl`),
+  `combined.stl` (jaw mesh, re-serialised, plus every replacement; without a jaw it equals the main file),
+  `replacement_<safeFilename(label, 'implant_N')>.stl` per site in site order (case-insensitive duplicates get `_2`,
+  `_3`), `jaw.stl` or `jaw.ply` = `jaw.originalBytes` byte for byte (only with a jaw), `report.json`
+  (`JSON.stringify(report, null, 2)`), `README.txt`. STLs via `writeBinarySTL`. Shells are concatenated: no Boolean, no
+  cutting (say so in notes and README). Without a jaw the bundle is complete in the capture's coordinates: exporting
+  without a scan is a normal path.
+- **`ExportRequest.matchedWith`** (optional): per site id, `{ id, name }` of the body the alignment was made with.
+  `CAPTURE_BODY_ID` (`'capture'`) is the site's own body from the positions file ("No exchange", or the captured-bodies
+  surfaces); a site missing from it was aligned with the geometry it exports (the default). Copied into
+  `alignment.perSite[].matchedWith` (whitelisted `id`, `name`; anything else attached is dropped). When some site
+  exports another body than it was aligned with (an exchange after aligning: the alignment keeps its pose and metrics),
+  notes get the `exchanged` sentence and README the line "Alineado con …; se exporta …" / "Aligned with …; exported
+  with …" (the file's bodies read "los cuerpos del archivo de posiciones" / "the bodies of the positions file").
+  A "No exchange" geometry is exported with id `capture` in `sites[].geometry`.
+- **Validation:** every site needs a geometry (`EXPORT_GEOMETRY_MISSING {site: index}`); a `matchedWith` entry of a
+  perSite site needs a string `id` and `name` (`INVALID_ARGUMENT {reason: 'matchedWith', index}`); `validateRigid`
   on `assemblyTransform`; the total ZIP size is computed before allocating and must be <= `LIMITS.bundle.maxBytes`
   (`EXPORT_TOO_LARGE {limitBytes, bytes}`); <= 65 535 entries; entry names non-empty, <= 255 UTF-8 bytes, no `/ \ :`,
   no `..`, no control characters, unique ignoring case (`EXPORT_NAME_INVALID {index}`).
@@ -601,7 +617,8 @@ export function safeFilename(label: string, fallback: string): string;
     "method": "auto | landmarks | manual", "status": "<AlignmentStatus>",
     "rmsMm": 0.0, "p95Mm": 0.0, "coverage": 0.0, "visible": 0.0, "toleranceMm": 0.1, "flags": ["visualCheckRequired"],
     "matchesExport": true,                                  // maxAbsDiff(alignment.transform, assemblyTransform) <= 1e-9
-    "perSite": [{ "siteId": "site-1", "label": "AXO1", "rmsMm": 0.0, "coverage": 0.0, "visible": 0.0, "samples": 400 }]
+    "perSite": [{ "siteId": "site-1", "label": "AXO1", "rmsMm": 0.0, "coverage": 0.0, "visible": 0.0, "samples": 400,
+                  "matchedWith": { "id": "capture | <geometry id>", "name": "<name>" } }]   // the body this site was aligned with
   },
   "sites": [{
     "id": "site-1", "label": "AXO1", "source": "<CaptureFormat>",
@@ -612,8 +629,8 @@ export function safeFilename(label: string, fallback: string): string;
   }],
   "jaw": null | { "file": "jaw.stl | jaw.ply", "format": "stl | ply", "preservation": "exact-original-bytes",
                   "bytes": 123, "crc32": "1a2b3c4d", "triangles": 456 },
-  "files": [{ "name": "combined.stl", "bytes": 123, "crc32": "1a2b3c4d" }],   // every entry except report.json and README.txt
-  "notes": ["<fixed English sentences: no Boolean/cut, visual check required, index ambiguity when present, not a clinical validation>"]
+  "files": [{ "name": "lower_implant_position.stl", "bytes": 123, "crc32": "1a2b3c4d" }],   // every entry except report.json and README.txt, main file first
+  "notes": ["<fixed English sentences: no Boolean/cut, visual check required, index ambiguity when present, exchanged after aligning when present, not a clinical validation>"]
 }
 ```
 
@@ -623,7 +640,10 @@ export function safeFilename(label: string, fallback: string): string;
   (float32 tolerance); `jaw.*` identical to `originalBytes`; the ZIP read back by a tiny independent reader in the
   test (local + central headers, CRCs, sizes, UTF-8 flag, names, EOCD); report keys exactly the schema; `coordinateFrame`
   for the three cases; duplicate and hostile labels (`../x`, `CON`, `ä/ö`) produce safe unique names; oversize refused
-  before allocating (fake a huge request with a stubbed mesh count, not real memory).
+  before allocating (fake a huge request with a stubbed mesh count, not real memory); the main file named after the arch
+  and first, equal to every per-site file in order; `matchedWith` default (the exported geometry), given (the file's
+  bodies, then an exchange: note + README line in both languages, nothing else copied), one implant exchanged, and a
+  malformed entry refused.
 
 ---
 
@@ -631,7 +651,17 @@ export function safeFilename(label: string, fallback: string): string;
 
 - `state/`: typed store, case lifecycle (a new valid capture replaces the case; invalid keeps it), geometry library
   in IndexedDB (versioned schema, size and entry limits, never deletes silently), favourite applies at once to all
-  implants or to one, multi-file capture (position file + mesh -> `linkSitesToComponents`).
+  implants or to one, multi-file capture (position file + mesh -> `linkSitesToComponents`). Workflow 2
+  (`state/case.ts`, workflow2-export): `capturedBodies(sites, components, name)` = "No exchange", each site's own
+  captured body in its implant frame (case geometry `capture:<site id>`, kind `capture`); `alignedWith` (the surfaces
+  and geometry of each site when the alignment was made) is set and cleared with `alignment`; `chosenBodies` (what a
+  new alignment uses) and `measuredBodies` (what a re-measure and the color map use: `alignedWith`, else the choice);
+  `exchangedSites`, `shownDeviation` (no map on an exchanged part), `matchedBodies` (report.json matchedWith) and
+  `stepAfterGeometry` (a pick for all implants goes on to step 3, or back to step 4 once step 3 is done). Tests
+  (`state.test.ts`, `test/ux/workflow2.ux.test.ts`): a BTH CSV + STL of caps with inserts, each body back at its site
+  is the captured shell, exchanges of all or one implant, the old re-measure of a healing cap reads weak or failed where
+  the kept alignment stays good, a hand move measured with the file's bodies, the map leaving the exchanged parts,
+  the export request and its real bundle.
 - `viewer/`: three.js scene, exocad mouse preset, picking, assembly manipulation (drag, Ctrl + rotate, arrows, flip),
   markers, opacity, FOV, colour map legend (grey = not seen by the scan: NaN from `partDeviations`). Builds its own
   buffers once; never re-uploads per render. View presets per case (`viewer/presets.ts`, quality-views):

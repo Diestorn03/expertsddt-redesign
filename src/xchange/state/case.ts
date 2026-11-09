@@ -5,27 +5,40 @@
  */
 import { XchangeError } from '../core/errors';
 import { LIMITS } from '../core/limits';
-import { identity, maxAbsDiff } from '../core/mat4';
+import { identity, inverseRigid, maxAbsDiff } from '../core/mat4';
 import { transformMesh } from '../core/mesh';
-import type { AlignmentFlag, AlignmentResult, Arch, AssemblyPart, CaptureFormat, ImplantSite, JawScan, Mat4, ReplacementGeometry, SiteFit, TriMesh } from '../core/types';
+import type { AlignmentFlag, AlignmentResult, Arch, AssemblyPart, CaptureFormat, ImplantSite, JawScan, Mat4, MatchedBody, ReplacementGeometry, SiteFit, TriMesh } from '../core/types';
 import { DEFAULT_QUALITY, grade, type QualityThresholds } from '../align/metrics';
 import { orderSitesAlongArch } from '../align/landmarks';
+import { CAPTURE_BODY_ID } from '../export/report';
 
 export type Step = 1 | 2 | 3 | 4;
 export type Surfaces = 'replacement' | 'capture';
 
 /** One imported source, never with a name. */
 export interface Source {
-  kind: 'positions' | 'mesh' | 'sample';
+  kind: 'positions' | 'mesh';
   format: CaptureFormat;
   count: number;
 }
 
-/** A geometry that lives only in this case (sample body, positioned assembly). */
+/**
+ * A geometry that lives only in this case: the sample body, a positioned assembly, or (kind 'capture', "No exchange")
+ * a site's own body from the positions file, in its implant frame.
+ */
 export interface CaseGeometry extends ReplacementGeometry {
-  kind: 'sample' | 'assembly';
+  kind: 'sample' | 'assembly' | 'capture';
   /** Assembly entries of one file share a group and show as one library row. */
   group: string;
+}
+
+/**
+ * The bodies an alignment was made with, and is measured with afterwards (UI-DESIGN §5.2): the surfaces choice and
+ * each site's geometry at that moment. A later exchange only changes what is exported.
+ */
+export interface AlignedWith {
+  surfaces: Surfaces;
+  geometryBySite: Readonly<Record<string, string>>;
 }
 
 export interface CaseState {
@@ -54,6 +67,8 @@ export interface CaseState {
   assembly: Mat4;
   /** Last result applied to `assembly`. */
   alignment: AlignmentResult | null;
+  /** The bodies `alignment` was made and is measured with; set and cleared with it. */
+  alignedWith: AlignedWith | null;
   /** A failed attempt, shown greyed and never applied. */
   lastAttempt: AlignmentResult | null;
   lastAlignedPose: Mat4 | null;
@@ -72,7 +87,7 @@ export function freshCase(arch: Arch | null = null): CaseState {
   return {
     arch, sources: [], format: null, sites: [], captureMesh: null, components: [], needsReference: false, referenceId: null,
     unresolved: [], confirmed: new Set(), excluded: new Set(), geometryBySite: {}, caseGeometries: new Map(), jaw: null,
-    jawColors: false, jawSkipped: false, surfaces: 'replacement', assembly: identity(), alignment: null, lastAttempt: null,
+    jawColors: false, jawSkipped: false, surfaces: 'replacement', assembly: identity(), alignment: null, alignedWith: null, lastAttempt: null,
     lastAlignedPose: null, undo: [], deviation: null, measuring: false, step: 1, sample: false, exportedSinceChange: false,
   };
 }
@@ -163,6 +178,72 @@ export function alignmentParts(
   }
   return parts;
 }
+
+/** The choice in place now: what the next alignment (auto, refine, guided) is made with. */
+export const chosenBodies = (s: Pick<CaseState, 'surfaces' | 'geometryBySite'>): AlignedWith => ({ surfaces: s.surfaces, geometryBySite: s.geometryBySite });
+/** What a re-measure and the color map use: the alignment's bodies, else the choice in place (a first pose moved by hand). */
+export const measuredBodies = (s: Pick<CaseState, 'surfaces' | 'geometryBySite' | 'alignedWith'>): AlignedWith => s.alignedWith ?? chosenBodies(s);
+
+/** Case-geometry id of a site's own captured body ("No exchange"). */
+export const captureGeometryId = (siteId: string): string => `capture:${siteId}`;
+
+/**
+ * "No exchange": each site's own body from the positions file, in its implant frame (placed at the site it is the
+ * captured shell again), keyed by site id. Sites without a captured body are skipped.
+ */
+export function capturedBodies(sites: readonly ImplantSite[], components: readonly TriMesh[], name: string): Map<string, CaseGeometry> {
+  const out = new Map<string, CaseGeometry>();
+  for (const site of sites) {
+    const mesh = site.componentIndex === undefined ? undefined : components[site.componentIndex];
+    if (mesh) out.set(site.id, { id: captureGeometryId(site.id), name, mesh: transformMesh(mesh, inverseRigid(site.matrix)), kind: 'capture', group: 'capture' });
+  }
+  return out;
+}
+
+type BodyState = Pick<CaseState, 'sites' | 'excluded' | 'geometryBySite' | 'caseGeometries' | 'alignment' | 'alignedWith'>;
+
+/** A geometry id as a body: CAPTURE_BODY_ID for a site's own captured body ("No exchange"), else the id itself. */
+export const bodyOf = (s: Pick<CaseState, 'caseGeometries'>, geometryId: string | undefined): string | undefined =>
+  geometryId !== undefined && s.caseGeometries.get(geometryId)?.kind === 'capture' ? CAPTURE_BODY_ID : geometryId;
+
+/** The body a site was aligned with (CAPTURE_BODY_ID or a geometry id); undefined without an alignment. */
+export function alignedBody(s: BodyState, siteId: string): string | undefined {
+  const w = s.alignedWith;
+  if (!s.alignment || !w) return undefined;
+  return w.surfaces === 'capture' ? CAPTURE_BODY_ID : bodyOf(s, w.geometryBySite[siteId]);
+}
+
+/** Active sites whose exported body is not the one they were aligned with: an exchange after the alignment. */
+export function exchangedSites(s: BodyState): ImplantSite[] {
+  if (!s.alignment || !s.alignedWith) return [];
+  return activeSites(s).filter((x) => alignedBody(s, x.id) !== bodyOf(s, s.geometryBySite[x.id]));
+}
+
+/**
+ * The color map as it can be drawn: on the captured shells after a 'capture' alignment, else on the parts that are
+ * still the aligned ones (an exchanged part shows no map). null when nothing is left to draw.
+ */
+export function shownDeviation(s: BodyState & Pick<CaseState, 'deviation'>): Map<string, Float32Array> | null {
+  const dev = s.deviation;
+  if (!dev || s.alignedWith?.surfaces === 'capture') return dev;
+  const gone = new Set(exchangedSites(s).map((x) => x.id));
+  if (!gone.size) return dev;
+  const kept = new Map([...dev].filter(([id]) => !gone.has(id)));
+  return kept.size ? kept : null;
+}
+
+/** report.json alignment.perSite[].matchedWith: per active site, the body its alignment used (the exported one without an alignment). */
+export function matchedBodies(s: BodyState, nameOf: (geometryId: string) => string, captureName: string): Record<string, MatchedBody> {
+  const out: Record<string, MatchedBody> = {};
+  for (const site of activeSites(s)) {
+    const id = alignedBody(s, site.id) ?? bodyOf(s, s.geometryBySite[site.id]);
+    if (id !== undefined) out[site.id] = { id, name: id === CAPTURE_BODY_ID ? captureName : nameOf(id) };
+  }
+  return out;
+}
+
+/** Where a pick for all implants goes on to: back to step 4 once step 3 is done (a jaw, or export without one), else step 3. */
+export const stepAfterGeometry = (s: Pick<CaseState, 'jaw' | 'jawSkipped'>): Step => (s.jaw || s.jawSkipped ? 4 : 3);
 
 /** Guided targets 1-2-3-4: all sites when 4 or fewer, else four spread along the arch. */
 export function guidedTargets(sites: readonly ImplantSite[]): ImplantSite[] {

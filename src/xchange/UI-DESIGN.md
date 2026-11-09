@@ -471,7 +471,7 @@ one-line reason under it while disabled. Panel padding `1.25rem 1rem`.
 ```ts
 interface CaseState {
   arch: Arch | null;
-  sources: { kind: 'positions' | 'mesh' | 'sample'; format: CaptureFormat; count: number }[]; // never a name
+  sources: { kind: 'positions' | 'mesh'; format: CaptureFormat; count: number }[]; // never a name (sample: a chip, from `sample`)
   sites: ImplantSite[];                     // merged, ids re-numbered site-1..n
   captureMesh?: TriMesh;
   components?: MeshComponent[];             // splitComponents(captureMesh)
@@ -479,11 +479,12 @@ interface CaseState {
   referenceId: string | null;               // capture scan body (mesh-only captures)
   confirmed: Set<string>; excluded: Set<string>; // provisional sites confirmed / left out
   geometryBySite: Record<string, string>;   // site id -> geometry id (library or case-only)
-  caseGeometries: Map<string, ReplacementGeometry>; // sample, positioned assemblies
+  caseGeometries: Map<string, CaseGeometry>; // sample, positioned assemblies, "No exchange" bodies (kind 'capture')
   jaw: JawScan | null; jawSkipped: boolean;
   matchSurfaces: 'replacement' | 'capture';
   assembly: Mat4;                           // capture -> jaw; identity without a jaw
   alignment: AlignmentResult | null;        // last result applied to `assembly`
+  alignedWith: { surfaces; geometryBySite } | null; // the bodies `alignment` was made and is measured with (set and cleared with it)
   lastAlignedPose: Mat4 | null; undo: Mat4[]; // undo holds at most 20 poses
   deviation: Map<string, Float32Array> | null; measuring: boolean;
   step: 1 | 2 | 3 | 4; sample: boolean; exportedSinceChange: boolean;
@@ -498,7 +499,7 @@ The geometry library, display preferences and the email flag live outside the ca
 |---|---|---|---|
 | 1 Arch & capture | always | `arch` set ∧ ≥ 1 site with a frame ∧ every provisional site confirmed or left out | → 2 |
 | 2 Geometry | step 1 done | every site not left out has a geometry | → 3 |
-| 3 Jaw scan (optional) | step 2 done | jaw loaded (→ 4 and auto align) or Skip (→ 4 without jaw) | — |
+| 3 Jaw scan (optional) | step 2 done | jaw loaded (→ 4 and auto align) or Export without a jaw scan (→ 4 without jaw) | — |
 | 4 Align & export | step 2 done | — | — |
 
 Going back never loses work. Upstream changes invalidate downstream results like this:
@@ -507,11 +508,11 @@ Going back never loses work. Upstream changes invalidate downstream results like
 |---|---|
 | New valid capture | Replaces the case (confirm first when steps 2–4 hold work, §5.3); arch and library stay. An invalid file changes nothing |
 | Arch changed | Label only (ZIP name, report, Occlusal preset); nothing invalidated |
-| Geometry reassigned | With `matchSurfaces = 'replacement'` the metrics go stale and are re-measured when step 4 shows |
-| Jaw replaced | `assembly` back to identity, alignment cleared, auto align runs again |
-| Jaw removed | `assembly` identity, alignment cleared, step 4 becomes "Review and export" |
+| Geometry reassigned (an exchange) | Only what is exported changes. The alignment stays measured with the bodies it was made with (`alignedWith`): no re-measure, the per-implant table and the export warnings keep the alignment's numbers, the color map leaves the exchanged parts, and step 4 says `al.exchanged` ("Aligned with … · Exporting …"). A new alignment (Auto align, Refine from here, guided points) uses what is in place then; switching Surfaces to match re-measures the pose with the surfaces picked (workflow-map G5) |
+| Jaw replaced | `assembly` back to identity, alignment and `alignedWith` cleared, auto align runs again |
+| Jaw removed | `assembly` identity, alignment and `alignedWith` cleared, step 4 becomes "Review and export" |
 | Surfaces to match changed | Current pose re-measured |
-| Any pose change | Metrics and color map stale → re-measured 250 ms after the gesture ends (cancelling a measurement still running) |
+| Any pose change | Metrics and color map stale → re-measured with the alignment's bodies 250 ms after the gesture ends (cancelling a measurement still running) |
 
 Re-measuring uses `alignClient.measure()`, whose result always says method `manual` with flag `manualPose`. The UI
 keeps that only when the pose was moved by hand. When the pose did not move (surfaces or geometry changed), it keeps the
@@ -584,8 +585,18 @@ Body:
    AXO2`. The second is disabled until an implant is selected; selecting one in the stage or in the list checks it;
    choosing All clears the selection.
 2. **Implant list** (same component as step 1) with the assigned geometry name or "No geometry yet".
-3. **Your geometries** (§7): `[Load geometry file]`, a ⋯ menu (Import / Export geometries), groups Favorites · All
-   geometries · This case only, rows with thumbnails.
+3. **Your geometries** (§7): `[Load geometry file]`, a ⋯ menu (Import / Export geometries), groups In the positions
+   file · Favorites · All geometries · This case only, rows with thumbnails.
+
+**No exchange** (workflow 2, workflow-map G4): when every implant not left out has its own body in the capture (a
+positions STL alone, or one linked to the position file), the list opens with the group `s2.fromFile` and one row,
+`s2.noExchange` "No exchange: use the bodies in the file" (meta `s2.noExchangeMeta`, label `s2.noExchangeLabel`; the
+title wraps, `.xch__libmain--wrap`: it is a sentence, where library names keep the one-line ellipsis). Picking
+it gives each target implant (All, or the selected one) its own captured body, brought to its implant frame
+(`state/case.capturedBodies`: case-only geometries `capture:<site id>`, kind `capture`, named `s2.fileBody`), so the
+case can be aligned without choosing a replacement; toast `say.noExchange`, with Undo. Exported as is, those bodies go
+out in place (report.json geometry id `capture`). With a position file alone the row is not shown: there is no body
+to keep.
 
 **Apply on pick** (the client's request): activating a row applies that geometry to the target at once. There is no
 "Use selected" button.
@@ -593,8 +604,10 @@ Body:
 - Stage: the affected implants swap their meshes with the scale-in (§3.2).
 - Toast: "H6.6 cap applied to all 4 implants. [Undo]". Undo restores the previous `geometryBySite` (and the step, if
   it auto-advanced). The toast stays 10 s, pauses while hovered or focused, closes with Esc or ×.
-- Auto-advance: when the target was **All implants** and every implant now has a geometry, go to step 3 after .6 s.
-  The step sentence says so beforehand (WCAG 3.2.2). Per-implant picks never auto-advance.
+- Auto-advance: when the target was **All implants** and every implant now has a geometry, go on after .6 s: to step 3,
+  or back to step 4 once step 3 is done (a jaw is loaded, or Export without a jaw scan was chosen;
+  `state/case.stepAfterGeometry`). An exchange after aligning thus lands on step 4 with the alignment kept and the
+  `al.exchanged` note. The step sentence says so beforehand (WCAG 3.2.2). Per-implant picks never auto-advance.
 
 **Loading a geometry file:** `parseMesh(bytes, 'geometry')` then `planAssembly(mesh, sites)`:
 
@@ -611,8 +624,9 @@ need a geometry."
 
 ### 5.5 Step 3 · Jaw scan (optional)
 
-- Drop zone `accept=".stl,.ply"`; `[Use the sample jaw scan]` only in the sample case; `[Skip: export without aligning]`
-  (`.btn--outline`) → step 4 without a jaw, with the note "The files stay in the capture's coordinates."
+- Drop zone `accept=".stl,.ply"`; `[Use the sample jaw scan]` only in the sample case; `[Export without a jaw scan →]`
+  (`.btn--primary`, the same weight as the drop zone's Choose file: exporting without a scan is a normal path, workflow-map
+  G6) → step 4 without a jaw, with the note "The files stay in the capture's coordinates."
 - Reading: indeterminate bar "Reading the jaw scan…", then "Preparing the surface…" while `alignClient.setJaw(mesh)`
   builds the worker's target.
 - Success card: "Jaw scan ready" + "PLY with color · 1,248,330 triangles · 61 mm across" + `[Replace]` `[Remove]`, plus
@@ -638,8 +652,10 @@ need a geometry."
   chosen in step 2 is the one visible in the jaw scan. The prototype matched the captured bodies first, one reason its
   auto alignment "lo alinea mal".
 - **Alignment parts** (the known gap the UI fills): per site, `transformMesh(geometry.mesh, site.matrix)` with the
-  site's replacement geometry (a `fixed` assembly uses its per-site body), or `components[site.componentIndex].mesh`
-  for captured bodies. Built once per change of geometry or surfaces, not per call.
+  site's replacement geometry (a `fixed` assembly uses its per-site body, "No exchange" the site's own captured body),
+  or `components[site.componentIndex].mesh` for captured bodies. Built once per change of geometry or surfaces, not
+  per call. A new alignment is made with the choice in place (`chosenBodies`) and records it as `alignedWith`;
+  re-measures and the color map use `alignedWith` (`measuredBodies`), so an exchange afterwards never re-measures.
 - **Progress** (while running): determinate bar with stage weights prepare 0–.10, coarse .10–.55, fine .55–.90,
   metrics .90–1; text "{stage} · {pct} %"; `[Cancel]` aborts the `AbortSignal` → `CANCELLED` → quiet "Alignment
   cancelled." and the pose unchanged.
@@ -659,6 +675,11 @@ need a geometry."
   `minVisible` ∧ rms ≤ `goodRmsMm` ∧ coverage ≥ `goodCoverage`), acceptable (visible ≥ `minVisible` ∧ rms ≤
   `acceptableRmsMm` ∧ coverage ≥ `acceptableCoverage`), no match (coverage < `siteUsableCoverage`), weak otherwise. The first cell is a button "Show AXO2 in the view" (camera eases to it, it pulses
   once). Numbers right-aligned, `font-variant-numeric: tabular-nums`.
+- **After an exchange** (some implant exports another body than the one it was aligned with,
+  `state/case.exchangedSites`): under the card the note `al.exchanged`, "Aligned with {aligned} · Exporting
+  {exported}. The exchange keeps this alignment…", the bodies named once each (the bodies of the file read
+  `s2.fileBodies`). The color map is not drawn on an exchanged part (`shownDeviation`; all exchanged: no map, the map
+  button and legend off); it is still drawn on the captured shells after a `capture` alignment.
 
 **Guided points mode** (replaces section A while active; stage behavior in §6.6):
 
@@ -1033,12 +1054,18 @@ the right (36 px targets). The row's main button has the accessible name "Apply 
 ## 8. Export
 
 - Request, built on the main thread and run by the jobs worker: `ExportRequest { arch, captureFormat, sites (not left
-  out), geometryBySite (ids → ReplacementGeometry, case-only included), assemblyTransform (identity without a jaw), jaw?,
-  alignment? (the applied result, matching the pose), createdAt: new Date().toISOString(), appVersion: XCHANGE_VERSION }`
-  → `buildBundle(request)`; the jaw is structured-cloned in, the ZIP buffer transferred back.
+  out), geometryBySite (ids → ReplacementGeometry, case-only included; a "No exchange" body goes with id `capture`),
+  assemblyTransform (identity without a jaw), jaw?, alignment? (the applied result, matching the pose), matchedWith?
+  (with an alignment: per site the body it was aligned with, `state/case.matchedBodies`), createdAt: new
+  Date().toISOString(), appVersion: XCHANGE_VERSION }` → `buildBundle(request)`; the jaw is structured-cloned in, the
+  ZIP buffer transferred back.
+- The ZIP opens with the main file `<upper|lower>_implant_position.stl` (every placed geometry: the group Fernando sends
+  to Exocad, named like his files), then `combined.stl`, one file per implant, the jaw copy, report.json and README.txt
+  (CONTRACTS §5). Without a jaw it is a normal export: step 3's primary button, then Export ZIP.
 - Before the button: the coordinates sentence (`ex.textJaw` / `ex.textCapture`), a `<details>` "What's in the ZIP"
-  listing each file (`ex.files.*`), and a three-row summary: Coordinates (Jaw scan / Capture) · Implants n · Alignment
-  (status · method · RMS, or None).
+  listing each file (`ex.files.*`), and a four-row summary: Coordinates (Jaw scan / Capture) · Implants n · Geometry
+  (the exported names once each) + `[Change]` (`ex.sum.change`, → step 2: workflow 2's exchange after aligning) ·
+  Alignment (status · method · RMS, or None).
 - Standing note, always: `al.flags.visualCheckRequired` ("A surface fit is not a clinical validation…").
 - Warning lines when they apply: `ex.warnWeak`, `ex.warnAmbiguous`, `ex.warnManual`, `ex.warnProvisional`,
   `ex.warnRotation`.
@@ -1089,7 +1116,9 @@ the right (36 px targets). The row's main button has the accessible name "Apply 
     flat on +X, 0.8 mm chamfer on top: no manufacturer's part), scanned standing in the gingiva (5 µm noise, tissue
     cuff, closed so the buried part is there to measure).
   - Capture: a MicronMapper V1.4 CSV of the four implant frames in capture coordinates, 11° and ~16 mm away from the
-    jaw scan's, so the alignment has real work to do.
+    jaw scan's, so the alignment has real work to do, and a positions STL of the same capture (the clean CAD scan body
+    at each position, as photogrammetry exports deliver it): each position is linked to its body, so step 2 also offers
+    "No exchange".
   - Replacement geometry (step 2): the same scan body as clean CAD (96 segments, separate vertices at the creases),
     named "Sample scan body".
   - Budget: about 115 ms warm and 190–210 ms on the first run in Chrome on the development PC (2026-11).
@@ -1101,10 +1130,12 @@ the right (36 px targets). The row's main button has the accessible name "Apply 
   1. Step 1 filled: arch Upper, source "MicronMapper CSV · 4 positions" with a "Sample" chip; the header shows the pill
      "Sample case · synthetic data" + `[Exit sample]`. Live: `say.sample`. Focus moves to Continue.
   2. Step 2: "This case only" holds "Sample scan body" with the hint `say.sampleHint`; picking it applies to all and
-     auto-advances.
+     auto-advances (workflow 1: exchange, then align). Or "No exchange" first (workflow 2).
   3. Step 3: `[Use the sample jaw scan]` next to the normal drop zone → step 4 + auto align → expected "Good fit"
-     (RMS ~4 µm).
-  4. Step 4: color map, per-implant table, Export → email gate (first time) → `DDT-Xchange_upper_export.zip`.
+     (RMS ~4 µm), with either choice.
+  4. Step 4: color map, per-implant table, Export → email gate (first time) → `DDT-Xchange_upper_export.zip` with
+     `upper_implant_position.stl` first. Workflow 2 goes on with Geometry `[Change]` → "Sample scan body" → back to
+     step 4 with the alignment kept and the `al.exchanged` note.
 - Sample geometries are case-only and never saved to the library. `[Exit sample]` = New case.
 
 ---
@@ -1213,7 +1244,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `help.how[0].t` | Arch and capture | Arcada y captura |
 | `help.how[0].d` | Pick upper or lower and import the implant positions: a file from your photogrammetry or scanner software, or a mesh of the scan bodies. | Elige superior o inferior e importa las posiciones de los implantes: un archivo de tu software de fotogrametría o escáner, o una malla de los scan bodies. |
 | `help.how[1].t` | Geometry | Geometría |
-| `help.how[1].d` | Pick the scan body or healing cap your lab uses. It lands on every implant, in the exact position. | Elige el scan body o pilar de cicatrización que usa tu laboratorio. Queda sobre cada implante, en la posición exacta. |
+| `help.how[1].d` | Pick the scan body or healing cap your lab uses. It lands on every implant, in the exact position. Or keep the bodies of the positions file, align with them and exchange afterwards. | Elige el scan body o pilar de cicatrización que usa tu laboratorio. Queda sobre cada implante, en la posición exacta. O conserva los cuerpos del archivo de posiciones, alinea con ellos e intercambia después. |
 | `help.how[2].t` | Jaw scan | Escaneo de la arcada |
 | `help.how[2].d` | Optional: add the tissue scan and the implants line up with it automatically, or with three or four guided clicks. | Opcional: agrega el escaneo de tejidos y los implantes se alinean con él automáticamente o con tres o cuatro clics guiados. |
 | `help.how[3].t` | Export | Exportar |
@@ -1246,7 +1277,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `faq.items[2].q` | My scanner gives me Excel, PIC or Tupel files. What now? | Mi escáner me da archivos Excel, PIC o Tupel. ¿Qué hago? |
 | `faq.items[2].a` | Save Excel sheets as CSV and import the CSV. Native PIC, Tupel and BEB projects can't be read without guessing their content: export the implant positions as CSV or XML from the scanner software. | Guarda las hojas de Excel como CSV e importa ese CSV. Los proyectos nativos PIC, Tupel y BEB no se pueden leer sin adivinar su contenido: exporta las posiciones de los implantes como CSV o XML desde el software del escáner. |
 | `faq.items[3].q` | Which geometry should I pick? | ¿Qué geometría debo elegir? |
-| `faq.items[3].a` | The one that should sit on the implants in Exocad, usually the scan body or healing cap you can see in the jaw scan. Its file must use the implant frame: origin at the implant connection, +Z along the implant axis toward the top, +X toward the index. | La que debe quedar sobre los implantes en Exocad, normalmente el scan body o pilar de cicatrización que se ve en el escaneo de la arcada. Su archivo debe usar el sistema del implante: origen en la conexión, +Z a lo largo del eje hacia arriba, +X hacia el índice. |
+| `faq.items[3].a` | The one that should sit on the implants in Exocad, usually the scan body or healing cap you can see in the jaw scan. Its file must use the implant frame: origin at the implant connection, +Z along the implant axis toward the top, +X toward the index. If your positions file already holds the bodies the jaw scan shows, pick “No exchange”, align, and exchange afterwards: the alignment stays. | La que debe quedar sobre los implantes en Exocad, normalmente el scan body o pilar de cicatrización que se ve en el escaneo de la arcada. Su archivo debe usar el sistema del implante: origen en la conexión, +Z a lo largo del eje hacia arriba, +X hacia el índice. Si tu archivo de posiciones ya trae los cuerpos que muestra el escaneo, elige «Sin intercambio», alinea e intercambia después: la alineación se conserva. |
 | `faq.items[4].q` | What do RMS and the color map tell me? | ¿Qué me dicen el RMS y el mapa de color? |
 | `faq.items[4].a` | RMS is the typical distance between the implant surfaces and the jaw scan. The map colors every point from green (0 µm) to red (100 µm or more). A low RMS and a mostly green map mean the surfaces line up; they don't replace a clinical check. | El RMS es la distancia típica entre las superficies de los implantes y el escaneo. El mapa colorea cada punto de verde (0 µm) a rojo (100 µm o más). Un RMS bajo y un mapa casi todo verde indican que las superficies coinciden; no reemplazan una revisión clínica. |
 | `faq.items[5].q` | Why does it say the rotation is unknown? | ¿Por qué dice que el giro es desconocido? |
@@ -1327,7 +1358,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `s1.framesDiffer` | The {positions} file and the {mesh} file are in different coordinate systems: the positions don't fall on the bodies, so they weren't matched. Keep one of the two. | El archivo {positions} y el archivo {mesh} están en sistemas de coordenadas distintos: las posiciones no caen sobre los cuerpos, así que no se emparejaron. Quédate con uno de los dos. |
 | `s1.useOnly` | Use only the {kind} file | Usar solo el archivo {kind} |
 | `s2.title` | Replacement geometry | Geometría de reemplazo |
-| `s2.text` | Pick what should sit on each implant in the export, usually the scan body or healing cap visible in your jaw scan. A geometry applies as soon as you pick it; picked for all implants, it also takes you to the next step. | Elige lo que irá sobre cada implante en la exportación, normalmente el scan body o pilar de cicatrización que se ve en tu escaneo. La geometría se aplica en cuanto la eliges; si es para todos los implantes, también te lleva al siguiente paso. |
+| `s2.text` | Pick what should sit on each implant in the export, usually the scan body or healing cap visible in your jaw scan, or keep the bodies of the positions file. A pick applies at once; picked for all implants, it also takes you on to step 3, or back to step 4 once step 3 is done. | Elige lo que irá sobre cada implante en la exportación, normalmente el scan body o pilar de cicatrización que se ve en tu escaneo, o conserva los cuerpos del archivo de posiciones. La elección se aplica al instante; si es para todos los implantes, también te lleva al paso 3, o de vuelta al paso 4 si el paso 3 ya está hecho. |
 | `s2.applyTo` | Apply to | Aplicar a |
 | `s2.all` | All implants ({count}) | Todos los implantes ({count}) |
 | `s2.selected` | Selected implant: {label} | Implante seleccionado: {label} |
@@ -1341,13 +1372,19 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `s2.framesDiffer` | The bodies in this file aren't on the implant positions of the capture: the two are in different coordinate systems, so the file wasn't applied. Use only this file to take the positions from it (it replaces the capture), or keep the capture and pick a single body. | Los cuerpos de este archivo no están en las posiciones de los implantes de la captura: los dos están en sistemas de coordenadas distintos, así que el archivo no se aplicó. Usa solo este archivo para tomar de él las posiciones (reemplaza la captura), o mantén la captura y elige un solo cuerpo. |
 | `s2.useOnly` | Use only this {kind} file | Usar solo este archivo {kind} |
 | `s2.keepCapture` | Keep the capture's positions | Mantener las posiciones de la captura |
+| `s2.fromFile` | In the positions file | En el archivo de posiciones |
+| `s2.noExchange` | No exchange: use the bodies in the file | Sin intercambio: usar los cuerpos del archivo |
+| `s2.noExchangeMeta` | Each implant keeps its own body from the positions file. Align with them, then exchange if you need to. | Cada implante conserva su propio cuerpo del archivo de posiciones. Alinea con ellos y, si hace falta, intercambia después. |
+| `s2.noExchangeLabel` {target} | No exchange: keep the bodies of the file on {target} | Sin intercambio: mantener los cuerpos del archivo en {target} |
+| `s2.fileBody` | Body from the file | Cuerpo del archivo |
+| `s2.fileBodies` | the bodies in the file | los cuerpos del archivo |
 | `s3.title` | Jaw scan | Escaneo de la arcada |
 | `s3.text` | Add the tissue scan from the intraoral scanner, as STL or PLY, to align the implants to it. It is never changed: the export copies it byte for byte. | Agrega el escaneo de tejidos del escáner intraoral, en STL o PLY, para alinear los implantes con él. Nunca se modifica: la exportación lo copia byte a byte. |
 | `s3.drop` | Drop the jaw scan here | Suelta aquí el escaneo de la arcada |
 | `s3.choose` | Choose file | Elegir archivo |
 | `s3.formats` | STL or PLY (the color is kept) | STL o PLY (se conserva el color) |
 | `s3.sample` | Use the sample jaw scan | Usar el escaneo de ejemplo |
-| `s3.skip` | Skip: export without aligning | Omitir: exportar sin alinear |
+| `s3.skip` | Export without a jaw scan | Exportar sin escaneo |
 | `s3.skipNote` | The files stay in the capture's coordinates. | Los archivos quedan en las coordenadas de la captura. |
 | `s3.reading` | Reading the jaw scan… | Leyendo el escaneo… |
 | `s3.preparing` | Preparing the surface… | Preparando la superficie… |
@@ -1568,6 +1605,7 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `al.explain.ambiguous` | Another, clearly different position fits almost as well. This is typical with one round scan body or a symmetric layout. Use guided points to pick the right one. | Otra posición, claramente distinta, encaja casi igual de bien. Es típico con un solo scan body redondo o una distribución simétrica. Usa los puntos guiados para elegir la correcta. |
 | `al.explain.failed` | No usable fit was found. The last attempt is shown below but was not applied. Try guided points. | No se encontró un ajuste útil. El último intento se muestra abajo, pero no se aplicó. Prueba con los puntos guiados. |
 | `al.lastAttempt` | Last attempt (not applied) | Último intento (no aplicado) |
+| `al.exchanged` {aligned} {exported} | Aligned with {aligned} · Exporting {exported}. The exchange keeps this alignment: the position and the fit above are the ones measured with {aligned}, and the color map is not drawn on the exchanged geometry. | Alineado con {aligned} · Se exporta {exported}. El intercambio conserva esta alineación: la posición y el ajuste de arriba son los medidos con {aligned}, y el mapa de color no se dibuja sobre la geometría intercambiada. |
 | `al.rms` | RMS | RMS |
 | `al.rmsHelp` | Typical distance between the implant surfaces and the jaw scan. | Distancia típica entre las superficies de los implantes y el escaneo. |
 | `al.p95` | 95 % within | 95 % a menos de |
@@ -1624,9 +1662,9 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `ex.textJaw` | One ZIP with everything in the jaw scan's coordinates. | Un ZIP con todo en las coordenadas del escaneo de la arcada. |
 | `ex.textCapture` | One ZIP with everything in the capture's coordinates. | Un ZIP con todo en las coordenadas de la captura. |
 | `ex.what` | What's in the ZIP | Qué trae el ZIP |
+| `ex.files.main` {file} | {file}: the geometry on every implant, in one file: the group to open in Exocad. | {file}: la geometría en cada implante, en un solo archivo: el grupo para abrir en Exocad. |
 | `ex.files.combined` | combined.stl: the jaw scan and every replacement in one file. The surfaces are joined, not merged or cut. | combined.stl: el escaneo y todos los reemplazos en un archivo. Las superficies se juntan; no se fusionan ni se recortan. |
-| `ex.files.combinedNoJaw` | combined.stl: every replacement in one file (the same as replacements.stl when there is no jaw scan). | combined.stl: todos los reemplazos en un archivo (igual a replacements.stl cuando no hay escaneo). |
-| `ex.files.replacements` | replacements.stl: all replacement bodies together. | replacements.stl: todos los cuerpos de reemplazo juntos. |
+| `ex.files.combinedNoJaw` {file} | combined.stl: every replacement in one file (the same as {file} when there is no jaw scan). | combined.stl: todos los reemplazos en un archivo (igual a {file} cuando no hay escaneo). |
 | `ex.files.single` | `replacement_<label>.stl`: one file per implant, named after its label. | `replacement_<etiqueta>.stl`: un archivo por implante, con su etiqueta. |
 | `ex.files.jaw` | jaw.stl or jaw.ply: your jaw scan, byte for byte as you imported it. | jaw.stl o jaw.ply: tu escaneo, byte a byte como lo importaste. |
 | `ex.files.report` | report.json: positions as 4×4 matrices (mm, row-major), alignment metrics and checksums. No file names, no patient data. | report.json: posiciones como matrices de 4×4 (mm, por filas), métricas de alineación y sumas de verificación. Sin nombres de archivos ni datos de pacientes. |
@@ -1635,6 +1673,8 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `ex.sum.jaw` | Jaw scan | Escaneo de la arcada |
 | `ex.sum.capture` | Capture | Captura |
 | `ex.sum.implants` | Implants | Implantes |
+| `ex.sum.geometry` | Geometry | Geometría |
+| `ex.sum.change` / `ex.sum.changeLabel` | Change / Change the exported geometry (step 2) | Cambiar / Cambiar la geometría exportada (paso 2) |
 | `ex.sum.alignment` | Alignment | Alineación |
 | `ex.sum.alignmentValue` | {status} · {method} · RMS {rms} µm | {status} · {method} · RMS {rms} µm |
 | `ex.sum.none` | None | Ninguna |
@@ -1669,7 +1709,8 @@ part of the copy. Spanish uses «» quotes, a decimal comma through `Intl`, and 
 | `say.captureReplaced` | Capture replaced. | Captura reemplazada. |
 | `say.usingOnly` | Using only the {kind} file. | Se usa solo el archivo {kind}. |
 | `say.detected` | Positions found: {found}. Provisional: {provisional}. Not recognized: {unresolved}. (parts with 0 are left out) | Posiciones encontradas: {found}. Provisionales: {provisional}. No reconocidas: {unresolved}. (se omiten las partes en 0) |
-| `say.applied` | {name} applied to {target}. | {name} aplicada a {target}. |
+| `say.applied` | {name} applied to {target}. | Se aplicó {name} a {target}. |
+| `say.noExchange` {target} | No exchange on {target}: the bodies of the file stay. | Sin intercambio en {target}: se quedan los cuerpos del archivo. |
 | `say.undo` | Undo | Deshacer |
 | `say.undone` | Undone. | Deshecho. |
 | `say.saved` | {name} saved to your geometries. | {name} guardada en tus geometrías. |
@@ -2052,11 +2093,14 @@ needed for v1).
    the library file, next to the existing `AlignClient` worker.
 8. Step 1: mesh-only captures pick a "capture scan body" and detection runs on pick; provisional positions must be
    confirmed or left out; position files merge with re-numbered ids and the 1e-7 cross-file label rule; one mesh max.
-9. Step 2: apply on pick to All or the selected implant, with an Undo toast; picking for All auto-advances (said
-   beforehand in the step text); `planAssembly` handles single, normalized, fixed and count-mismatch files.
+9. Step 2: apply on pick to All or the selected implant, with an Undo toast; picking for All auto-advances to step 3,
+   or back to step 4 once step 3 is done (said beforehand in the step text); `planAssembly` handles single,
+   normalized, fixed and count-mismatch files; "No exchange" keeps each implant's own body from the positions file.
 10. Alignment surfaces default to the replacement geometry (the body the jaw scan shows in Fernando's case), with
     captured bodies as an option; loading the jaw starts auto align; with a jaw, export is blocked until an alignment
-    is applied; weak, ambiguous and manual results only warn.
+    is applied; weak, ambiguous and manual results only warn. The alignment is measured with the bodies it was made
+    with (`alignedWith`): an exchange afterwards only changes what is exported, so Fernando's two orders (exchange then
+    align, align then exchange) share the same four steps with no workflow picker.
 11. Guided points: at most four spread targets in `orderSitesAlongArch` order (all when ≤ 4), alignment runs after the
     last one; the keyboard path is the center crosshair + arrows/Shift/±/Enter.
 12. Viewer: custom exocad-mapped controller, implant-set drag, Ctrl/⌘-drag arcball rotation, pad with 30°/5° and

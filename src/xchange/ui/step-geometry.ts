@@ -1,11 +1,12 @@
 /**
  * Step 2 · Replacement geometry and "Your geometries" (UI-DESIGN §5.4, §7). Picking a geometry applies it at
  * once (client request: no "use selected" button), to all implants or to the selected one, with an Undo toast;
- * a pick for all auto-advances to step 3 after .6 s.
+ * a pick for all auto-advances after .6 s to step 3, or back to step 4 once step 3 is done. "No exchange" keeps each
+ * implant's own body from the positions file (workflow 2: align with them, exchange afterwards).
  */
 import { computeVertexNormals } from '../core/mesh';
 import type { TriMesh } from '../core/types';
-import { activeSites, missingGeometry, type CaseGeometry } from '../state/case';
+import { activeSites, canMatchCapture, capturedBodies, missingGeometry, stepAfterGeometry, type CaseGeometry } from '../state/case';
 import { UiError, type GeometryResult } from '../state/jobs-handler';
 import { LibraryError, matchesQuery, type GeometryMeta } from '../state/library';
 import type { App } from './app';
@@ -181,6 +182,21 @@ export class GeometryStep {
     });
   }
 
+  /** "No exchange": the targets keep their own bodies from the positions file (case-only geometries, one per implant). */
+  keepBodies(): void {
+    const app = this.app, s = app.s, c = app.c;
+    const one = this.target === 'one' && app.selected && !s.excluded.has(app.selected);
+    const targets = activeSites(s).filter((x) => !one || x.id === app.selected);
+    const caseGeometries = new Map(s.caseGeometries);
+    const geometryBySite = { ...s.geometryBySite };
+    for (const [siteId, g] of capturedBodies(targets, s.components, c.s2.fileBody)) {
+      if (!caseGeometries.has(g.id)) caseGeometries.set(g.id, g);
+      geometryBySite[siteId] = g.id;
+    }
+    const target = one ? fmt(app.lang, c.lib.targetOne, { label: targets[0]?.label ?? '' }) : c.lib.targetAll;
+    this.commit(geometryBySite, caseGeometries, c.s2.fileBody, !one, '', fmt(app.lang, c.say.noExchange, { target }));
+  }
+
   /** Apply on pick. A positioned assembly always applies to all implants. */
   async apply(geometryId: string): Promise<void> {
     const app = this.app, s = app.s;
@@ -201,7 +217,7 @@ export class GeometryStep {
     this.commit(geometryBySite, s.caseGeometries, name, !one, label);
   }
 
-  private commit(geometryBySite: Record<string, string>, caseGeometries: Map<string, CaseGeometry>, name: string, all: boolean, label = ''): void {
+  private commit(geometryBySite: Record<string, string>, caseGeometries: Map<string, CaseGeometry>, name: string, all: boolean, label = '', said?: string): void {
     const app = this.app, c = app.c;
     const prev = { geometryBySite: app.s.geometryBySite, caseGeometries: app.s.caseGeometries };
     const changed = Object.keys(geometryBySite).filter((k) => geometryBySite[k] !== prev.geometryBySite[k]);
@@ -209,7 +225,7 @@ export class GeometryStep {
     app.syncSites(changed);
     app.alignStep.onGeometryChanged();
     const target = all ? c.lib.targetAll : fmt(app.lang, c.lib.targetOne, { label });
-    const text = fmt(app.lang, c.say.applied, { name, target }); // the toast region (role=status) announces it
+    const text = said ?? fmt(app.lang, c.say.applied, { name, target }); // the toast region (role=status) announces it
     let advanced = false;
     app.toasts.show(text, {
       label: c.say.undo,
@@ -221,7 +237,8 @@ export class GeometryStep {
         app.say.say(c.say.undone);
       },
     });
-    if (all && missingGeometry(app.s) === 0) app.later(() => { if (app.shown === 2) { advanced = true; app.go(3); } }, 600);
+    // on to step 3, or back to step 4 once step 3 is done: an exchange after aligning keeps the alignment (state/case alignedWith)
+    if (all && missingGeometry(app.s) === 0) app.later(() => { if (app.shown === 2) { advanced = true; app.go(stepAfterGeometry(app.s)); } }, 600);
   }
 
   /* ---------------- library list ---------------- */
@@ -263,13 +280,20 @@ export class GeometryStep {
       }
       return li;
     };
+    if (mode === 'apply' && canMatchCapture(activeSites(s), s.components)) {
+      const target = this.target === 'one' && app.selected ? fmt(app.lang, c.lib.targetOne, { label: s.sites.find((x) => x.id === app.selected)?.label ?? '' }) : c.lib.targetAll;
+      const usedOn = activeSites(s).filter((x) => s.caseGeometries.get(s.geometryBySite[x.id] ?? '')?.kind === 'capture').length;
+      const main = this.mainButton('capture', c.s2.noExchange, c.s2.noExchangeMeta, '', fmt(app.lang, c.s2.noExchangeLabel, { target }), usedOn, mode, () => this.keepBodies());
+      main.classList.add('xch__libmain--wrap'); // our sentence, not a file name: shown whole, never cut
+      group(c.s2.fromFile, [h('li', 'xch__libitem', {}, main)]);
+    }
     group(c.lib.favorites, metas.filter((m) => m.favorite).map(libRow));
     group(c.lib.all, metas.filter((m) => !m.favorite).map(libRow));
     if (mode === 'apply') {
       const seen = new Set<string>();
       const rows: HTMLElement[] = [];
       for (const g of s.caseGeometries.values()) {
-        if (seen.has(g.group)) continue;
+        if (g.kind === 'capture' || seen.has(g.group)) continue; // the "No exchange" row stands for these
         seen.add(g.group);
         const badge = g.kind === 'sample' ? c.lib.sampleBadge : c.lib.assemblyBadge;
         const meta = g.kind === 'sample' ? c.say.sampleHint : c.s2.assemblyAll;

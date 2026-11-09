@@ -49,7 +49,7 @@ const caseStore = (): Store<CaseState> => new Store<CaseState>({
 /** The App surface AlignStep's methods read. */
 function fakeApp(store: Store<CaseState>, align: unknown, extra: Record<string, unknown> = {}) {
   return {
-    store, get s(): CaseState { return store.state; }, align, parts: () => c.parts, viewer: null, lang: 'en' as const, c: en, hook: '',
+    store, get s(): CaseState { return store.state; }, align, parts: () => c.parts, viewer: null, lang: 'en' as const, c: en, hook: '', geometryName: () => 'G',
     say: { say: vi.fn() }, stage: { setDisplay: vi.fn() }, error: vi.fn(), render: vi.fn(), toasts: { show: vi.fn() }, ...extra,
   };
 }

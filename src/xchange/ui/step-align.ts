@@ -13,7 +13,8 @@ import type { AlignmentResult, ExportRequest, ImplantSite, LandmarkPair, Mat4, V
 import { guidePoint, orderSitesAlongArch } from '../align/landmarks';
 import { DEFAULT_QUALITY } from '../align/metrics';
 import type { AlignStage } from '../align/multistart';
-import { activeSites, canMatchCapture, exportBlocker, guidedTargets, mergeMeasured, missingGeometry, pushUndo, siteStatus } from '../state/case';
+import { activeSites, alignedBody, bodyOf, canMatchCapture, chosenBodies, exchangedSites, exportBlocker, guidedTargets, matchedBodies, measuredBodies, mergeMeasured, missingGeometry, pushUndo, shownDeviation, siteStatus, type AlignedWith } from '../state/case';
+import { CAPTURE_BODY_ID, mainFileName } from '../export/report';
 import type { ExportResult, JawResult } from '../state/jobs-handler';
 import { markSent, needsEmail, retryPending, submitLead, type LeadEnv, type StorageLike } from '../state/lead';
 import { rotatePose, translatePose, type ControlCallbacks, type ControlMode } from '../viewer/controls';
@@ -41,7 +42,7 @@ interface Guided {
 }
 
 /** What the ZIP is built from: if one of these changed while it was built, it is not the case on screen. */
-const EXPORTED = ['arch', 'sites', 'excluded', 'geometryBySite', 'caseGeometries', 'assembly', 'jaw', 'alignment', 'format'] as const;
+const EXPORTED = ['arch', 'sites', 'excluded', 'geometryBySite', 'caseGeometries', 'assembly', 'jaw', 'alignment', 'alignedWith', 'format'] as const;
 
 const storage = (): StorageLike | null => { try { return window.localStorage; } catch { return null; } };
 
@@ -93,6 +94,7 @@ export class AlignStep {
     const exportBtn = q<HTMLButtonElement>(this.pane4, '[data-export]');
     exportBtn.addEventListener('click', () => void this.onExport(exportBtn), { signal });
     q(this.pane4, '[data-ex-again]').addEventListener('click', () => this.downloadAgain(), { signal });
+    q(this.pane4, '[data-change-geometry]').addEventListener('click', () => app.go(2), { signal });
     root.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && app.s.undo.length) { e.preventDefault(); this.undo(); }
@@ -169,7 +171,7 @@ export class AlignStep {
       this.alignedResult = null;
       app.jawNormals = r.normals;
       this.jawWarnings = r.warnings.map((w) => noteCard(warningMessage(c, app.lang, w, 'jaw')));
-      app.store.set({ jaw: { mesh: r.mesh, originalBytes: r.originalBytes, format: r.format }, jawColors: !!r.mesh.colors, jawSkipped: false, assembly: identity(), alignment: null, lastAttempt: null, lastAlignedPose: null, undo: [], deviation: null, exportedSinceChange: false });
+      app.store.set({ jaw: { mesh: r.mesh, originalBytes: r.originalBytes, format: r.format }, jawColors: !!r.mesh.colors, jawSkipped: false, assembly: identity(), alignment: null, alignedWith: null, lastAttempt: null, lastAlignedPose: null, undo: [], deviation: null, exportedSinceChange: false });
       app.viewer?.setJaw(r.mesh, r.normals);
       app.viewer?.setAssembly(identity());
       app.viewer?.setDeviation(null, app.s.surfaces, () => undefined);
@@ -195,7 +197,7 @@ export class AlignStep {
     this.ownJaw = false;
     app.align.clearJaw(); // the worker's jaw target is hundreds of MB at the 3 M-triangle limit
     app.jawNormals = null;
-    app.store.set({ jaw: null, jawColors: false, assembly: identity(), alignment: null, lastAttempt: null, lastAlignedPose: null, undo: [], deviation: null, exportedSinceChange: false });
+    app.store.set({ jaw: null, jawColors: false, assembly: identity(), alignment: null, alignedWith: null, lastAttempt: null, lastAlignedPose: null, undo: [], deviation: null, exportedSinceChange: false });
     app.viewer?.setJaw(null, null);
     app.viewer?.setAssembly(identity());
     this.applyDeviation();
@@ -234,9 +236,10 @@ export class AlignStep {
     const job = (this.alignJob = new AbortController());
     const { busy, onProgress } = this.progress();
     app.render(); // the align buttons show as disabled while it runs
+    const bodies = chosenBodies(app.s); // a new alignment uses what is in place now
     try {
-      const r = await app.align.autoAlign(app.parts(), initial ? { initial } : {}, { signal: job.signal, onProgress });
-      await this.applyResult(r);
+      const r = await app.align.autoAlign(app.parts(bodies), initial ? { initial } : {}, { signal: job.signal, onProgress });
+      await this.applyResult(r, bodies);
     } catch (e) {
       if ((e as { code?: string }).code === 'CANCELLED') app.say.say(app.c.say.alignCancelled);
       else app.error(4, e, 'jaw');
@@ -247,7 +250,8 @@ export class AlignStep {
     }
   }
 
-  private async applyResult(r: AlignmentResult): Promise<void> {
+  /** `bodies`: what the result was computed with; it stays measured with them, whatever is exchanged later. */
+  private async applyResult(r: AlignmentResult, bodies: AlignedWith): Promise<void> {
     const app = this.app, c = app.c;
     if (r.status === 'failed') {
       app.store.set({ lastAttempt: r });
@@ -255,7 +259,7 @@ export class AlignStep {
       return;
     }
     this.alignedResult = r;
-    app.store.set({ assembly: r.transform, alignment: r, lastAttempt: null, lastAlignedPose: r.transform, undo: [], deviation: null, exportedSinceChange: false });
+    app.store.set({ assembly: r.transform, alignment: r, alignedWith: bodies, lastAttempt: null, lastAlignedPose: r.transform, undo: [], deviation: null, exportedSinceChange: false });
     app.viewer?.setAssembly(r.transform, 'align');
     app.say.say(fmt(app.lang, c.say.aligned, { status: c.al.status[r.status], rms: num(app.lang, r.rmsMm * 1000) }));
     await this.computeDeviation();
@@ -264,7 +268,7 @@ export class AlignStep {
   /** Deviation map of the current pose; `current` false (a newer pose came meanwhile) drops it. */
   private async computeDeviation(current: () => boolean = () => true): Promise<void> {
     const app = this.app;
-    const parts = app.parts();
+    const parts = app.parts(measuredBodies(app.s));
     if (!parts.length || !app.s.jaw) return;
     const dev = await app.align.deviation(parts, app.s.assembly);
     if (!current()) return;
@@ -273,25 +277,28 @@ export class AlignStep {
     if (!this.mapShown) { this.mapShown = true; app.stage.setDisplay({ map: true }); }
   }
 
+  /** The map on what it can be drawn on: never on a part exchanged after the alignment (state/case shownDeviation). */
   applyDeviation(): void {
     const app = this.app;
-    app.viewer?.setDeviation(app.s.deviation, app.s.surfaces, (id) => app.s.sites.find((x) => x.id === id)?.componentIndex);
+    app.viewer?.setDeviation(shownDeviation(app.s), app.s.surfaces, (id) => app.s.sites.find((x) => x.id === id)?.componentIndex);
   }
 
+  /** Comparing other surfaces is an explicit re-measure: the current pose is measured with them from now on. */
   private setSurfaces(surfaces: 'replacement' | 'capture'): void {
     const app = this.app;
     if (surfaces === app.s.surfaces) return;
-    app.store.set({ surfaces, deviation: null });
+    app.store.set({ surfaces, deviation: null, ...(app.s.alignment ? { alignedWith: chosenBodies({ surfaces, geometryBySite: app.s.geometryBySite }) } : {}) });
     this.applyDeviation();
     app.stage.setDisplay({ capture: surfaces === 'capture', parts: true });
     if (app.s.alignment) this.scheduleMeasure();
   }
 
+  /**
+   * An exchange keeps the alignment (UI-DESIGN §5.2, alignedWith): nothing is re-measured with the new geometry, which
+   * is often not the body the jaw scan shows (workflow 2). Only the map leaves the exchanged parts.
+   */
   onGeometryChanged(): void {
-    const app = this.app;
-    if (app.s.surfaces !== 'replacement') return;
-    if (app.s.deviation) { app.store.set({ deviation: null }); this.applyDeviation(); }
-    if (app.s.jaw && app.s.alignment) this.scheduleMeasure();
+    this.applyDeviation();
   }
 
   /** Stops waiting for a re-measure; one already in the worker finishes (it is short) and is dropped. */
@@ -315,7 +322,8 @@ export class AlignStep {
     const app = this.app;
     const job = (this.measureJob = {});
     const current = (): boolean => this.measureJob === job;
-    const parts = app.parts();
+    const bodies = measuredBodies(app.s); // the alignment's own bodies, whatever was exchanged since
+    const parts = app.parts(bodies);
     if (!parts.length) { app.store.set({ measuring: false }); return; }
     try {
       const pose = app.s.assembly;
@@ -324,7 +332,7 @@ export class AlignStep {
       // moved = away from the aligned pose (an Undo back to it is no manual adjustment)
       const aligned = app.s.lastAlignedPose;
       const merged = mergeMeasured(app.s.alignment, r, !aligned || maxAbsDiff(pose, aligned) > 1e-12);
-      app.store.set({ alignment: merged, lastAttempt: null, measuring: false });
+      app.store.set({ alignment: merged, alignedWith: bodies, lastAttempt: null, measuring: false });
       app.say.say(fmt(app.lang, app.c.say.measured, { status: app.c.al.status[merged.status], rms: num(app.lang, merged.rmsMm * 1000) }));
       await this.computeDeviation(current);
     } catch (e) {
@@ -504,9 +512,10 @@ export class AlignStep {
     const job = (this.alignJob = new AbortController());
     const { busy, onProgress } = this.progress();
     app.render(); // the align buttons show as disabled while it runs
+    const bodies = chosenBodies(app.s);
     try {
-      const r = await app.align.alignFromLandmarks(app.parts(), pairs, {}, { signal: job.signal, onProgress });
-      await this.applyResult(r);
+      const r = await app.align.alignFromLandmarks(app.parts(bodies), pairs, {}, { signal: job.signal, onProgress });
+      await this.applyResult(r, bodies);
     } catch (e) {
       if ((e as { code?: string }).code === 'CANCELLED') app.say.say(app.c.say.alignCancelled);
       else app.error(4, e, 'jaw');
@@ -588,9 +597,12 @@ export class AlignStep {
         const g = gid ? (await app.loadGeometry(gid), app.replacement(gid)) : null;
         if (g) geometryBySite[site.id] = g;
       }
+      const aligned = !!(s.jaw && s.alignment);
       const request: ExportRequest = {
         arch: s.arch ?? 'lower', captureFormat: s.format ?? 'demo', sites, geometryBySite,
-        assemblyTransform: s.jaw ? s.assembly : identity(), jaw: s.jaw ?? undefined, alignment: s.jaw ? s.alignment ?? undefined : undefined,
+        assemblyTransform: s.jaw ? s.assembly : identity(), jaw: s.jaw ?? undefined, alignment: aligned ? s.alignment! : undefined,
+        // the bodies the alignment was made with: an exchange after it keeps its pose and metrics (report.json, README)
+        ...(aligned ? { matchedWith: matchedBodies(s, (id) => app.geometryName(id), c.s2.fileBody) } : {}),
         createdAt: new Date().toISOString(), appVersion: XCHANGE_VERSION,
       };
       const r = await app.jobs.run<ExportResult>({ type: 'export', request });
@@ -670,6 +682,13 @@ export class AlignStep {
     q(this.pane4, '[data-surf-off]').hidden = captureOk;
     q(this.pane4, '[data-surf-block]').hidden = !captureOk; // one possible choice is no choice (position files)
     q(this.pane4, '[data-not-yet]').hidden = !!(s.alignment || s.lastAttempt) || running;
+    const exchanged = exchangedSites(s);
+    const note = q(this.pane4, '[data-exchanged]');
+    note.hidden = !exchanged.length;
+    note.textContent = exchanged.length ? fmt(app.lang, c.al.exchanged, {
+      aligned: this.bodyNames(exchanged.map((x) => alignedBody(s, x.id))),
+      exported: this.bodyNames(exchanged.map((x) => bodyOf(s, s.geometryBySite[x.id]))),
+    }) : '';
     for (const b of qa(this.pane4, '[data-manual]')) {
       const kind = b.dataset.manual;
       b.setAttribute('aria-disabled', String(kind === 'undo' ? !s.undo.length : kind === 'reset' ? !s.lastAlignedPose : false));
@@ -779,15 +798,24 @@ export class AlignStep {
     note.textContent = few ? (n === 1 ? c.gp.one : c.gp.two) : '';
   }
 
+  /** "the bodies in the file" or geometry names, once each, in order. */
+  private bodyNames(bodies: readonly (string | undefined)[]): string {
+    const app = this.app;
+    return [...new Set(bodies.flatMap((b) => (b === undefined ? [] : [b === CAPTURE_BODY_ID ? app.c.s2.fileBodies : app.geometryName(b)])))].join(', ');
+  }
+
   private renderExport(): void {
     const app = this.app, s = app.s, c = app.c;
     const jaw = !!s.jaw;
     q(this.pane4, '[data-ex-text]').textContent = jaw ? c.ex.textJaw : c.ex.textCapture;
-    const files = [jaw ? c.ex.files.combined : c.ex.files.combinedNoJaw, c.ex.files.replacements, c.ex.files.single, ...(jaw ? [c.ex.files.jaw] : []), c.ex.files.report, c.ex.files.readme];
+    const main = mainFileName(s.arch ?? 'lower');
+    const files = [fmt(app.lang, c.ex.files.main, { file: main }), jaw ? c.ex.files.combined : fmt(app.lang, c.ex.files.combinedNoJaw, { file: main }), c.ex.files.single, ...(jaw ? [c.ex.files.jaw] : []), c.ex.files.report, c.ex.files.readme];
     fill(q(this.pane4, '[data-ex-files]'), files.map((t) => h('li', '', { text: t })));
     const sites = activeSites(s);
     q(this.pane4, '[data-sum="coords"]').textContent = jaw ? c.ex.sum.jaw : c.ex.sum.capture;
     q(this.pane4, '[data-sum="implants"]').textContent = num(app.lang, sites.length);
+    // what is exported, one click from step 2 (workflow 2: align, then exchange)
+    q(this.pane4, '[data-sum="geometry"]').textContent = [...new Set(sites.flatMap((x) => { const g = s.geometryBySite[x.id]; return g ? [app.geometryName(g)] : []; }))].join(', ') || c.ex.sum.none;
     const a = jaw ? s.alignment : null;
     q(this.pane4, '[data-sum="alignment"]').textContent = a ? fmt(app.lang, c.ex.sum.alignmentValue, { status: c.al.status[a.status], method: c.al.methods[a.method], rms: num(app.lang, a.rmsMm * 1000) }) : c.ex.sum.none;
     const warns: string[] = [];

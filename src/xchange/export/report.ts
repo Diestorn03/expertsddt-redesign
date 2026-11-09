@@ -5,16 +5,21 @@
  *
  * Throws INVALID_ARGUMENT {reason}: 'arch' | 'createdAt' | 'appVersion' | 'noSites' |
  * 'duplicateSiteId' (+ site index) | 'jawFormat' | 'jawBytes' | 'alignmentWithoutJaw' |
- * 'alignmentSite' (+ perSite index) | 'files' (placed/files do not match the request).
+ * 'alignmentSite' | 'matchedWith' (+ perSite index) | 'files' (placed/files do not match the request).
  */
 import { XchangeError } from '../core/errors';
 import { identity, maxAbsDiff, toRowMajorArray, validateRigid } from '../core/mat4';
 import { countTriangles } from '../core/mesh';
-import type { AlignmentFlag, AlignmentMethod, AlignmentStatus, Arch, CaptureFormat, ExportRequest } from '../core/types';
+import type { AlignmentFlag, AlignmentMethod, AlignmentStatus, Arch, CaptureFormat, ExportRequest, MatchedBody } from '../core/types';
 import type { PlacedReplacement } from './placement';
 import { crc32, type BundleFile } from './zip';
 
 export type CoordinateFrame = 'jaw' | 'capture' | 'capture-adjusted';
+
+/** Geometry id of a site's own body from the positions file ("No exchange"), in sites[].geometry and matchedWith. */
+export const CAPTURE_BODY_ID = 'capture';
+/** The bundle's main file, named as Fernando names his: every placed geometry, the group to open in Exocad. */
+export const mainFileName = (arch: Arch): string => `${arch}_implant_position.stl`;
 
 export interface ExportReport {
   schema: 'ddt-xchange-report';
@@ -42,7 +47,8 @@ export interface ExportReport {
     flags: AlignmentFlag[];
     /** The exported pose is the measured one (max element difference <= 1e-9). */
     matchesExport: boolean;
-    perSite: { siteId: string; label: string; rmsMm: number; coverage: number; visible: number; samples: number }[];
+    /** matchedWith: the body this site was aligned with (an exchange afterwards keeps the pose and these metrics). */
+    perSite: { siteId: string; label: string; rmsMm: number; coverage: number; visible: number; samples: number; matchedWith: MatchedBody }[];
   } | null;
   sites: {
     id: string;
@@ -75,7 +81,7 @@ const APP_VERSION = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$/;
 
 const NOTES = {
   shells:
-    'combined.stl and replacements.stl concatenate independent shells: no Boolean union, no trimming of the scanned bodies; overlaps are possible.',
+    'combined.stl and the main file (<arch>_implant_position.stl) concatenate independent shells: no Boolean union, no trimming of the scanned bodies; overlaps are possible.',
   visual: 'Check every implant visually against the scans before using these files.',
   indexAmbiguous:
     'At least one implant has an ambiguous index (indexAmbiguous): its rotation about the implant axis is arbitrary.',
@@ -84,6 +90,8 @@ const NOTES = {
   adjusted: 'No jaw scan: the output is in capture coordinates moved by the manual adjustment (captureToOutput).',
   poseChanged:
     'The exported pose is not the measured alignment pose (matchesExport false): the alignment metrics do not describe these files.',
+  exchanged:
+    'The geometry was exchanged after aligning: the alignment (pose and metrics) is the one measured with alignment.perSite[].matchedWith, not with the exported geometry.',
   clinical:
     'A geometric fit is not a clinical validation: confirm units, connection, index and the result before any clinical or manufacturing use.',
 } as const;
@@ -92,7 +100,7 @@ function invalid(reason: string, extra: Record<string, number> = {}): XchangeErr
   return new XchangeError('INVALID_ARGUMENT', { reason, ...extra });
 }
 
-function checkRequest({ arch, createdAt, appVersion, sites, jaw, alignment }: ExportRequest): void {
+function checkRequest({ arch, createdAt, appVersion, sites, jaw, alignment, matchedWith }: ExportRequest): void {
   if (arch !== 'upper' && arch !== 'lower') throw invalid('arch');
   if (!ISO_TIME.test(createdAt) || !Number.isFinite(Date.parse(createdAt))) throw invalid('createdAt');
   if (!APP_VERSION.test(appVersion)) throw invalid('appVersion');
@@ -107,14 +115,20 @@ function checkRequest({ arch, createdAt, appVersion, sites, jaw, alignment }: Ex
   if (alignment && !jaw) throw invalid('alignmentWithoutJaw');
   alignment?.perSite.forEach((fit, index) => {
     if (!ids.has(fit.siteId)) throw invalid('alignmentSite', { index });
+    const m = ownEntry(matchedWith, fit.siteId);
+    if (m && (typeof m.id !== 'string' || typeof m.name !== 'string')) throw invalid('matchedWith', { index });
   });
 }
+
+/** Own keys only: a site id like 'constructor' finds nothing. */
+const ownEntry = <T>(record: Readonly<Record<string, T>> | undefined, key: string): T | undefined =>
+  record && Object.hasOwn(record, key) ? record[key] : undefined;
 
 const hex = (crc: number): string => crc.toString(16).padStart(8, '0');
 
 /**
  * `placed` = placeReplacements(...) for request.sites; `files` = the data entries in bundle order:
- * combined.stl, replacements.stl, one STL per site (site order), then the jaw entry holding
+ * the main file (<arch>_implant_position.stl), combined.stl, one STL per site (site order), then the jaw entry holding
  * request.jaw.originalBytes itself.
  */
 export function buildReport(
@@ -142,12 +156,28 @@ export function buildReport(
       : 'capture-adjusted';
   const matchesExport = alignment ? maxAbsDiff(alignment.transform, assemblyTransform) <= SAME_TRANSFORM : false;
   const labelOf = new Map(sites.map((s) => [s.id, s.label]));
+  const placedOf = new Map(placed.map((p) => [p.siteId, p]));
+  // whitelisted copies: the body the site was aligned with, else (not given) the geometry it exports
+  const matched = (siteId: string): MatchedBody => {
+    const m = ownEntry(request.matchedWith, siteId) ?? { id: placedOf.get(siteId)!.geometryId, name: placedOf.get(siteId)!.geometryName };
+    return { id: m.id, name: m.name };
+  };
+  const perSite = alignment?.perSite.map((fit) => ({
+    siteId: fit.siteId,
+    label: labelOf.get(fit.siteId)!,
+    rmsMm: fit.rmsMm,
+    coverage: fit.coverage,
+    visible: fit.visible,
+    samples: fit.samples,
+    matchedWith: matched(fit.siteId),
+  }));
 
   const notes: string[] = [NOTES.shells, NOTES.visual];
   if (sites.some((s) => s.flags.indexAmbiguous === true)) notes.push(NOTES.indexAmbiguous);
   if (sites.some((s) => s.flags.provisional === true)) notes.push(NOTES.provisional);
   if (coordinateFrame === 'capture-adjusted') notes.push(NOTES.adjusted);
   if (alignment && !matchesExport) notes.push(NOTES.poseChanged);
+  if (perSite?.some((p) => p.matchedWith.id !== placedOf.get(p.siteId)!.geometryId)) notes.push(NOTES.exchanged);
   notes.push(NOTES.clinical);
 
   return {
@@ -174,14 +204,7 @@ export function buildReport(
           toleranceMm: alignment.toleranceMm,
           flags: [...alignment.flags],
           matchesExport,
-          perSite: alignment.perSite.map((fit) => ({
-            siteId: fit.siteId,
-            label: labelOf.get(fit.siteId)!,
-            rmsMm: fit.rmsMm,
-            coverage: fit.coverage,
-            visible: fit.visible,
-            samples: fit.samples,
-          })),
+          perSite: perSite!,
         }
       : null,
     sites: sites.map((site, i) => ({
@@ -215,8 +238,8 @@ interface ReadmeText {
   created: (at: string, version: string) => string;
   decimal: string;
   headings: { files: string; frame: string; alignment: string; limits: string };
-  combined: { jaw: string; noJaw: string };
-  replacements: string;
+  main: (file: string) => string;
+  combined: { jaw: string; noJaw: (main: string) => string };
   perSite: string;
   jaw: (file: string) => string;
   report: string;
@@ -229,6 +252,10 @@ interface ReadmeText {
   fit: (rms: string, p95: string, coverage: string, tolerance: string, visible: string) => string;
   noAlignment: string;
   poseChanged: string;
+  /** The geometry was exchanged after aligning: what the alignment used, what is exported. */
+  exchanged: (aligned: string, exported: string) => string;
+  /** How the bodies of the positions file (id 'capture') read in `exchanged`. */
+  fileBodies: string;
   limits: { shells: string; colors: string; visual: string; indexAmbiguous: string; provisional: string; clinical: string };
   privacy: string;
 }
@@ -238,11 +265,11 @@ const ES: ReadmeText = {
   created: (at, version) => `Creado el ${at} con DDT Xchange ${version}.`,
   decimal: ',',
   headings: { files: 'Archivos', frame: 'Coordenadas', alignment: 'Alineación', limits: 'Límites' },
+  main: (file) => `${file}: todas las geometrías de reemplazo colocadas, en un solo archivo y sin el escaneo: el grupo para abrir en Exocad.`,
   combined: {
     jaw: 'combined.stl: superficie del escaneo de la arcada más todas las geometrías de reemplazo colocadas.',
-    noJaw: 'combined.stl: todas las geometrías de reemplazo colocadas; sin escaneo de la arcada es igual a replacements.stl.',
+    noJaw: (main) => `combined.stl: todas las geometrías de reemplazo colocadas; sin escaneo de la arcada es igual a ${main}.`,
   },
-  replacements: 'replacements.stl: todas las geometrías de reemplazo colocadas, sin el escaneo.',
   perSite: 'Un archivo por implante, en el orden de la captura:',
   jaw: (file) => `${file}: copia exacta, byte a byte, del escaneo de la arcada importado.`,
   report: 'report.json: datos de colocación (matriz 4x4 de cada implante, alineación, CRC-32 de cada archivo).',
@@ -262,9 +289,12 @@ const ES: ReadmeText = {
     `RMS ${rms} mm, p95 ${p95} mm en el ${visible} % de la superficie alineada que ve el escaneo (el resto queda bajo la encía); el ${coverage} % de esa parte queda a ${tolerance} mm o menos del escaneo.`,
   noAlignment: 'Sin alineación registrada.',
   poseChanged: 'La posición exportada no es la de esta alineación: sus métricas no describen estos archivos.',
+  exchanged: (aligned, exported) =>
+    `Alineado con ${aligned}; se exporta ${exported}. La geometría se intercambió después de alinear: la posición y estas métricas son las medidas con ${aligned}.`,
+  fileBodies: 'los cuerpos del archivo de posiciones',
   limits: {
     shells:
-      'combined.stl y replacements.stl concatenan superficies independientes: no hay unión booleana ni recorte de los cuerpos escaneados, y puede haber solapes.',
+      'combined.stl y el archivo principal concatenan superficies independientes: no hay unión booleana ni recorte de los cuerpos escaneados, y puede haber solapes.',
     colors: 'El formato STL no guarda colores, texturas ni el mapa de desviación.',
     visual: 'Revise visualmente cada implante contra los escaneos antes de usar estos archivos.',
     indexAmbiguous:
@@ -282,11 +312,11 @@ const EN: ReadmeText = {
   created: (at, version) => `Created ${at} with DDT Xchange ${version}.`,
   decimal: '.',
   headings: { files: 'Files', frame: 'Coordinates', alignment: 'Alignment', limits: 'Limits' },
+  main: (file) => `${file}: every placed replacement geometry in one file, without the scan: the group to open in Exocad.`,
   combined: {
     jaw: 'combined.stl: the jaw scan surface plus every placed replacement geometry.',
-    noJaw: 'combined.stl: every placed replacement geometry; without a jaw scan it equals replacements.stl.',
+    noJaw: (main) => `combined.stl: every placed replacement geometry; without a jaw scan it equals ${main}.`,
   },
-  replacements: 'replacements.stl: every placed replacement geometry, without the scan.',
   perSite: 'One file per implant, in capture order:',
   jaw: (file) => `${file}: exact byte-for-byte copy of the imported jaw scan.`,
   report: 'report.json: placement data (4x4 matrix of every implant, alignment, CRC-32 of every file).',
@@ -306,9 +336,12 @@ const EN: ReadmeText = {
     `RMS ${rms} mm, p95 ${p95} mm on the ${visible} % of the aligned surface the scan sees (the rest lies under the gum); ${coverage} % of that part lies within ${tolerance} mm of the scan.`,
   noAlignment: 'No alignment recorded.',
   poseChanged: "The exported pose is not this alignment's pose: its metrics do not describe these files.",
+  exchanged: (aligned, exported) =>
+    `Aligned with ${aligned}; exported with ${exported}. The geometry was exchanged after aligning: the position and these metrics are the ones measured with ${aligned}.`,
+  fileBodies: 'the bodies of the positions file',
   limits: {
     shells:
-      'combined.stl and replacements.stl concatenate independent surfaces: no Boolean union, no trimming of the scanned bodies, and overlaps are possible.',
+      'combined.stl and the main file concatenate independent surfaces: no Boolean union, no trimming of the scanned bodies, and overlaps are possible.',
     colors: 'STL files do not store colors, textures or the deviation map.',
     visual: 'Check every implant visually against the scans before using these files.',
     indexAmbiguous:
@@ -326,6 +359,11 @@ function readmeSection(t: ReadmeText, r: ExportReport): string[] {
     Number.isFinite(value) ? value.toFixed(digits).replace('.', t.decimal) : '-';
   const title = t.title(r.arch);
   const a = r.alignment;
+  const main = mainFileName(r.arch);
+  const names = (bodies: readonly MatchedBody[]): string =>
+    [...new Set(bodies.map((b) => (b.id === CAPTURE_BODY_ID ? t.fileBodies : b.name)))].join(', ');
+  const geometryOf = new Map(r.sites.map((s) => [s.id, s.geometry]));
+  const exchanged = a ? a.perSite.filter((p) => p.matchedWith.id !== geometryOf.get(p.siteId)?.id) : [];
   const limits = [
     t.limits.shells,
     t.limits.colors,
@@ -340,8 +378,8 @@ function readmeSection(t: ReadmeText, r: ExportReport): string[] {
     t.created(r.createdAt, r.appVersion),
     '',
     t.headings.files,
-    `- ${r.jaw ? t.combined.jaw : t.combined.noJaw}`,
-    `- ${t.replacements}`,
+    `- ${t.main(main)}`,
+    `- ${r.jaw ? t.combined.jaw : t.combined.noJaw(main)}`,
     `- ${t.perSite}`,
     ...r.sites.map((s) => `    ${s.file}`),
     ...(r.jaw ? [`- ${t.jaw(r.jaw.file)}`] : []),
@@ -358,6 +396,7 @@ function readmeSection(t: ReadmeText, r: ExportReport): string[] {
       ? `${t.method[a.method]}: ${t.status[a.status]}. ${t.fit(num(a.rmsMm, 3), num(a.p95Mm, 3), num(a.coverage * 100, 1), num(a.toleranceMm, 3), num(a.visible * 100, 1))}`
       : t.noAlignment,
     ...(a && !a.matchesExport ? [t.poseChanged] : []),
+    ...(exchanged.length ? [t.exchanged(names(exchanged.map((p) => p.matchedWith)), names(exchanged.map((p) => geometryOf.get(p.siteId)!)))] : []),
     '',
     t.headings.limits,
     ...limits.map((line) => `- ${line}`),

@@ -1,7 +1,7 @@
 /**
- * The export ZIP. Entries, in order: combined.stl, replacements.stl, replacement_<label>.stl per site
- * (site order), jaw.stl | jaw.ply (the imported bytes, unchanged), report.json, README.txt.
- * Shells are concatenated: no Boolean union, no cutting.
+ * The export ZIP. Entries, in order: <upper|lower>_implant_position.stl (the main file: every placed geometry, named
+ * as Fernando names his), combined.stl, replacement_<label>.stl per site (site order), jaw.stl | jaw.ply (the imported
+ * bytes, unchanged), report.json, README.txt. Shells are concatenated: no Boolean union, no cutting.
  *
  * Throws EXPORT_GEOMETRY_MISSING / MATRIX_* (placement.ts), EXPORT_NAME_INVALID / EXPORT_TOO_LARGE
  * (zip.ts; the size is checked before any large allocation), INVALID_ARGUMENT (report.ts, or core
@@ -11,7 +11,7 @@ import { checkMesh, countTriangles } from '../core/mesh';
 import { writeBinarySTL } from '../core/stl-writer';
 import type { ExportRequest } from '../core/types';
 import { placeReplacements, siteGeometries } from './placement';
-import { buildReadme, buildReport, type ExportReport } from './report';
+import { buildReadme, buildReport, mainFileName, type ExportReport } from './report';
 import { entryViews, safeFilename, zipStore, zipStoreSize, type BundleFile } from './zip';
 
 export { safeFilename } from './zip';
@@ -38,14 +38,15 @@ export function buildBundle(request: ExportRequest): ExportBundle {
     return name;
   });
   const jawEntry: BundleFile | null = jaw ? { name: `jaw.${jaw.format}`, bytes: jaw.originalBytes } : null;
+  const main = mainFileName(request.arch); // an arch other than upper/lower is refused by buildReport
 
   // Exact size of everything except the report and README text (zipStore re-checks the true total),
   // from triangle counts alone: an oversize bundle is refused before any mesh or STL is allocated.
   const siteTriangles = siteGeometries(sites, request.geometryBySite).map((g) => countTriangles(g.mesh));
   const replacementTriangles = siteTriangles.reduce((sum, n) => sum + n, 0);
   zipStoreSize([
+    { name: main, size: stlBytes(replacementTriangles) },
     { name: 'combined.stl', size: stlBytes(replacementTriangles + (jaw ? countTriangles(jaw.mesh) : 0)) },
-    { name: 'replacements.stl', size: stlBytes(replacementTriangles) },
     ...siteFiles.map((name, i) => ({ name, size: stlBytes(siteTriangles[i]!) })),
     ...(jawEntry ? [{ name: jawEntry.name, size: jawEntry.bytes.length }] : []),
     { name: 'report.json', size: 0 },
@@ -57,8 +58,8 @@ export function buildBundle(request: ExportRequest): ExportBundle {
   const meshes = placed.map((p) => p.mesh);
   const replacements = writeBinarySTL(meshes);
   const data: BundleFile[] = [
+    { name: main, bytes: replacements },
     { name: 'combined.stl', bytes: jaw ? writeBinarySTL([jaw.mesh, ...meshes]) : replacements },
-    { name: 'replacements.stl', bytes: replacements },
     ...meshes.map((mesh, i) => ({ name: siteFiles[i]!, bytes: writeBinarySTL(mesh) })),
     ...(jawEntry ? [jawEntry] : []),
   ];

@@ -48,15 +48,15 @@ function commonChecks(bundle: ExportBundle, sites: readonly ImplantSite[]): void
   expect(bundle.report.alignment?.matchesExport).toBe(true);
   expect(bundle.files.find((f) => f.name === 'jaw.ply')!.bytes).toEqual(jawFile); // byte for byte
   expect(bundle.files.map((f) => f.name)).toEqual([
+    `${c.arch}_implant_position.stl`, // the main file: the group, as Fernando names his
     'combined.stl',
-    'replacements.stl',
     ...sites.map((s) => `replacement_${s.label.replaceAll(' ', '_')}.stl`),
     'jaw.ply',
     'report.json',
     'README.txt',
   ]);
   // combined = re-serialised jaw + every replacement, readable by our own jaw parser.
-  const combined = parseMesh(bundle.files[0]!.bytes, 'jaw').mesh;
+  const combined = parseMesh(bundle.files.find((f) => f.name === 'combined.stl')!.bytes, 'jaw').mesh;
   expect(combined.indices.length / 3).toBe(c.jaw.indices.length / 3 + sites.length * (library.mesh.indices.length / 3));
 }
 
