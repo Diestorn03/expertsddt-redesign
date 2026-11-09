@@ -140,8 +140,9 @@ function caseRequest(withJaw: boolean) {
     rmsMm: 0.012,
     p95Mm: 0.02,
     coverage: 0.99,
+    visible: 0.9,
     toleranceMm: 0.1,
-    perSite: c.sites.map((s) => ({ siteId: s.id, rmsMm: 0.011, coverage: 0.98, samples: 400 })),
+    perSite: c.sites.map((s) => ({ siteId: s.id, rmsMm: 0.011, coverage: 0.98, visible: 0.9, samples: 400 })),
     status: 'good',
     flags: ['visualCheckRequired'],
   };
@@ -372,9 +373,9 @@ describe('buildBundle', () => {
       'matrixConvention', 'implantFrame', 'arch', 'coordinateFrame', 'captureToOutput', 'capture', 'alignment', 'sites',
       'jaw', 'files', 'notes']);
     expect(Object.keys(report.capture)).toEqual(['format', 'siteCount']);
-    expect(Object.keys(report.alignment!)).toEqual(['method', 'status', 'rmsMm', 'p95Mm', 'coverage', 'toleranceMm', 'flags',
+    expect(Object.keys(report.alignment!)).toEqual(['method', 'status', 'rmsMm', 'p95Mm', 'coverage', 'visible', 'toleranceMm', 'flags',
       'matchesExport', 'perSite']);
-    expect(Object.keys(report.alignment!.perSite[0]!)).toEqual(['siteId', 'label', 'rmsMm', 'coverage', 'samples']);
+    expect(Object.keys(report.alignment!.perSite[0]!)).toEqual(['siteId', 'label', 'rmsMm', 'coverage', 'visible', 'samples']);
     expect(Object.keys(report.sites[0]!)).toEqual(['id', 'label', 'source', 'indexAmbiguous', 'provisional',
       'implantToCapture', 'implantToOutput', 'geometry', 'file']);
     expect(Object.keys(report.sites[0]!.geometry)).toEqual(['id', 'name']);
@@ -528,7 +529,7 @@ describe('buildBundle', () => {
     expect(reason({ ...request, sites: [request.sites[0]!, request.sites[0]!] })).toBe('duplicateSiteId');
     expect(reason({ ...request, jaw: undefined })).toBe('alignmentWithoutJaw');
     expect(reason({ ...request, jaw: { ...request.jaw!, originalBytes: new Uint8Array(0) } })).toBe('jawBytes');
-    const stray = { ...request.alignment!, perSite: [{ siteId: 'site-9', rmsMm: 0, coverage: 1, samples: 1 }] };
+    const stray = { ...request.alignment!, perSite: [{ siteId: 'site-9', rmsMm: 0, coverage: 1, visible: 1, samples: 1 }] };
     expect(thrown(() => buildBundle({ ...request, alignment: stray }))).toMatchObject({
       code: 'INVALID_ARGUMENT',
       details: { reason: 'alignmentSite', index: 0 },

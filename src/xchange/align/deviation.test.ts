@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { fromTranslation, inverseRigid } from '../core/mat4';
 import { transformMesh } from '../core/mesh';
-import { addNoise, makeScanBody, randomRigid } from '../test/fixtures';
-import { deviationMap } from './deviation';
-import { bruteDistance2 } from './test-utils';
+import { addNoise, makeScanBody, makeSyntheticCase, randomRigid } from '../test/fixtures';
+import { deviationMap, partDeviations } from './deviation';
+import { buildTriangleTree } from './kdtree';
+import { bruteDistance2, buriedJaw, flipWinding } from './test-utils';
 
 describe('deviationMap', () => {
   const body = makeScanBody({ segments: 32 });
@@ -36,5 +37,29 @@ describe('deviationMap', () => {
     expect(() => deviationMap(body, { positions: body.positions, indices: Uint32Array.of(0, 1, 9999) })).toThrow(
       expect.objectContaining({ details: { reason: 'indexRange' } }),
     );
+  });
+});
+
+describe('partDeviations (the colour map)', () => {
+  it('leaves what lies under the gum uncoloured (NaN) and gives the rest its distance, whatever the windings', () => {
+    const sc = makeSyntheticCase({ seed: 73, implants: 3, bodyOptions: { heightSegments: 12 } }); // rings every 0.5 mm
+    const jaw = buriedJaw(sc, 2);
+    const maps = partDeviations(sc.parts, buildTriangleTree(jaw), sc.captureToJaw);
+    const flipped = partDeviations(sc.parts.map((p) => ({ ...p, mesh: flipWinding(p.mesh) })), buildTriangleTree(flipWinding(jaw)), sc.captureToJaw);
+    sc.parts.forEach((part, k) => {
+      const z = transformMesh(part.mesh, inverseRigid(sc.frames[k]!)).positions; // implant frame: height above the connection
+      let hidden = 0;
+      for (let v = 0; v < maps[k]!.length; v++) {
+        const h = z[3 * v + 2]!;
+        if (h < 1.6) expect(maps[k]![v]).toBeNaN(); // 0.35 mm or more under the gum line
+        if (h > 1.99) expect(maps[k]![v]).toBeLessThan(1);
+        if (Number.isNaN(maps[k]![v])) hidden++;
+        expect(Number.isNaN(flipped[k]![v])).toBe(Number.isNaN(maps[k]![v]));
+      }
+      expect(hidden).toBeGreaterThan(0);
+    });
+    const off = partDeviations(sc.parts, buildTriangleTree(jaw), fromTranslation([0, 0, 0.2]));
+    expect(off.every((m) => m.every((um) => Number.isNaN(um) || (um >= 0 && um <= 1000)))).toBe(true);
+    expect(() => partDeviations(sc.parts, buildTriangleTree(jaw), sc.captureToJaw, 0.1, 0)).toThrow(expect.objectContaining({ details: { reason: 'maxUm' } }));
   });
 });

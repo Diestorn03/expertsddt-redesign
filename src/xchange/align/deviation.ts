@@ -1,14 +1,17 @@
 /**
- * Deviation map for the colour overlay: unsigned distance (µm) from every vertex of a mesh to a surface.
+ * Deviation map for the colour overlay: unsigned distance (µm) from every vertex of a mesh to a surface; for the UI,
+ * partDeviations also marks what the jaw scan cannot see (NaN), as the fit metrics leave it out.
  *
  * Errors: INVALID_ARGUMENT (reason 'maxUm', plus checkMesh reasons), MATRIX_INVALID / MATRIX_NOT_RIGID.
  */
 import { XchangeError } from '../core/errors';
 import { LIMITS } from '../core/limits';
 import { identity, validateRigid } from '../core/mat4';
-import type { Mat4, TriMesh } from '../core/types';
+import { computeVertexNormals } from '../core/mesh';
+import type { AssemblyPart, Mat4, TriMesh } from '../core/types';
 import { checkUsableMesh } from './icp';
 import { buildTriangleTree, closestOnSurface, type TriangleTree } from './kdtree';
+import { DEFAULT_TOLERANCE_MM, jawDistances } from './metrics';
 
 /** Values are exact up to this and clamped to it (the colour ramp itself saturates at 100 µm in the viewer). */
 export const DEFAULT_MAX_UM = 1000;
@@ -37,4 +40,16 @@ export function deviationMap(meshA: TriMesh, meshB: TriMesh, transformA?: Mat4, 
   checkUsableMesh(meshA, LIMITS.jaw.maxTriangles);
   checkUsableMesh(meshB, LIMITS.jaw.maxTriangles);
   return deviationToSurface(meshA, buildTriangleTree(meshB), transformA, options.maxUm);
+}
+
+/**
+ * The colour map of the parts (UI): µm per vertex of each part (after `transform`) to the jaw, clamped to maxUm, and
+ * NaN where the scan cannot see the vertex (hidden behind the scanned surface, as measureFit leaves it out), so the map
+ * colours what the quality label measures.
+ */
+export function partDeviations(parts: readonly AssemblyPart[], surface: TriangleTree, transform: Mat4 = identity(), toleranceMm = DEFAULT_TOLERANCE_MM, maxUm = DEFAULT_MAX_UM): Float32Array<ArrayBuffer>[] {
+  if (!(maxUm > 0)) throw new XchangeError('INVALID_ARGUMENT', { reason: 'maxUm' });
+  const t = validateRigid(transform);
+  const probes = jawDistances(parts.map((p) => ({ points: p.mesh.positions, normals: computeVertexNormals(p.mesh) })), surface, t, toleranceMm);
+  return probes.map(({ mm, hidden }) => Float32Array.from(mm, (d, i) => (hidden[i] ? Number.NaN : Math.min(maxUm, d * 1000))));
 }

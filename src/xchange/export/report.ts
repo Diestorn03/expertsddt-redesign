@@ -36,11 +36,13 @@ export interface ExportReport {
     rmsMm: number;
     p95Mm: number;
     coverage: number;
+    /** Fraction of the aligned surface the scan can judge (the rest is hidden under the gum); rms, p95 and coverage are on it. */
+    visible: number;
     toleranceMm: number;
     flags: AlignmentFlag[];
     /** The exported pose is the measured one (max element difference <= 1e-9). */
     matchesExport: boolean;
-    perSite: { siteId: string; label: string; rmsMm: number; coverage: number; samples: number }[];
+    perSite: { siteId: string; label: string; rmsMm: number; coverage: number; visible: number; samples: number }[];
   } | null;
   sites: {
     id: string;
@@ -168,6 +170,7 @@ export function buildReport(
           rmsMm: alignment.rmsMm,
           p95Mm: alignment.p95Mm,
           coverage: alignment.coverage,
+          visible: alignment.visible,
           toleranceMm: alignment.toleranceMm,
           flags: [...alignment.flags],
           matchesExport,
@@ -176,6 +179,7 @@ export function buildReport(
             label: labelOf.get(fit.siteId)!,
             rmsMm: fit.rmsMm,
             coverage: fit.coverage,
+            visible: fit.visible,
             samples: fit.samples,
           })),
         }
@@ -222,7 +226,7 @@ interface ReadmeText {
   matrices: string;
   method: Record<AlignmentMethod, string>;
   status: Record<AlignmentStatus, string>;
-  fit: (rms: string, p95: string, coverage: string, tolerance: string) => string;
+  fit: (rms: string, p95: string, coverage: string, tolerance: string, visible: string) => string;
   noAlignment: string;
   poseChanged: string;
   limits: { shells: string; colors: string; visual: string; indexAmbiguous: string; provisional: string; clinical: string };
@@ -254,8 +258,8 @@ const ES: ReadmeText = {
     "Matrices 4x4 por filas (row-major), p' = M·p. Marco del implante: origen en la conexión, +Z en el eje del implante, +X hacia la dirección indexada.",
   method: { auto: 'Alineación automática', landmarks: 'Alineación por puntos guiados', manual: 'Alineación manual' },
   status: { good: 'buena', acceptable: 'aceptable', weak: 'débil', ambiguous: 'ambigua', failed: 'fallida' },
-  fit: (rms, p95, coverage, tolerance) =>
-    `RMS ${rms} mm, p95 ${p95} mm; el ${coverage} % de la superficie alineada queda a ${tolerance} mm o menos del escaneo.`,
+  fit: (rms, p95, coverage, tolerance, visible) =>
+    `RMS ${rms} mm, p95 ${p95} mm en el ${visible} % de la superficie alineada que ve el escaneo (el resto queda bajo la encía); el ${coverage} % de esa parte queda a ${tolerance} mm o menos del escaneo.`,
   noAlignment: 'Sin alineación registrada.',
   poseChanged: 'La posición exportada no es la de esta alineación: sus métricas no describen estos archivos.',
   limits: {
@@ -298,8 +302,8 @@ const EN: ReadmeText = {
     "Matrices: 4x4 row-major, p' = M·p. Implant frame: origin at the connection, +Z along the implant axis, +X towards the indexed direction.",
   method: { auto: 'Automatic alignment', landmarks: 'Guided-point alignment', manual: 'Manual alignment' },
   status: { good: 'good', acceptable: 'acceptable', weak: 'weak', ambiguous: 'ambiguous', failed: 'failed' },
-  fit: (rms, p95, coverage, tolerance) =>
-    `RMS ${rms} mm, p95 ${p95} mm; ${coverage} % of the aligned surface lies within ${tolerance} mm of the scan.`,
+  fit: (rms, p95, coverage, tolerance, visible) =>
+    `RMS ${rms} mm, p95 ${p95} mm on the ${visible} % of the aligned surface the scan sees (the rest lies under the gum); ${coverage} % of that part lies within ${tolerance} mm of the scan.`,
   noAlignment: 'No alignment recorded.',
   poseChanged: "The exported pose is not this alignment's pose: its metrics do not describe these files.",
   limits: {
@@ -351,7 +355,7 @@ function readmeSection(t: ReadmeText, r: ExportReport): string[] {
     '',
     t.headings.alignment,
     a
-      ? `${t.method[a.method]}: ${t.status[a.status]}. ${t.fit(num(a.rmsMm, 3), num(a.p95Mm, 3), num(a.coverage * 100, 1), num(a.toleranceMm, 3))}`
+      ? `${t.method[a.method]}: ${t.status[a.status]}. ${t.fit(num(a.rmsMm, 3), num(a.p95Mm, 3), num(a.coverage * 100, 1), num(a.toleranceMm, 3), num(a.visible * 100, 1))}`
       : t.noAlignment,
     ...(a && !a.matchesExport ? [t.poseChanged] : []),
     '',

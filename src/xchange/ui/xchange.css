@@ -25,7 +25,7 @@
   --xch-quiet: var(--slate);
   --xch-warn: #92400e;
   --xch-bad: #b91c1c;
-  --xch-map-0: #86efac; --xch-map-50: #fbbf24; --xch-map-100: #dc2626;
+  --xch-map-0: #86efac; --xch-map-50: #fbbf24; --xch-map-100: #dc2626; --xch-map-hidden: #94a3b8; /* = viewer/colormap MAP_HIDDEN */
   --xch-loader: cubic-bezier(.76,0,.24,1);
 }
 [data-theme="dark"] :is(.xch, .xch-dialog, .xch__toasts) {
@@ -357,6 +357,9 @@
 .xch__ticks span:nth-child(4) { left: 75%; }
 .xch__ticks span:nth-child(5) { left: auto; right: 0; translate: none; }
 .xch__ticks span:nth-child(5)::before { left: auto; right: 0; }
+/* the grey the map gives what the scan does not see (under the gum): left out of the fit numbers */
+.xch__legendhidden { display: flex; align-items: center; gap: .4rem; }
+.xch__legendhidden::before { content: ''; flex: none; width: 14px; height: 8px; border-radius: 4px; background: var(--xch-map-hidden); }
 /* scale bar at the orbit target's depth (viewer.ts sets --w and the text); the readout sits above it */
 .xch__scale { position: absolute; left: 50%; bottom: .7rem; translate: -50% 0; display: grid; justify-items: center; gap: 3px; padding: .3rem .6rem .45rem; border-radius: 10px; background: var(--xch-glass); border: 1px solid var(--xch-glass-line); box-shadow: var(--xch-float); color: var(--ink); font-size: .7rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .xch__scale::after { content: ''; width: var(--w, 0); height: 5px; border: 1.5px solid currentColor; border-top: 0; }

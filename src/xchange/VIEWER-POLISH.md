@@ -101,7 +101,7 @@ scratchpad `C:\Users\Diestorn\AppData\Local\Temp\claude\C--Users-Diestorn-Deskto
 | G8 | Home sets the rotation pivot at the cursor | HK | Home = Fit | Rotation center at the pointer, or at the crosshair from the keyboard | Done (slice A): A6 |
 | G9 | Numpad views: 1 Front, 2 Bottom, 3 Back, 4 Left, 5 Fit, 6 Right, 8 Top | HK | 0/Home Fit, 1 Occlusal, 2 Front, 3 Back, 4 Left, 5 Right, 6 Top; no Bottom; with motion on the keys never move the camera (bug) | exocad's map on the keypad and the number row; 0 = Default view (occlusal) | Done (slice A): A2; bug Handled (look base) |
 | G10 | Six view arrows plus a cube that fits (DentalCAD); arrows lower right plus "Default view" (webview) | OV, WV, F1 | Seven text buttons in a top toolbar | View buttons: Default view, Fit, six directions | Done (look A): views dial; Done (slice A): A7 (keys) |
-| G11 | View arrows follow the scene axes, not anatomy | OV | Presets assume +Z occlusal on the lower arch, −Y anterior (UI-DESIGN P8, open) | Keep; P8 stays open | Exists |
+| G11 | View arrows follow the scene axes, not anatomy | OV | Presets follow each case's frame (implant axes and arch, else the jaw; UI-DESIGN §6.3), P8 answered by the 8 real arches | Keep the arrows on the scene axes | Done (quality-views) |
 | G12 | Touch (DentalCAD on Windows): 3 fingers rotate, 2 move or pinch, 1 selects | OV | 1 finger turns, 2 pinch and pan, a tap selects or places, a double tap fits | Keep ours: iPadOS owns three-finger swipes and pinches (undo, redo, copy, paste) | Won't |
 | G13 | Webview app: Touch & Hold sets the rotation point | AS | Nothing | Long-press 500 ms | Done (slice A): A8 |
 | G14 | Shift + middle click toggles the transparency of the object under the pointer | HK | Ctrl or Shift + middle click toggles the jaw, whatever is under the pointer | Per object (jaw scan, replacements) | Done (slice A): A9 |
@@ -294,7 +294,7 @@ what the look lacks), `src/pages/ddt-xchange.astro` (§6), UI-DESIGN §3.2/§6.2
 
 - **Behaviour.**
   - `viewer/presets.ts`: `Preset` gains `'bottom'` = camera from −Z, up −Y (the occlusal view of an upper arch,
-    anterior at the top). The table stays the single place to change if P8 shows other axes.
+    anterior at the top). Since quality-views the table is read in each case's frame (`archFrame`, UI-DESIGN §6.3).
   - `PRESET_KEYS` is replaced by one pure function `viewForKey(code: string, key: string): Preset | 'fit' | null`.
   - The **Default view** is `'occlusal'` (occlusal for the case's arch, framed): the view every import ends on
     (UI-DESIGN §6.3, unchanged), and exocad webview's "Default view" [WV].

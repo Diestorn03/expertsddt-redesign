@@ -8,7 +8,7 @@ import { LIMITS } from '../core/limits';
 import { identity, maxAbsDiff } from '../core/mat4';
 import { transformMesh } from '../core/mesh';
 import type { AlignmentFlag, AlignmentResult, Arch, AssemblyPart, CaptureFormat, ImplantSite, JawScan, Mat4, ReplacementGeometry, SiteFit, TriMesh } from '../core/types';
-import { DEFAULT_QUALITY, type QualityThresholds } from '../align/metrics';
+import { DEFAULT_QUALITY, grade, type QualityThresholds } from '../align/metrics';
 import { orderSitesAlongArch } from '../align/landmarks';
 
 export type Step = 1 | 2 | 3 | 4;
@@ -174,11 +174,9 @@ export function guidedTargets(sites: readonly ImplantSite[]): ImplantSite[] {
 }
 
 export type SiteStatus = 'good' | 'acceptable' | 'weak' | 'poor';
-export function siteStatus(fit: Pick<SiteFit, 'rmsMm' | 'coverage'>, q: QualityThresholds = DEFAULT_QUALITY): SiteStatus {
-  if (fit.coverage < q.usableCoverage) return 'poor';
-  if (fit.rmsMm <= q.goodRmsMm && fit.coverage >= q.goodCoverage) return 'good';
-  if (fit.rmsMm <= q.acceptableRmsMm && fit.coverage >= q.acceptableCoverage) return 'acceptable';
-  return 'weak';
+/** One implant's status: the set's grade, 'poor' below siteUsableCoverage. */
+export function siteStatus(fit: Pick<SiteFit, 'rmsMm' | 'coverage' | 'visible'>, q: QualityThresholds = DEFAULT_QUALITY): SiteStatus {
+  return fit.coverage < q.siteUsableCoverage ? 'poor' : grade(fit, q);
 }
 
 const METHOD_FLAGS: readonly AlignmentFlag[] = ['landmarkTranslationOnly', 'landmarkAxisFree', 'ambiguousAlternative', 'notConverged', 'fewCorrespondences'];

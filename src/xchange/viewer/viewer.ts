@@ -7,11 +7,11 @@
  */
 import gsap from 'gsap';
 import * as THREE from 'three';
-import { fromColumnMajor } from '../core/mat4';
+import { fromColumnMajor, getColumn, multiply, transformDirection } from '../core/mat4';
 import type { Arch, Mat4, TriMesh, Vec3 } from '../core/types';
 import { buildLut, colorize } from './colormap';
 import { decodePick, PICK_CAPTURE, PICK_FS, PICK_JAW, PICK_PART, PICK_VS, type Pick, type SceneObject } from './pick';
-import { presetView, type Preset } from './presets';
+import { archFrame, jawShape, presetView, type ArchFrame, type JawShape, type Preset } from './presets';
 import { sectionPlane } from './section';
 import { EASE_OUT, forget, transient } from '../ui/motion';
 
@@ -225,6 +225,8 @@ export class Viewer {
 
   private jaw: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial> | null = null;
   private jawLinearColors: Float32Array | null = null;
+  /** The jaw's outline and mean normal for the view presets (archFrame), made once per jaw. */
+  private jawOutline: JawShape | null = null;
   private readonly implants = new Map<string, Implant>();
   private readonly ghosts: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhongMaterial>[] = [];
   private ghostUm: (Float32Array | null)[] = [];
@@ -582,6 +584,7 @@ export class Viewer {
       this.jaw.material.dispose();
       this.jaw = null;
       this.jawLinearColors = null;
+      this.jawOutline = null;
     }
     if (mesh) {
       const g = bufferGeometry(mesh, normals);
@@ -593,6 +596,7 @@ export class Viewer {
       shine(m, LOOK.jaw);
       this.jaw = new THREE.Mesh(g, m);
       this.jaw.matrixAutoUpdate = false;
+      this.jawOutline = jawShape(g.getAttribute('position').array, g.getAttribute('normal').array);
       this.scene.add(this.jaw);
     }
     this.updateSphere();
@@ -975,8 +979,18 @@ export class Viewer {
     this.tweenCamera(sphere.center.clone(), this.q.clone(), this.fitDistance(sphere.radius), instant ? 0 : 0.7);
   }
 
+  /** The case's frame for the view presets: the implants where the set is now, else the jaw scan (presets.archFrame). */
+  archFrame(): ArchFrame | null {
+    const pose = toEngine(this.assembly.matrix);
+    const implants = [...this.implants.values()].map(({ site }) => {
+      const m = multiply(pose, site.matrix);
+      return { origin: getColumn(m, 3), axis: transformDirection(m, [0, 0, 1]) };
+    });
+    return archFrame(implants, this.jawOutline);
+  }
+
   view(preset: Preset, instant = false): void {
-    const { from, up } = presetView(preset, this.arch);
+    const { from, up } = presetView(preset, this.arch, this.archFrame());
     const m = new THREE.Matrix4().lookAt(new THREE.Vector3(...from), new THREE.Vector3(), new THREE.Vector3(...up));
     const q = new THREE.Quaternion().setFromRotationMatrix(m);
     const { center, dist } = this.frame(q);

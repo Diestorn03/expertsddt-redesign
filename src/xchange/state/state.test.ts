@@ -99,10 +99,11 @@ describe('alignment parts', () => {
 
 describe('results', () => {
   it('per-site status from DEFAULT_QUALITY', () => {
-    expect(siteStatus({ rmsMm: 0.02, coverage: 0.99 })).toBe('good');
-    expect(siteStatus({ rmsMm: 0.08, coverage: 0.9 })).toBe('acceptable');
-    expect(siteStatus({ rmsMm: 0.3, coverage: 0.6 })).toBe('weak');
-    expect(siteStatus({ rmsMm: 0.3, coverage: 0.1 })).toBe('poor');
+    expect(siteStatus({ rmsMm: 0.02, coverage: 0.99, visible: 0.7 })).toBe('good');
+    expect(siteStatus({ rmsMm: 0.14, coverage: 0.6, visible: 0.7 })).toBe('acceptable');
+    expect(siteStatus({ rmsMm: 0.02, coverage: 0.99, visible: 0.5 })).toBe('weak'); // too little of it in the scan
+    expect(siteStatus({ rmsMm: 0.2, coverage: 0.35, visible: 0.6 })).toBe('weak'); // usable for one implant, not for the set
+    expect(siteStatus({ rmsMm: 0.3, coverage: 0.1, visible: 0.9 })).toBe('poor');
   });
   it('a re-measure of an unmoved pose keeps the method and method flags', () => {
     const prev = { method: 'landmarks', status: 'good', flags: ['visualCheckRequired', 'landmarkAxisFree'] } as unknown as AlignmentResult;

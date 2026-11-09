@@ -15,14 +15,18 @@ describe('multiStartAlign: noise, symmetry, starts and failures', () => {
     expect(poseError(result.transform, c.captureToJaw, c.frames).mm).toBeLessThan(0.02);
   });
 
-  it('bodies 40 % buried in the gum still align within 20 µm (robust rejection), reported as weak coverage', () => {
+  it('bodies cut 2.5 mm up in the scan still align within 20 µm (robust rejection); the band the scan misses counts against the fit', () => {
     const c = makeSyntheticCase({ seed: 36, implants: 4, maxAngleRad: Math.PI });
     const jaw = addNoise(transformMesh(mergeMeshes([c.archMesh, placeBodies(c.frames, visibleAbove(c.body, 2.5))]), c.captureToJaw), 0.01, 9);
     const result = multiStartAlign(c.parts, buildIcpTarget(jaw));
     expect(poseError(result.transform, c.captureToJaw, c.frames).mm).toBeLessThan(0.02);
-    expect(result.coverage).toBeGreaterThan(0.5);
-    expect(result.coverage).toBeLessThan(0.6); // the buried samples have nothing to match: metrics are untrimmed
-    expect(result.status).toBe('weak');
+    // The metrics leave out only what lies under the ridge (~1 mm): the band from the ridge up to the cut faces a scan
+    // with nothing there, as a sulcus the scanner missed, and counts as misses (before: every buried sample did).
+    expect(result.visible).toBeGreaterThan(0.75);
+    expect(result.visible).toBeLessThan(0.9);
+    expect(result.coverage).toBeGreaterThan(0.6);
+    expect(result.coverage).toBeLessThan(0.75);
+    expect(['acceptable', 'weak']).toContain(result.status);
   });
 
   it('one round body: position found, status ambiguous (rotation about its axis is unknown)', () => {

@@ -25,7 +25,7 @@ import type { SurfaceSamples } from '../core/sampling';
 import type { AlignmentFlag, AlignmentResult, AssemblyPart, Mat4, Vec3 } from '../core/types';
 import { distance, dot } from '../core/vec3';
 import { cappedRms, checkParts, icp, MIN_PAIRS, polish, poseScore, prefixSamples, refineLocal, sampleParts, type IcpOptions, type IcpResult, type IcpTarget } from './icp';
-import { alignSettings, finishResult, icpFlags, isSymmetric, measureFit, pointPca, surfacePca, type Pca, type QualityThresholds } from './metrics';
+import { alignSettings, finishResult, icpFlags, isSymmetric, measureFit, pointPca, statusOf, surfacePca, type Pca, type QualityThresholds } from './metrics';
 import { seededStarts } from './seeds';
 
 export { DEFAULT_QUALITY, type QualityThresholds } from './metrics';
@@ -261,7 +261,7 @@ export function multiStartAlign(parts: readonly AssemblyPart[], target: IcpTarge
     if (local) {
       const { transform } = local.fit;
       const metrics = measureFit(parts, target, transform, { toleranceMm, seed: settings.seed });
-      if (metrics.rmsMm <= quality.goodRmsMm && metrics.coverage >= quality.goodCoverage) {
+      if (statusOf(metrics, [], quality) === 'good') {
         const flags: AlignmentFlag[] = [...(symmetric ? (['symmetricSource'] as const) : []), ...icpFlags(local.fit, count, fine.trimFraction)];
         progress?.('metrics', 1);
         return finishResult(parts, target, transform, 'auto', flags, settings, metrics);

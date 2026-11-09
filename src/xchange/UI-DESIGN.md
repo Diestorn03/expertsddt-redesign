@@ -644,7 +644,10 @@ need a geometry."
   metrics .90–1; text "{stage} · {pct} %"; `[Cancel]` aborts the `AbortSignal` → `CANCELLED` → quiet "Alignment
   cancelled." and the pose unchanged.
 - **Result card**: status chip + one-sentence explanation (thresholds interpolated from `DEFAULT_QUALITY`, never typed
-  in copy) + metrics row (RMS µm · 95 % within µm · within {tol} µm %) + method + the flags present other than
+  in copy) + metrics row (RMS µm · 95 % within µm · within {tol} µm %), all on the part of the bodies the scan sees,
+  then the line `al.visible` ("The scan sees {pct} % of the implant surfaces; what it cannot see (under the gum) is left out…") + "What do
+  these numbers mean?" (each metric, then `al.limits`: the provisional thresholds, set from real cases aligned in
+  Exocad, to follow the clinical tolerance once confirmed) + method + the flags present other than
   `visualCheckRequired` (that one is the standing note of the Export section) + the per-implant table. Applied
   results tween the implant set into place (§3.2) and turn the color map on the first time.
 - `failed`: chip "No usable fit", the attempt's metrics grayed under "Last attempt (not applied)", pose unchanged,
@@ -652,9 +655,9 @@ need a geometry."
 - Stale (pose, surfaces or geometry changed): chip "Measuring…" until `measure()` returns, then the normal card
   (method rule in §5.2).
 - **Per-implant table**: `<table>` with caption, rows in guided order (`orderSitesAlongArch`), columns Implant · RMS
-  (µm) · Within {tol} µm · Status. Status per site from `DEFAULT_QUALITY`: good (rms ≤ `goodRmsMm` ∧ coverage ≥
-  `goodCoverage`), acceptable (rms ≤ `acceptableRmsMm` ∧ coverage ≥ `acceptableCoverage`), no match (coverage <
-  `usableCoverage`), weak otherwise. The first cell is a button "Show AXO2 in the view" (camera eases to it, it pulses
+  (µm) · Within {tol} µm · Status. Status per site from `DEFAULT_QUALITY` (`state/case.siteStatus`): good (visible ≥
+  `minVisible` ∧ rms ≤ `goodRmsMm` ∧ coverage ≥ `goodCoverage`), acceptable (visible ≥ `minVisible` ∧ rms ≤
+  `acceptableRmsMm` ∧ coverage ≥ `acceptableCoverage`), no match (coverage < `siteUsableCoverage`), weak otherwise. The first cell is a button "Show AXO2 in the view" (camera eases to it, it pulses
   once). Numbers right-aligned, `font-variant-numeric: tabular-nums`.
 
 **Guided points mode** (replaces section A while active; stage behavior in §6.6):
@@ -771,10 +774,16 @@ roving tabindex (one Tab stop each, arrow keys move):
 
 ### 6.3 View presets
 
-World-axis directions, assuming scanner coordinates with +Z toward the occlusal side of the lower arch and −Y toward
-anterior. The Z rule matches the synthetic fixtures (implant axes point +Z on the lower arch, −Z on the upper); the
-anterior direction is an assumption. The table is the only thing to change if real exports differ (§15.3); it lives
-in `viewer/presets.ts`.
+Directions in the case's own frame (`viewer/presets.ts` `archFrame`; P8 answered by Fernando's 8 real arches, which
+come in at least two frames, occlusal ±Z and front ±X): **occlusal** = the implants' mean axis (connection → top
+points occlusally on either arch) averaged with the normal of the plane through their connections, **anterior** =
+across the line through the two implants farthest apart, toward the others. Implants that do not sit on the jaw scan
+(not aligned yet: median connection more than 6 mm from it) or too few for an arch leave the frame to the jaw (its
+mean normal; the main axis of its outline, the front at its narrow end); with nothing to go on, the world table below
+(+Z occlusal on a lower arch, −Y anterior). Superior = occlusal on a lower arch, −occlusal on an upper; the patient's
+left = superior × anterior. Each preset of the table is that frame's axis, so on the world frame it reads as written.
+A jaw import ends on Occlusal + Fit like every import. On the 8 arches every preset lands within 8.6° of the jaw's
+normal and mirror axis (the world table was 57–178° off).
 
 | Preset | Key | Camera from | Up |
 |---|---|---|---|
@@ -843,8 +852,12 @@ wheel), so Remove the cut stays in view above the views dial.
   with red-green color blindness; exact numbers are always available (hover readout, per-implant table).
 - The map is drawn on the surfaces that were measured (replacements or captured bodies), which are the meshes shown.
 - Legend, bottom-left glass card: title "Distance to the jaw scan" with "µm" at its right, 8 × 180 px gradient bar,
-  ticks 0 · 25 · 50 · 75 · 100+ each at its value on the bar (the ends align outward), sub-line "On the replacement
+  ticks 0 · 25 · 50 · 75 · 100+ each at its value on the bar (the ends align outward), the grey line "Grey: not seen by
+  the scan (under the gum)" with its swatch (`--xch-map-hidden` = `MAP_HIDDEN`), sub-line "On the replacement
   geometry" / "On the captured scan bodies". `role="img"` with `legend.aria`.
+- What the scan cannot see (a vertex more than 3 tolerances behind the scanned surface, `partDeviations` NaN) is
+  `MAP_HIDDEN` #94a3b8, a cool grey apart from every stop, the jaw and the parts; its readout is "AXO2 · not seen by
+  the scan". The map so colours exactly what the quality label measures (quality-views).
 
 ### 6.6 Hover readout, picking and the guided flow in the stage
 
@@ -2074,7 +2087,7 @@ needed for v1).
 | # | Question | Default in this design |
 |---|---|---|
 | P5 | RMS and coverage that count as good/acceptable; block export on a weak fit? | `DEFAULT_QUALITY` interpolated into the copy; weak/ambiguous only warn |
-| P8 | Scanner axis conventions for the view presets (three real exports: upper, lower, one PLY) | LPS-like table of §6.3 |
+| P8 | Scanner axis conventions for the view presets | Answered by the 8 real arches (several frames): per-case frame, §6.3 |
 | P3 | Round scan body + indexed replacement: warn, block, or ask for the rotation? | Warn (chip, note, report) |
 | P12/P13 | Approval of the consent text and of the "not a clinical validation" wording | §12.6 and §12.5 texts |
 | P9 | Typical and maximum implant count per case | Guided targets: all up to 4, four spread above |

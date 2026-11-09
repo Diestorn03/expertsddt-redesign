@@ -7,7 +7,7 @@
  */
 import { toErrorPayload, XchangeError } from '../core/errors';
 import { buildIcpTarget, checkParts, type IcpTarget } from './icp';
-import { deviationToSurface } from './deviation';
+import { partDeviations } from './deviation';
 import { alignFromLandmarks } from './landmarks';
 import { measureManualPose } from './metrics';
 import { multiStartAlign, type AlignOptions, type AlignStage } from './multistart';
@@ -55,9 +55,9 @@ export function createAlignHandler(post: (message: AlignResponse, transfer?: Tra
           post({ type: 'result', id, result: measureManualPose(message.parts, jaw(), message.transform, optionsFor(id, message.options)) });
           return;
         case 'deviation': {
-          const surface = jaw().surface;
           checkParts(message.parts);
-          const perSite = message.parts.map((part) => ({ siteId: part.siteId, distancesUm: deviationToSurface(part.mesh, surface, message.transform) }));
+          const maps = partDeviations(message.parts, jaw().surface, message.transform);
+          const perSite = message.parts.map((part, k) => ({ siteId: part.siteId, distancesUm: maps[k]! }));
           post({ type: 'deviation', id, perSite }, perSite.map((site) => site.distancesUm.buffer));
           return;
         }

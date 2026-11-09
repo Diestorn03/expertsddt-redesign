@@ -5,6 +5,7 @@
  * Tests named "BUG:" fail until the CSS is fixed.
  */
 import { describe, expect, it } from 'vitest';
+import { MAP_HIDDEN } from '../../viewer/colormap';
 
 // node:fs through a computed specifier: the tool's tsconfig has no Node types and this is the only file read
 const fs = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as { readFileSync(path: URL, encoding: 'utf8'): string };
@@ -179,4 +180,10 @@ describe('3D view toolbar (glass over the stage gradient)', () => {
     const r = worst(fg, [bg, resolve(prop('.xch__toolbar', 'background', theme)!, t), resolve('var(--xch-stage)', t)]);
     it(`${r < AA ? 'BUG: ' : ''}${theme}: the pressed view preset / open Display button reaches 4.5:1 (computed ${r.toFixed(2)}:1)`, () => expect(r).toBeGreaterThanOrEqual(AA));
   }
+});
+
+describe('color scale legend (quality-views): the grey line', () => {
+  it('its swatch is the grey the map gives what the scan does not see, in both themes', () => {
+    for (const theme of ['light', 'dark'] as const) expect(resolve('var(--xch-map-hidden)', tokens(theme))).toBe(MAP_HIDDEN);
+  });
 });

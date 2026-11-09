@@ -2,8 +2,11 @@
  * Deviation color map (UI-DESIGN §6.5): 0 µm #86efac -> 50 µm #fbbf24 -> 100+ µm #dc2626, interpolated in
  * OKLab so lightness falls monotonically (reads in grayscale and for red-green color blindness).
  * The LUT is built once; the GPU copy is linear sRGB because three treats vertex colors as linear.
+ * A vertex the scan cannot see (NaN from partDeviations: under the gum) takes MAP_HIDDEN, a cool grey apart from
+ * every stop, the jaw and the parts: the map colours exactly what the quality label measures.
  */
 export const MAP_STOPS = ['#86efac', '#fbbf24', '#dc2626'] as const;
+export const MAP_HIDDEN = '#94a3b8';
 export const MAP_MAX_UM = 100;
 export const LUT_SIZE = 256;
 
@@ -48,12 +51,15 @@ export function buildLut(): { linear: Float32Array; srgb: Uint8Array } {
 
 export const lutIndex = (um: number): number => Math.min(LUT_SIZE - 1, Math.max(0, Math.round((um / MAP_MAX_UM) * (LUT_SIZE - 1))));
 
-/** Fills `out` (linear rgb per vertex) from µm values. */
+const HIDDEN_LINEAR = hex(MAP_HIDDEN).map(toLinear);
+
+/** Fills `out` (linear rgb per vertex) from µm values; NaN (not seen by the scan) -> MAP_HIDDEN. */
 export function colorize(um: Float32Array, lut: Float32Array, out: Float32Array): void {
   for (let i = 0; i < um.length; i++) {
-    const j = 3 * lutIndex(um[i]!);
-    out[3 * i] = lut[j]!;
-    out[3 * i + 1] = lut[j + 1]!;
-    out[3 * i + 2] = lut[j + 2]!;
+    const v = um[i]!, j = 3 * lutIndex(v);
+    const hidden = Number.isNaN(v);
+    out[3 * i] = hidden ? HIDDEN_LINEAR[0]! : lut[j]!;
+    out[3 * i + 1] = hidden ? HIDDEN_LINEAR[1]! : lut[j + 1]!;
+    out[3 * i + 2] = hidden ? HIDDEN_LINEAR[2]! : lut[j + 2]!;
   }
 }

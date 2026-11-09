@@ -356,14 +356,19 @@ export function icp(source: SurfaceSamples, target: IcpTarget, initial: Mat4, op
 
 // align/multistart.ts
 export type AlignStage = 'prepare' | 'coarse' | 'fine' | 'metrics';
+/** PROVISIONAL (quality-views, from Fernando's 8 aligned arches); his tolerance answer (report question 1) sets the final numbers. */
 export interface QualityThresholds {
-  goodRmsMm: number;          // 0.05
-  goodCoverage: number;       // 0.95
-  acceptableRmsMm: number;    // 0.10
-  acceptableCoverage: number; // 0.80
+  goodRmsMm: number;          // 0.11  (was 0.05 on the whole body)
+  goodCoverage: number;       // 0.75  (was 0.95)
+  acceptableRmsMm: number;    // 0.16  (was 0.10)
+  acceptableCoverage: number; // 0.50  (was 0.80)
+  minVisible: number;         // 0.55: good and acceptable need this visible fraction, else at best weak
   /** Another finalist ending > toleranceMm from the best (any sample) and scoring within max(ratio · best, best + slack) -> 'ambiguous'. */
   ambiguityRatio: number;     // 1.1
   ambiguitySlackMm: number;   // 0.005 (added at integration: near-zero residuals make any ratio too tight)
+  usableCoverage: number;     // 0.45 (was 0.40): below -> 'failed'
+  siteUsableCoverage: number; // 0.30: one implant below -> 'poor' (a distorted scan lands on single implants)
+  symmetryTolerance: number;  // 0.01
 }
 export const DEFAULT_QUALITY: QualityThresholds;
 export interface AlignOptions extends IcpOptions {
@@ -393,19 +398,29 @@ export function alignFromLandmarks(parts: readonly AssemblyPart[], target: IcpTa
 
 // align/metrics.ts
 export interface FitMetrics {
-  rmsMm: number;
-  p95Mm: number;
-  coverage: number;
+  rmsMm: number;     // visible samples, each distance capped at 3 × toleranceMm
+  p95Mm: number;     // visible samples, uncapped
+  coverage: number;  // share of the visible samples within toleranceMm
+  visible: number;   // share of all samples that are visible
   perSite: SiteFit[];
 }
-/** Point-to-surface distances of every part's samples (no trimming), accurate to <= 5 µm on the fixtures. */
+/** Points on one part with their normals (any winding). */
+export interface PartPoints { points: ArrayLike<number>; normals: ArrayLike<number> }
+/** mm from every point (moved by transform) to the jaw, and whether it is hidden from the scan (rule below). */
+export function jawDistances(clouds: readonly PartPoints[], surface: TriangleTree, transform: Mat4, toleranceMm: number, maxMm?: number): { mm: Float64Array; hidden: Uint8Array }[];
+/** Fit on the part of the bodies the scan sees (no trimming), exact on the jaw triangles. */
 export function measureFit(parts: readonly AssemblyPart[], target: IcpTarget, transform: Mat4, options?: { toleranceMm?: number; samplesPerSite?: number; seed?: number }): FitMetrics;
+/** good / acceptable / weak by rms, coverage and visible (the set's and each implant's grade). */
+export function grade(m: Pick<FitMetrics, 'rmsMm' | 'coverage' | 'visible'>, q: QualityThresholds): 'good' | 'acceptable' | 'weak';
+export function statusOf(m: Pick<FitMetrics, 'rmsMm' | 'coverage' | 'visible'>, flags: readonly AlignmentFlag[], q: QualityThresholds): AlignmentStatus;
 /** Metrics of a pose the user placed by hand: method 'manual', flag 'manualPose'. */
 export function measureManualPose(parts: readonly AssemblyPart[], target: IcpTarget, transform: Mat4, options?: AlignOptions): AlignmentResult;
 
 // align/deviation.ts
 /** Unsigned distance in µm from every vertex of meshA (after transformA) to the SURFACE of meshB. Exact (vs brute force, 0.5 µm) below 200 µm; may be approximate above 1000 µm. */
 export function deviationMap(meshA: TriMesh, meshB: TriMesh, transformA?: Mat4): Float32Array;
+/** The colour map (the worker's 'deviation' answer): µm per vertex of each part, clamped to maxUm, NaN where hidden from the scan (as measureFit leaves it out). */
+export function partDeviations(parts: readonly AssemblyPart[], surface: TriangleTree, transform?: Mat4, toleranceMm?: number, maxUm?: number): Float32Array[];
 
 // align/protocol.ts
 export type AlignOptionsData = Omit<AlignOptions, 'onProgress' | 'onIteration' | 'shouldCancel'>; // functions cannot be posted
@@ -474,10 +489,24 @@ export class AlignClient {
     3 × toleranceMm; kept only if poseScore improves). poseScore ranks them. The 80 % trim alone held a fixed point
     0.57° off on a real case; the robust (MAD) polish is gone (never kept after this one). `alignFromLandmarks` polishes
     the same way.
-- **Status** (`DEFAULT_QUALITY`): `failed` (did not converge to anything usable) -> `ambiguous` (flag
-  `ambiguousAlternative`, or nearly isotropic source PCA within 1 % -> `symmetricSource`) -> `good` (rms <=
-  goodRmsMm and coverage >= goodCoverage) -> `acceptable` -> `weak`. `flags` always contains `visualCheckRequired`.
-  The thresholds are heuristics pending Fernando (spec P5): keep them in `DEFAULT_QUALITY`, nowhere else.
+- **Metrics on the visible part** (quality-views; before, every sample counted and the 2-3 mm of each body under the
+  gum read 'weak' on every correct real case, 'failed' on one): a sample is hidden when it lies more than
+  3 × toleranceMm (0.3 mm, poseScore's cap) from the jaw and the scanned surface does not clearly face it (offset within
+  60° of the outward normal): under the gum, where the scanner never looked. Farther samples the scan faces stick out
+  where it shows free space: visible misses. The scan's outside is the side its normals take where the parts lie on it
+  (samples within the tolerance, each part's normals turned outward first), so neither winding matters. rms, p95 and
+  coverage are over the visible samples (rms capped at 3 × toleranceMm: a scanned screw recess the body file lacks
+  counts as a miss, not as millimetres); `visible` is their share. Known limit: a set pushed straight along the implant
+  axes slides on the scanned walls and shows only at the tops (1 mm in: weak or acceptable; 2 mm: weak or failed).
+- **Status** (`DEFAULT_QUALITY`): `failed` (coverage < usableCoverage: nothing usable) -> `ambiguous` (flag
+  `ambiguousAlternative`, or nearly isotropic source PCA within 1 % -> `symmetricSource`) -> `good` (visible >=
+  minVisible, rms <= goodRmsMm and coverage >= goodCoverage) -> `acceptable` (visible >= minVisible, rms <=
+  acceptableRmsMm, coverage >= acceptableCoverage) -> `weak`. Per implant (`state/case.siteStatus`): the same grade,
+  `poor` below siteUsableCoverage. `flags` always contains `visualCheckRequired`. The thresholds are PROVISIONAL, from
+  Fernando's 8 arches: his poses read good (rms 0.07-0.10 mm, coverage 0.80-0.94, visible 0.68-0.96) except the
+  stretched case 2 upper, acceptable (0.149 mm / 0.54); the same poses moved 2 mm and 3° in 12 random directions all
+  read failed (96 of 96), and so does the case 3 MM3.0 set aligned without the exchange. Fernando's tolerance answer
+  (report question 1) sets the final numbers: keep them in `DEFAULT_QUALITY`, nowhere else (the UI interpolates them).
 - **Cancel and progress:** algorithms are synchronous and report through `onProgress` / `onIteration`. The
   client cancels by terminating the worker: the promise rejects with `CANCELLED` at once and the next call
   re-creates the worker and re-sends the last jaw (`ponytail:` simple and instant; no shared memory needed).
@@ -493,7 +522,10 @@ export class AlignClient {
   (`multistart-search.test.ts`, `seeds.test.ts`): a set 15-35° off the jaw's axes with round bodies 2.5 mm under the
   gum and with prism bodies (no seeds: the turns), scanned bodies off the layout (result scores <= the truth), a near
   rival flagged; wall radius of several bodies and windings, seeds with half the jaw wound the other way, none
-  without round walls.
+  without round walls. Visible part (`metrics.test.ts`, `deviation.test.ts`; `test-utils.buriedJaw`): four bodies 2 mm
+  deep under a gum line -> the exact pose good (the whole-body metric read weak), 2 mm / 3° off in six directions and
+  ±2 mm along the axes failed, the same numbers with the jaw or the parts wound the other way; `partDeviations` NaN
+  under the gum line, whatever the windings.
 
 ## 5. export (builder 5)
 
@@ -567,9 +599,9 @@ export function safeFilename(label: string, fallback: string): string;
   "capture": { "format": "<CaptureFormat>", "siteCount": 4 },
   "alignment": null | {
     "method": "auto | landmarks | manual", "status": "<AlignmentStatus>",
-    "rmsMm": 0.0, "p95Mm": 0.0, "coverage": 0.0, "toleranceMm": 0.1, "flags": ["visualCheckRequired"],
+    "rmsMm": 0.0, "p95Mm": 0.0, "coverage": 0.0, "visible": 0.0, "toleranceMm": 0.1, "flags": ["visualCheckRequired"],
     "matchesExport": true,                                  // maxAbsDiff(alignment.transform, assemblyTransform) <= 1e-9
-    "perSite": [{ "siteId": "site-1", "label": "AXO1", "rmsMm": 0.0, "coverage": 0.0, "samples": 400 }]
+    "perSite": [{ "siteId": "site-1", "label": "AXO1", "rmsMm": 0.0, "coverage": 0.0, "visible": 0.0, "samples": 400 }]
   },
   "sites": [{
     "id": "site-1", "label": "AXO1", "source": "<CaptureFormat>",
@@ -601,7 +633,14 @@ export function safeFilename(label: string, fallback: string): string;
   in IndexedDB (versioned schema, size and entry limits, never deletes silently), favourite applies at once to all
   implants or to one, multi-file capture (position file + mesh -> `linkSitesToComponents`).
 - `viewer/`: three.js scene, exocad mouse preset, picking, assembly manipulation (drag, Ctrl + rotate, arrows, flip),
-  markers, opacity, FOV, colour map legend. Builds its own buffers once; never re-uploads per render.
+  markers, opacity, FOV, colour map legend (grey = not seen by the scan: NaN from `partDeviations`). Builds its own
+  buffers once; never re-uploads per render. View presets per case (`viewer/presets.ts`, quality-views):
+  `archFrame(implants, jawShape)` -> `{ occlusal, anterior }` in world axes, `presetView(preset, arch, frame)`;
+  occlusal = the implants' mean axis averaged with the normal of the plane through their connections (3 or more in an
+  arch), anterior = across the line through the two implants farthest apart, toward the others; implants that do not
+  sit on the jaw (median connection > 6 mm from it) or too few leave it to the jaw (mean normal; outline main axis,
+  front at its narrow end); nothing -> the world table (+Z occlusal on the lower arch, -Y anterior). On Fernando's 8
+  arches every preset lands within 8.6° of the jaw's normal and mirror axis (the world table: 57-178° off).
 - `ui/`: four-step wizard in the site's style, ES/EN, keyboard alternative for guided clicks, privacy copy, the
   optional marketing e-mail (the only network call).
 

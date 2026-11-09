@@ -57,7 +57,10 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
   mejor puntaje propio que la suya, en 0,7-1,6 s (mediana).
 - Paso 4: automática, puntos guiados 1-2-3-4 (clic, toque en tableta o Enter con la mira desde el teclado; se pueden
   omitir implantes y alinear con los puntos puestos), resultado con RMS, cobertura, tabla por implante y mapa de
-  colores 0-100 µm; ajuste a mano (arrastrar, Ctrl + arrastrar, panel de 30°/5° con Fino para pasos de 5° · 0,1 mm
+  colores 0-100 µm, medidos sobre la parte de los cuerpos que ve el escaneo: lo que queda bajo la encía no cuenta y el
+  mapa lo pinta de gris (antes toda alineación correcta de Fernando salía «débil» y una «fallida»; ahora sus 8 arcadas
+  salen «buena», o «aceptable» el caso 2 superior con el escaneo estirado, y las mismas poses movidas 2 mm y 3° salen
+  «fallida»); ajuste a mano (arrastrar, Ctrl + arrastrar, panel de 30°/5° con Fino para pasos de 5° · 0,1 mm
   también en tablet, voltear 180°), re-medido 250 ms
   después; Deshacer y Restablecer. Exportar el ZIP para Exocad tras pedir el correo una vez (webhook
   `PUBLIC_N8N_FORM_WEBHOOK`; nunca bloquea la descarga).
@@ -67,7 +70,9 @@ Commands (from the repo root): `npm run test:xchange`, `npm run typecheck:xchang
   aro de selección), con barra de iconos, dial de vistas, barra de escala y leyenda con las marcas en su valor
   (`VIEWER-POLISH.md` §3.5).
 - Navegación como en exocad (`VIEWER-POLISH.md` §4.14): vistas con el teclado numérico o la fila de números (1 frontal,
-  2 inferior, 3 posterior, 4 izquierda, 5 encuadrar, 6 derecha, 8 superior, 0 vista inicial), flechas para desplazar,
+  2 inferior, 3 posterior, 4 izquierda, 5 encuadrar, 6 derecha, 8 superior, 0 vista inicial), que siguen el marco de
+  cada caso: oclusal según los ejes de los implantes y frente según su arco (sin implantes sobre el escaneo, según el
+  escaneo); en las 8 arcadas de Fernando quedan a menos de 9° del lado correcto (la tabla fija erraba 57-178°), flechas para desplazar,
   Shift + flechas y Re Pág/Av Pág para girar, Inicio fija el centro de giro, Ctrl + arrastrar en cualquier parte gira
   el conjunto (paso 4), mantener presionado en tablet fija el centro de giro, Shift / Ctrl + clic central sobre un
   objeto cambia su transparencia o lo oculta, y S lo vuelve a mostrar.
@@ -87,7 +92,7 @@ All-on-4 con paladar y scan bodies escaneados, PLY con color de ~280 k triángul
 el pipeline real; en el paso 2 se elige "Sample scan body", en el paso 3 "Use the sample jaw scan", y el paso 4 alinea
 solo (Good fit, unos 4 µm) y exporta el ZIP.
 
-**Probado:** 554 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
+**Probado:** 564 tests de Vitest (motor, estado, visor, revisiones adversariales y de UX: foco, tiempos de
 animación, contraste, toque, ciclo de vida); `npm run typecheck:xchange` y `npm test` sin errores, `npm run build`
 correcto. Verificado en Chrome 156: foco con teclado en cada paso, puntos guiados con teclado y con toque en tableta,
 cambio de 1280 a 1100 px sin saltar al inicio, movimiento reducido sin desplazamientos, ES a 960 px sin botones
@@ -96,7 +101,9 @@ cortados.
 **Limitaciones conocidas:**
 - No hay plantilla integrada: la H6.6 del prototipo no se copia. La detección en malla necesita un cuerpo de
   referencia de la biblioteca.
-- Las métricas no recortan: la parte del cuerpo bajo la encía baja la cobertura aunque la pose sea exacta.
+- Los umbrales de calidad son provisionales (`align/metrics.ts` `DEFAULT_QUALITY`): salen de las 8 arcadas de Fernando
+  y los fija su tolerancia por implante. Un conjunto empujado justo a lo largo de los ejes de los implantes resbala por
+  las paredes escaneadas y solo se nota en los topes: 1 mm puede salir «aceptable».
 - Con un solo cuerpo redondo, el giro axial queda arbitrario; se marca, no se adivina.
 - Quedan dos ICP y dos árboles de punto más cercano (`detect/` con BVH, `align/` con k-d tree). Es deuda aceptada:
   conviene unificarlos con casos reales para comparar.
@@ -110,15 +117,14 @@ cortados.
   con el harness del análisis (`analysis/harness/xcase.mts --root <este repo>`), nunca desde el repositorio.
 
 **Necesita al cliente (Fernando)**, con casos anonimizados:
-- P5/P14: 3-5 casos con la alineación correcta hecha en exocad, para calibrar los umbrales, que hoy son heurísticos.
-  Alineación: RMS 50/100 µm, cobertura 95/80 %, ambigüedad 1,1 veces o 5 µm. Detección: 30 µm y 98 %, cobertura de
-  la referencia 50 %.
+- P5/P14 (pregunta 1 del informe de casos reales): su tolerancia por implante. Los umbrales de alineación ya están
+  calibrados con sus 5 casos, sobre la parte visible: buena hasta RMS 110 µm y 75 % a menos de 100 µm, aceptable hasta
+  160 µm y 50 %, ambas con al menos el 55 % de los cuerpos visible; fallida bajo el 45 %. Ambigüedad 1,1 veces o 5 µm.
+  Detección: 30 µm y 98 %, cobertura de la referencia 50 %.
 - P1: exportaciones reales de ScanAdaptor e iCam (los lectores siguen el prototipo y su guía). De MicronMapper ya hay
   5 CSV reales y se leen todos.
 - P11: tamaños reales de mandíbulas y capturas para ajustar los límites (hoy 150 MB y 3 M triángulos; se avisa de
   unidades si una mandíbula mide menos de 15 mm).
 - P3/P4: el CAD de los cuerpos de escaneo de referencia, con su licencia, y qué hacer con el giro axial de los
   cuerpos redondos.
-- Confirmar los ejes de las vistas predefinidas (`viewer/presets.ts`: se asume +Z oclusal en la inferior y -Y
-  anterior) con un caso real.
 - n8n: definir `PUBLIC_N8N_FORM_WEBHOOK` y añadir al flujo la rama `source: 'ddt-xchange'`.

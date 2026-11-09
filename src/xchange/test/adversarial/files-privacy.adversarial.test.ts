@@ -85,7 +85,8 @@ describe('input size limits, as the UI meets them', () => {
 });
 
 describe('privacy: files never leave this computer', () => {
-  it('the whole sample case (read, align, measure, deviation map, export, library file) touches no network API', () => {
+  // The whole pipeline on a 280 k-triangle jaw takes 3-4 s alone: the 5 s default timed out when the full suite loads the machine.
+  it('the whole sample case (read, align, measure, deviation map, export, library file) touches no network API', { timeout: 30_000 }, () => {
     const used: string[] = [];
     const trap = (name: string) => (): never => { used.push(name); throw new Error(`${name} must not be used`); };
     vi.stubGlobal('fetch', trap('fetch'));

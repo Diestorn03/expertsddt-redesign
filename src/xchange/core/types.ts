@@ -121,11 +121,18 @@ export type AlignmentFlag =
   | 'landmarkAxisFree' // 2 or collinear landmarks: roll about their line is free
   | 'manualPose'; // metrics measured on a pose the user placed by hand
 
+/**
+ * Metrics on the part of the bodies the jaw scan can judge (align/metrics.ts): a sample more than 3 tolerances
+ * behind the scanned surface (under the gum) is hidden and left out; one in front of it counts as a miss.
+ */
 export interface SiteFit {
   siteId: string;
+  /** RMS of the visible samples' distances, each capped at 3 tolerances. */
   rmsMm: number;
-  /** Fraction (0-1) of this site's samples within AlignmentResult.toleranceMm of the jaw. */
+  /** Fraction (0-1) of this site's visible samples within AlignmentResult.toleranceMm of the jaw. */
   coverage: number;
+  /** Fraction (0-1) of this site's samples that are visible (not hidden behind the scan). */
+  visible: number;
   samples: number;
 }
 
@@ -133,10 +140,13 @@ export interface AlignmentResult {
   /** capture -> jaw coordinates. The jaw never moves. */
   transform: Mat4;
   method: AlignmentMethod;
+  /** On the visible samples of every site, as SiteFit. */
   rmsMm: number;
   p95Mm: number;
-  /** Fraction (0-1) of all source samples within toleranceMm of the jaw surface. */
+  /** Fraction (0-1) of the visible samples within toleranceMm of the jaw surface. */
   coverage: number;
+  /** Fraction (0-1) of all samples that are visible. */
+  visible: number;
   toleranceMm: number;
   perSite: SiteFit[];
   status: AlignmentStatus;

@@ -362,7 +362,7 @@ export class Stage {
     if (!site) { el.hidden = true; return; }
     const gid = app.s.geometryBySite[site.id];
     el.textContent = hit!.um !== null
-      ? fmt(app.lang, c.readout.um, { label: site.label, value: num(app.lang, hit!.um) })
+      ? fmt(app.lang, Number.isNaN(hit!.um) ? c.readout.hidden : c.readout.um, { label: site.label, value: num(app.lang, hit!.um) })
       : site.flags.provisional && !app.s.confirmed.has(site.id) ? fmt(app.lang, c.readout.provisional, { label: site.label })
       : site.flags.indexAmbiguous ? fmt(app.lang, c.readout.rotation, { label: site.label })
       : fmt(app.lang, c.readout.geometry, { label: site.label, name: gid ? app.geometryName(gid) : c.s2.noGeometry });

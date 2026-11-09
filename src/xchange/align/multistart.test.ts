@@ -23,14 +23,17 @@ describe('multiStartAlign: recovers random rigid transforms (spec 7.5)', () => {
   });
 
   it('keeps the thresholds in one place', () => {
+    // Provisional, from Fernando's 8 aligned arches (quality-views); his tolerance answer sets the final numbers.
     expect(DEFAULT_QUALITY).toEqual({
-      goodRmsMm: 0.05,
-      goodCoverage: 0.95,
-      acceptableRmsMm: 0.1,
-      acceptableCoverage: 0.8,
+      goodRmsMm: 0.11,
+      goodCoverage: 0.75,
+      acceptableRmsMm: 0.16,
+      acceptableCoverage: 0.5,
+      minVisible: 0.55,
       ambiguityRatio: 1.1,
       ambiguitySlackMm: 0.005,
-      usableCoverage: 0.4,
+      usableCoverage: 0.45,
+      siteUsableCoverage: 0.3,
       symmetryTolerance: 0.01,
     });
     expect(Object.isFrozen(DEFAULT_QUALITY)).toBe(true);

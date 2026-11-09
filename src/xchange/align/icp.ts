@@ -276,8 +276,11 @@ export function icp(source: SurfaceSamples, target: IcpTarget, initial: Mat4, op
   return { transform, rmsMm: rms, pairs, iterations, converged };
 }
 
-/** Final poses are ranked with residuals capped at this many coverage tolerances. */
-const RANK_CAP_TOLERANCES = 3;
+/**
+ * Final poses are ranked with residuals capped at this many coverage tolerances. The fit metrics use the same
+ * distance: a sample farther than it, behind the scanned surface, is hidden from the scan (metrics.ts).
+ */
+export const RANK_CAP_TOLERANCES = 3;
 
 /** sqrt(mean(min(d², cap²))): untrimmed but bounded score on the exact surface, used to rank poses. */
 export function cappedRms(samples: SurfaceSamples, surface: TriangleTree, t: Mat4, capMm: number): number {

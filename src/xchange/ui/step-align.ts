@@ -174,7 +174,7 @@ export class AlignStep {
       app.viewer?.setAssembly(identity());
       app.viewer?.setDeviation(null, app.s.surfaces, () => undefined);
       app.stage.update();
-      app.viewer?.fit();
+      app.viewer?.view('occlusal'); // an import ends on Occlusal + Fit (UI-DESIGN §6.3): the jaw's own frame until the set sits on it
       app.say.say(c.say.jawReady);
       busy.done();
       app.go(4);
@@ -699,7 +699,8 @@ export class AlignStep {
     const chip = app.chip(tone, c.al.status[status], ico);
     chip.classList.add('xch-chip--big');
     const q0 = DEFAULT_QUALITY, tol = Math.round(r.toleranceMm * 1000);
-    const explain = fmt(app.lang, c.al.explain[!failed && status === 'failed' ? 'weak' : status], { goodRms: q0.goodRmsMm * 1000, goodCov: q0.goodCoverage * 100, accRms: q0.acceptableRmsMm * 1000, accCov: q0.acceptableCoverage * 100, tol });
+    const limits = { goodRms: q0.goodRmsMm * 1000, goodCov: q0.goodCoverage * 100, accRms: q0.acceptableRmsMm * 1000, accCov: q0.acceptableCoverage * 100, minVis: q0.minVisible * 100, tol };
+    const explain = fmt(app.lang, c.al.explain[!failed && status === 'failed' ? 'weak' : status], limits);
     const metric = (value: number, label: string, help: string, unit: string, digits = 0): HTMLElement => {
       const b = h('b', '', { text: '0' });
       app.motion.count(b, value, (v) => `${num(app.lang, v, digits)} ${unit}`);
@@ -708,7 +709,8 @@ export class AlignStep {
     // what the numbers mean, for everyone (a title tooltip reaches neither keyboard, touch nor screen readers)
     const help = h('details', 'xch__what', {}, h('summary', '', { text: c.al.metricsWhat }),
       h('ul', '', {}, h('li', '', { text: `${c.al.rms}: ${c.al.rmsHelp}` }), h('li', '', { text: `${c.al.p95}: ${c.al.p95Help}` }),
-        h('li', '', { text: `${fmt(app.lang, c.al.coverage, { tol })}: ${fmt(app.lang, c.al.coverageHelp, { tol })}` })));
+        h('li', '', { text: `${fmt(app.lang, c.al.coverage, { tol })}: ${fmt(app.lang, c.al.coverageHelp, { tol })}` }),
+        h('li', '', { text: fmt(app.lang, c.al.limits, limits) })));
     const metrics = h('div', 'xch__metrics', {},
       metric(r.rmsMm * 1000, c.al.rms, c.al.rmsHelp, 'µm'),
       metric(r.p95Mm * 1000, c.al.p95, c.al.p95Help, 'µm'),
@@ -733,6 +735,7 @@ export class AlignStep {
       h('p', 'xch__small', { text: explain }),
       failed ? h('p', 'xch__label', { text: c.al.lastAttempt }) : null,
       metrics,
+      h('p', 'xch__small', { text: fmt(app.lang, c.al.visible, { pct: Math.round(r.visible * 100) }) }),
       help,
       h('p', 'xch__small', { text: `${c.al.method}: ${c.al.methods[r.method]}` }),
       flags.length ? h('ul', 'xch__flags', {}, ...flags) : null,

@@ -1,6 +1,6 @@
 /** Helpers shared by the align/*.test.ts files only (never imported by application code). */
 import { getColumn, rotationAngleBetween, transformPoint } from '../core/mat4';
-import { closestPointOnTriangle, countTriangles } from '../core/mesh';
+import { closestPointOnTriangle, countTriangles, mergeMeshes, transformMesh } from '../core/mesh';
 import type { Mat4, TriMesh } from '../core/types';
 import { distance } from '../core/vec3';
 
@@ -26,3 +26,27 @@ export function bruteDistance2(mesh: TriMesh, x: number, y: number, z: number): 
   for (let t = 0; t < countTriangles(mesh); t++) best = Math.min(best, closestPointOnTriangle(mesh.positions, mesh.indices, t, x, y, z));
   return best;
 }
+
+/** Flat disc (implant frame) at height zMm, normal +Z: a gum line, crossing the body as well. */
+export function gumDisc(zMm: number, radiusMm = 6, segments = 32): TriMesh {
+  const positions = new Float32Array(3 * (segments + 1)), indices: number[] = [];
+  positions[2] = zMm;
+  for (let j = 0; j < segments; j++) {
+    const a = (2 * Math.PI * j) / segments;
+    positions.set([radiusMm * Math.cos(a), radiusMm * Math.sin(a), zMm], 3 * (j + 1));
+    indices.push(0, j + 1, ((j + 1) % segments) + 1);
+  }
+  return { positions, indices: Uint32Array.from(indices) };
+}
+
+/**
+ * Jaw scan of a synthetic case whose bodies sit depthMm deep in the gum: per body a gum disc just under depthMm and
+ * the body above depthMm (cut exactly there when depthMm is a ring height of the body), moved by captureToJaw.
+ */
+export function buriedJaw(c: { frames: readonly Mat4[]; body: TriMesh; captureToJaw: Mat4 }, depthMm: number): TriMesh {
+  const scan = c.frames.flatMap((f) => [transformMesh(gumDisc(depthMm - 0.05), f), transformMesh(visibleAbove(c.body, depthMm), f)]);
+  return transformMesh(mergeMeshes(scan), c.captureToJaw);
+}
+
+/** The same surface wound the other way. */
+export const flipWinding = (m: TriMesh): TriMesh => ({ positions: m.positions, indices: Uint32Array.from(m.indices, (_, i) => m.indices[i - (i % 3) + [0, 2, 1][i % 3]!]!) });
