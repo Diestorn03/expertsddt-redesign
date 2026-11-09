@@ -1,0 +1,29 @@
+---
+// §5.2: navy frame for the pages without the bar (login, 403, 404, 500).
+import Head from '../components/Head.astro';
+import Icon from '../components/Icon.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+import ConfirmDialog from '../components/ConfirmDialog.astro';
+import logo from '../../../public/img/brand/logo-light.webp?url';
+interface Props { title: string; flash?: any; error?: boolean }
+const { title, flash, error } = Astro.props;
+const year = new Date().getFullYear();
+---
+<html lang="es">
+<head><Head title={title} flash={flash} /></head>
+<body class:list={['auth', 'on-navy', error && 'auth--error']}>
+  <div class="grid-bg" aria-hidden="true"></div>
+  <header class="auth__top">
+    <a href="/" class="auth__logo" aria-label="Experts DDT, inicio del panel"><img src={logo} alt="Experts DDT" width="238" height="30" /></a>
+    <ThemeToggle />
+  </header>
+  <main id="main" class="auth__main"><slot /></main>
+  <footer class="auth__foot">
+    <span>© {year} Fernando Polanco DDT LLC · Experts DDT</span>
+    <a href="https://expertsddt.com/es/" target="_blank" rel="noopener"><Icon name="external-link" size={14} />Volver a expertsddt.com<span class="sr-only"> (se abre en otra pestaña)</span></a>
+  </footer>
+  <div class="auth__ghost" aria-hidden="true">EXPERTS DDT</div>
+  <ConfirmDialog />
+  <script>import '../scripts/panel.ts';</script>
+</body>
+</html>

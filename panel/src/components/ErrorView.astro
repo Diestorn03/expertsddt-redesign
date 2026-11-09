@@ -1,0 +1,21 @@
+---
+// §4.9 / §7.12: the branded 403, 404 and 500 pages share this card.
+import Auth from '../layouts/Auth.astro';
+import Chip from './Chip.astro';
+import Icon from './Icon.astro';
+interface Props { code: 403 | 404 | 500 }
+const { code } = Astro.props;
+const COPY = {
+  403: ['No pudimos confirmar la acción', 'La página estuvo abierta mucho tiempo o el formulario se envió dos veces. Vuelve al panel e inténtalo de nuevo. Nada cambió en la web.'],
+  404: ['Esta página no existe', 'Puede que el enlace esté mal escrito o que la página haya cambiado.'],
+  500: ['Algo salió mal de nuestro lado', 'Si estabas subiendo un archivo, revisa en el panel si el cambio se aplicó antes de repetirlo. Si vuelve a pasar, avísale a Diego o a David.'],
+}[code];
+---
+<Auth title={COPY[0]} error>
+  <div class="auth-card err-card">
+    <Chip>Error {code}</Chip>
+    <h1>{COPY[0]}</h1>
+    <p>{COPY[1]}</p>
+    <a class="btn btn--primary" href="/">Volver al panel <Icon name="arrow-right" size={18} /></a>
+  </div>
+</Auth>

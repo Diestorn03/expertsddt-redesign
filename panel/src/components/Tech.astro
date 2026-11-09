@@ -1,0 +1,11 @@
+---
+// §5.18: paths, formats and the SHA-256 live only here, closed by default.
+import Icon from './Icon.astro';
+interface Props { rows: [string, string, string?][]; copy?: string }
+const { rows, copy } = Astro.props;
+---
+<details class="tech">
+  <summary class="btn btn--quiet">Detalles técnicos <Icon name="chevron-down" size={14} class="chev" /></summary>
+  <dl>{rows.map(([k, v, attr]) => <div><dt>{k}</dt><dd class="mono" data-dims={attr === 'dims' ? '' : undefined}>{v}</dd></div>)}</dl>
+  {copy && <button type="button" class="btn btn--ghost btn--sm" data-copy={copy} hidden><Icon name="copy" size={16} /><span>Copiar huella</span></button>}
+</details>

@@ -1,0 +1,27 @@
+---
+// §5.3: top bar. Sticky at ≥761 px; below that it wraps into a row of tabs (same <nav>, no JS, no hamburger).
+import Icon from './Icon.astro';
+import ThemeToggle from './ThemeToggle.astro';
+import logo from '../../../public/img/brand/logo-light.webp?url';
+interface Props { user: { name: string; email: string; initials: string }; csrf: string; current: 'home' | 'history' }
+const { user, csrf, current } = Astro.props;
+const sections = [['librerias', 'Librerías'], ['documentos', 'Documentos'], ['imagenes', 'Imágenes'], ['videos', 'Videos']];
+---
+<header class="bar on-navy">
+  <div class="bar__in">
+    <a class="bar__brand" href="/" aria-label="Experts DDT, inicio del panel"><img src={logo} alt="Experts DDT" width="206" height="26" />
+      <span class="bar__div" aria-hidden="true"></span><span class="micro">Panel</span></a>
+    <nav class="bar__nav" aria-label="Principal">
+      {sections.map(([id, label]) => <a class="bar__sec" href={`/#${id}`}>{label}</a>)}
+      <a class="bar__all" href="/" aria-current={current === 'home' ? 'page' : undefined}>Contenido</a>
+      <a href="/history" aria-current={current === 'history' ? 'page' : undefined}>Historial</a>
+      <a href="https://expertsddt.com/es/" target="_blank" rel="noopener"><span class="bar__web">Ver la web</span><span class="bar__web-s">Web</span> <Icon name="external-link" size={14} /><span class="sr-only"> (se abre en otra pestaña)</span></a>
+    </nav>
+    <div class="bar__end">
+      <ThemeToggle />
+      <span class="who"><span class="av" aria-hidden="true">{user.initials}</span><span class="who__name"><span class="sr-only">Sesión iniciada como </span>{user.name || user.email}</span></span>
+      <form method="post" action="/logout"><input type="hidden" name="_csrf" value={csrf} />
+        <button class="btn btn--ghost btn--sm bar__outbtn" type="submit"><Icon name="log-out" size={16} /><span class="bar__out">Salir</span></button></form>
+    </div>
+  </div>
+</header>

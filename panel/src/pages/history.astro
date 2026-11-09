@@ -1,0 +1,22 @@
+---
+// §4.8: who changed what and when, filtered on the server (?tipo=cambios|accesos|todo), grouped by Florida day.
+import Panel from '../layouts/Panel.astro';
+import Hero from '../components/Hero.astro';
+import HistoryList from '../components/HistoryList.astro';
+import { panel } from '../panel';
+
+const h = await panel.history(Astro.locals.session, Astro.url.searchParams.get('tipo'));
+const filters = [['cambios', 'Cambios en la web'], ['accesos', 'Accesos'], ['todo', 'Todo']];
+---
+<Panel title="Historial" user={h.user} csrf={h.csrf} current="history">
+  <Hero eyebrow="Registro de actividad" compact>
+    Historial
+    <Fragment slot="lead">Quién cambió qué y cuándo. Las horas son de Florida.</Fragment>
+    <nav class="jump jump--filters" aria-label="Filtrar historial" slot="nav">
+      {filters.map(([t, label]) => <a href={`/history?tipo=${t}`} aria-current={h.tipo === t ? 'page' : undefined}>{label}</a>)}
+    </nav>
+  </Hero>
+  <section class="psec psec--last" aria-label="Eventos">
+    <div class="wrap"><HistoryList data={h} /></div>
+  </section>
+</Panel>

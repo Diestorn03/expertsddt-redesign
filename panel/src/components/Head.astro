@@ -1,0 +1,28 @@
+---
+// The <head> shared by both frames (§5.1/§5.2). CSS order: the site's global.css (tokens, never copied), Poppins, then panel.css.
+// The only script here is the external, blocking theme-init.js: no inline code anywhere (the CSP has no 'unsafe-inline').
+import '../../../src/styles/global.css';
+import '@fontsource/poppins/latin-400.css';
+import '@fontsource/poppins/latin-500.css';
+import '@fontsource/poppins/latin-600.css';
+import '@fontsource/poppins/latin-700.css';
+import '@fontsource/poppins/latin-800.css';
+import '../styles/panel.css';
+import p400 from '@fontsource/poppins/files/poppins-latin-400-normal.woff2?url';
+import p800 from '@fontsource/poppins/files/poppins-latin-800-normal.woff2?url';
+import favicon from '../../../public/favicon-32.png?url';
+import touch from '../../../public/apple-touch-icon.png?url';
+interface Props { title: string; flash?: { type: string; title: string } | null }
+const { title, flash } = Astro.props;
+const head = flash ? `${flash.type === 'err' ? 'Error: ' : ''}${flash.title} · ` : ''; // ok titles already start with «Listo:»
+---
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#0f346e" />
+<title>{head}{title} · Panel Experts DDT</title>
+<link rel="icon" href={favicon} type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href={touch} />
+<link rel="preload" as="font" type="font/woff2" crossorigin href={p400} />
+<link rel="preload" as="font" type="font/woff2" crossorigin href={p800} />
+<script is:inline src="/theme-init.js"></script>

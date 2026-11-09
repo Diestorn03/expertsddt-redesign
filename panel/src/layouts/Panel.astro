@@ -1,0 +1,20 @@
+---
+// §5.1: frame of every page with a session.
+import Head from '../components/Head.astro';
+import Bar from '../components/Bar.astro';
+import Footer from '../components/Footer.astro';
+import ConfirmDialog from '../components/ConfirmDialog.astro';
+interface Props { title: string; user: any; csrf: string; current: 'home' | 'history' }
+const { title, user, csrf, current } = Astro.props;
+---
+<html lang="es">
+<head><Head title={title} flash={Astro.locals.flash} /></head>
+<body>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <Bar user={user} csrf={csrf} current={current} />
+  <main id="main" tabindex="-1"><slot /></main>
+  <Footer />
+  <ConfirmDialog />
+  <script>import '../scripts/panel.ts';</script>
+</body>
+</html>

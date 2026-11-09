@@ -64,12 +64,23 @@ export function verify(token, secret, now = Date.now()) {
 }
 export const csrfFor = (session, secret) => createHmac('sha256', secret).update('csrf:' + session.sid).digest('base64url');
 
-// ---- login throttle: 5 failures lock the key (ip+email) for 15 minutes ----
-export function createThrottle({ max = 5, lockMs = 15 * 60_000, now = () => Date.now() } = {}) {
+// ---- login throttle: `max` failures lock the key for 15 minutes; failures older than that are forgotten ----
+export function createThrottle({ max = 5, lockMs = 15 * 60_000, now = () => Date.now(), cap = 10_000 } = {}) {
   const m = new Map();
+  const stale = (e, t) => e.until <= t && t - e.last > lockMs;
+  const sweep = () => { // bounded memory under a spray of unique keys
+    const t = now(); for (const [k, e] of m) if (stale(e, t)) m.delete(k);
+    while (m.size >= cap) m.delete(m.keys().next().value); // ponytail: evicts the oldest key first; per-key LRU if this ever matters
+  };
   return {
     blocked: (k) => (m.get(k)?.until ?? 0) > now(),
-    fail(k) { const e = m.get(k) ?? { n: 0, until: 0 }; e.n += 1; if (e.n >= max) { e.until = now() + lockMs; e.n = 0; } m.set(k, e); },
+    until: (k) => m.get(k)?.until ?? 0,
+    fail(k) {
+      if (!m.has(k) && m.size >= 1000) sweep();
+      const t = now(), old = m.get(k), e = old && !stale(old, t) ? old : { n: 0, until: 0 };
+      e.n += 1; e.last = t; if (e.n >= max) { e.until = t + lockMs; e.n = 0; }
+      m.set(k, e);
+    },
     ok: (k) => m.delete(k),
   };
 }

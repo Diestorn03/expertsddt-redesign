@@ -1,0 +1,35 @@
+---
+// §5.25: the history as sentences, one <section> per Florida day; failed or blocked logins are tinted and show the IP.
+import Icon from './Icon.astro';
+import EmptyState from './EmptyState.astro';
+interface Props { data: any }
+const { data } = Astro.props;
+---
+{data.empty ? (
+  <div class="card">
+    {data.empty === 'none'
+      ? <EmptyState icon="clock" title="Todavía no hay cambios registrados." text="Cuando alguien cambie una foto, un video, la guía o las librerías, aparecerá aquí." />
+      : <EmptyState icon="clock" title="No hay eventos de este tipo entre los últimos 200." />}
+  </div>
+) : (
+  <div class="card logcard">
+    {data.groups.map((g, gi) => (
+      <section aria-labelledby={`day-${gi}`}>
+        <h2 class="log__day" id={`day-${gi}`}>{g.label}</h2>
+        <ol class="log">
+          {g.items.map((i) => (
+            <li class:list={[i.warn && 'is-warn']}>
+              <time class="log__time" datetime={new Date(i.ts).toISOString()}>{i.time}{i.who && <span class="log__who"> · {i.who}</span>}</time>
+              {i.initials ? <span class="av av--sm" aria-hidden="true">{i.initials}</span> : <span class="av av--sm av--none" aria-hidden="true"></span>}
+              <div class="log__body">
+                <p class="log__t"><Icon name={i.icon} size={16} class="log__i" /><span>{i.who ? <><b>{i.who}</b> {i.text}</> : i.text}</span></p>
+                {i.detail && <p class="mono">{i.detail}</p>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+  </div>
+)}
+<p class="hint log__foot">Se muestran los últimos 200 eventos.</p>

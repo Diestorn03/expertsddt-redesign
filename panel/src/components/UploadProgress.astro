@@ -1,0 +1,16 @@
+---
+// §5.15: filled by the bundle during an XHR upload; hidden without JS. The error box below replaces it after a network failure (§6.8).
+import Icon from './Icon.astro';
+---
+<div class="upl" data-upl hidden>
+  <p class="upl__head"><span class="upl__name"></span><b class="upl__pct"></b></p>
+  <progress max="100" value="0" aria-label="Progreso de la subida"></progress>
+  <p class="upl__sub"></p>
+  <p class="upl__keep">No cierres esta pestaña hasta que termine.</p>
+  <button type="button" class="btn btn--quiet" data-upl-cancel>Cancelar subida</button>
+</div>
+<div class="alert alert--err" role="alert" tabindex="-1" data-upl-error hidden>
+  <Icon name="alert-circle" size={20} />
+  <div class="alert__body"><p class="alert__t"><b data-upl-error-t></b></p><p data-upl-error-x></p>
+    <div class="alert__act"><button type="button" class="btn btn--outline btn--sm" data-upl-retry hidden>Reintentar</button></div></div>
+</div>

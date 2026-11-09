@@ -1,0 +1,38 @@
+---
+// §5.19: the active library version on a flat navy card with the conic disc (spins once when published < 10 min ago).
+import Icon from './Icon.astro';
+import Chip from './Chip.astro';
+import Tech from './Tech.astro';
+import * as fmt from '../../lib/format.mjs';
+interface Props { lib: any }
+const { lib } = Astro.props;
+const v = lib.latest;
+const ext = { target: '_blank', rel: 'noopener' };
+---
+<article class:list={['vcard', 'on-navy', v && lib.fresh && 'is-fresh']} aria-labelledby="vcard-t">
+  <div class="disc" aria-hidden="true"><span class="disc__l">Versión</span><b>{v ? v.version : '—'}</b></div>
+  {v ? (
+    <div class="vcard__main">
+      <Chip tone="navy">{lib.fresh ? 'Publicada hace un momento' : 'En línea'}</Chip>
+      <h3 id="vcard-t">Versión {v.version}</h3>
+      <p class="vcard__date">Datos del {fmt.dataDate(v.dataDate)}</p>
+      <dl class="stats">
+        <div><dt>Tamaño</dt><dd>{fmt.size(v.bytes)}</dd></div>
+        <div><dt>Archivos</dt><dd>{v.files ?? '—'}</dd></div>
+        {lib.since && <div><dt>En la web desde</dt><dd>{fmt.date(lib.since.ts)} · {lib.since.who}</dd></div>}
+      </dl>
+      <p class="vcard__public">Así la ven los doctores: «{lib.publicLine}»</p>
+      <div class="cta-row">
+        <a class="btn btn--white btn--sm" href={lib.pageUrl} {...ext}>Ver página pública <Icon name="external-link" size={16} /><span class="sr-only"> (se abre en otra pestaña)</span></a>
+        <a class="btn btn--ghost btn--sm" href={lib.zipUrl}>Descargar el zip <Icon name="download" size={16} /></a>
+      </div>
+      <Tech rows={[['Nombre del archivo', v.file], ['Huella SHA-256', v.sha256 ?? '—']]} copy={v.sha256} />
+    </div>
+  ) : (
+    <div class="vcard__main">
+      <Chip tone="navy-warn" icon="alert-triangle">Sin publicar</Chip>
+      <h3 id="vcard-t">Aún no hay una versión publicada</h3>
+      <p class="vcard__date">Mientras tanto, la página pública dice «La descarga no está disponible por ahora». Publica la primera con el formulario de al lado.</p>
+    </div>
+  )}
+</article>

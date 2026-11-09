@@ -1,0 +1,15 @@
+---
+// §4.7 / §5.26
+import Icon from './Icon.astro';
+import logo from '../../../public/img/brand/logo-light.webp?url';
+const year = new Date().getFullYear();
+---
+<footer class="pfoot on-navy">
+  <div class="pfoot__ghost" aria-hidden="true">EXPERTS DDT</div>
+  <div class="wrap pfoot__in">
+    <img class="pfoot__logo" src={logo} alt="Experts DDT" width="206" height="26" />
+    <p>© {year} Fernando Polanco DDT LLC · Experts DDT · Panel de contenido, solo para personal autorizado.</p>
+    <p>¿Algo no funciona? Escríbele a Diego o a David.</p>
+    <a class="pfoot__link" href="https://expertsddt.com/es/" target="_blank" rel="noopener"><Icon name="external-link" size={14} />Ir a expertsddt.com<span class="sr-only"> (se abre en otra pestaña)</span></a>
+  </div>
+</footer>
