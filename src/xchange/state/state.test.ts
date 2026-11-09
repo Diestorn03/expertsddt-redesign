@@ -1,0 +1,380 @@
+import { describe, expect, it } from 'vitest';
+import { isXchangeError } from '../core/errors';
+import { fromTranslation, identity, multiply } from '../core/mat4';
+import { countTriangles, mergeMeshes, transformMesh } from '../core/mesh';
+import { writeBinarySTL } from '../core/stl-writer';
+import type { AlignmentResult, ImplantSite } from '../core/types';
+import { makeFrames, makeScanBody, makeSyntheticCase, placeBodies, randomRigid } from '../test/fixtures';
+import { capWithInsert, speck } from '../test/fixtures/detect';
+import { encodeMicronMapperCSV, encodeMicronMapperExport, encodeScanAdaptorXML, utf8 } from '../test/fixtures/positions';
+import type { WorkerLike } from '../align/client';
+import {
+  alignedBody, alignmentParts, bodyOf, canMatchCapture, capturedBodies, captureGeometryId, chosenBodies, exchangedSites, exportBlocker,
+  freshCase, guidedTargets, matchedBodies, measuredBodies, mergeMeasured, mergePositionFiles, missingGeometry, pushUndo, reachable,
+  redetected, shownDeviation, siteStatus, step1Blocker, stepAfterGeometry, UNDO_LIMIT, type CaseState,
+} from './case';
+import { captureOnly, createJobsHandler, readCapture, readGeometry, UiError, type JobRequest } from './jobs-handler';
+import { JobsClient } from './jobs';
+import { LEAD_KEY, needsEmail, readLead, retryPending, submitLead, type StorageLike } from './lead';
+import { cleanName, Library, LIBRARY_LIMIT, matchesQuery, uniqueName } from './library';
+import { decodeLibraryFile, encodeLibraryFile, LibraryFileError } from './library-file';
+
+const site = (id: string, label: string, m = identity()): ImplantSite => ({ id, label, matrix: m, source: 'matrix-table', flags: {} });
+const frames = makeFrames(6, 'lower');
+
+describe('mergePositionFiles (cross-file rule)', () => {
+  it('keeps a label present in two files once when the matrices match within 1e-7, ids renumbered', () => {
+    const m2 = Float64Array.from(frames[1]!);
+    m2[3] = m2[3]! + 5e-8;
+    const out = mergePositionFiles([[site('site-1', 'A', frames[0]), site('site-2', 'B', frames[1])], [site('site-1', 'B', m2), site('site-2', 'C', frames[2])]]);
+    expect(out.map((s) => `${s.id}:${s.label}`)).toEqual(['site-1:A', 'site-2:B', 'site-3:C']);
+  });
+  it('different matrices for the same label -> LABEL_DUPLICATE crossFile', () => {
+    const m2 = Float64Array.from(frames[0]!);
+    m2[3] = m2[3]! + 1e-6;
+    try {
+      mergePositionFiles([[site('site-1', 'A', frames[0])], [site('site-1', 'A', m2)]]);
+      expect.unreachable();
+    } catch (e) {
+      expect(isXchangeError(e) && e.code === 'LABEL_DUPLICATE' && e.details.reason === 'crossFile' && e.details.file === 2).toBe(true);
+    }
+  });
+  it('merged count above the limit -> TOO_MANY_POSITIONS', () => {
+    expect(() => mergePositionFiles([[site('s', 'A'), site('s', 'B')], [site('s', 'C')]], 2)).toThrow(/TOO_MANY_POSITIONS/);
+  });
+});
+
+describe('gating and invalidation', () => {
+  it('step 1 needs arch, positions and confirmed provisional sites', () => {
+    const s = freshCase();
+    expect(step1Blocker(s)).toBe('needArch');
+    s.arch = 'lower';
+    expect(step1Blocker(s)).toBe('needCapture');
+    s.sites = [site('site-1', 'A'), { ...site('site-2', 'B'), flags: { provisional: true } }];
+    expect(step1Blocker(s)).toBe('needConfirm');
+    expect(reachable(s, 2)).toBe(false);
+    s.excluded = new Set(['site-2']);
+    expect(step1Blocker(s)).toBe(null);
+    expect(missingGeometry(s)).toBe(1);
+    s.geometryBySite = { 'site-1': 'g' };
+    expect(reachable(s, 3)).toBe(true);
+  });
+  it('export: blocked without geometry, with an unaligned jaw and while measuring', () => {
+    const s = { ...freshCase('lower'), sites: [site('site-1', 'A')] };
+    expect(exportBlocker(s)).toBe('geometry');
+    s.geometryBySite = { 'site-1': 'g' };
+    expect(exportBlocker(s)).toBe(null);
+    s.jaw = { mesh: makeScanBody(), originalBytes: new Uint8Array(1), format: 'stl' };
+    expect(exportBlocker(s)).toBe('notAligned');
+    s.alignment = {} as AlignmentResult;
+    s.measuring = true;
+    expect(exportBlocker(s)).toBe('measuring');
+  });
+  it('undo keeps at most 20 poses', () => {
+    let u: Float64Array[] = [];
+    for (let i = 0; i < 25; i++) u = pushUndo(u, identity());
+    expect(u.length).toBe(UNDO_LIMIT);
+  });
+});
+
+describe('alignment parts', () => {
+  const c = makeSyntheticCase({ implants: 3 });
+  it('replacement geometry placed at each site, or the captured shell', () => {
+    const parts = alignmentParts(c.sites, () => c.body, c.parts.map((p) => p.mesh), 'replacement');
+    expect(parts.length).toBe(3);
+    expect(parts[1]!.mesh.positions).toEqual(c.parts[1]!.mesh.positions);
+    const shells = alignmentParts(c.sites, () => undefined, c.parts.map((p) => p.mesh), 'capture');
+    expect(shells[2]!.mesh).toBe(c.parts[2]!.mesh);
+    expect(canMatchCapture(c.sites, [])).toBe(false);
+    expect(canMatchCapture(c.sites, c.parts.map((p) => p.mesh))).toBe(true);
+  });
+  it('guided targets: all up to 4, four spread above', () => {
+    for (let n = 1; n <= 8; n++) {
+      const sites = makeFrames(n, 'lower').map((m, i) => site(`site-${i + 1}`, `S${i + 1}`, m));
+      const t = guidedTargets(sites);
+      expect(t.length).toBe(Math.min(n, 4));
+      expect(new Set(t.map((x) => x.id)).size).toBe(t.length);
+    }
+  });
+});
+
+describe('results', () => {
+  it('per-site status from DEFAULT_QUALITY', () => {
+    expect(siteStatus({ rmsMm: 0.02, coverage: 0.99, visible: 0.7 })).toBe('good');
+    expect(siteStatus({ rmsMm: 0.14, coverage: 0.6, visible: 0.7 })).toBe('acceptable');
+    expect(siteStatus({ rmsMm: 0.02, coverage: 0.99, visible: 0.5 })).toBe('weak'); // too little of it in the scan
+    expect(siteStatus({ rmsMm: 0.2, coverage: 0.35, visible: 0.6 })).toBe('weak'); // usable for one implant, not for the set
+    expect(siteStatus({ rmsMm: 0.3, coverage: 0.1, visible: 0.9 })).toBe('poor');
+  });
+  it('a re-measure of an unmoved pose keeps the method and method flags', () => {
+    const prev = { method: 'landmarks', status: 'good', flags: ['visualCheckRequired', 'landmarkAxisFree'] } as unknown as AlignmentResult;
+    const measured = { method: 'manual', status: 'acceptable', rmsMm: 0.07, flags: ['visualCheckRequired', 'manualPose'] } as unknown as AlignmentResult;
+    const kept = mergeMeasured(prev, measured, false);
+    expect(kept.method).toBe('landmarks');
+    expect(kept.flags).toEqual(['visualCheckRequired', 'landmarkAxisFree']);
+    expect(kept.status).toBe('acceptable');
+    expect(mergeMeasured(prev, measured, true)).toBe(measured);
+  });
+});
+
+describe('workflow 2: "No exchange" and the alignedWith rule', () => {
+  const c = makeSyntheticCase({ implants: 4, seed: 6 });
+  const { body } = capWithInsert(); // a cap with its insert: one body per implant
+  const capture = readCapture([
+    { bytes: utf8(encodeMicronMapperExport(c.frames, 'BTH')), extension: 'csv' },
+    { bytes: writeBinarySTL(placeBodies(c.frames, body)), extension: 'stl' },
+  ]);
+  const components = capture.components!.map((x) => x.mesh);
+  const own = capturedBodies(capture.sites, components, 'Body from the file');
+  const result = { status: 'good', rmsMm: 0.01 } as unknown as AlignmentResult;
+  /** A case aligned with the bodies of the file ("No exchange"), then given geometry `exported` on `sites`. */
+  const aligned = (exported: Record<string, string> = {}, surfaces: 'replacement' | 'capture' = 'replacement'): CaseState => {
+    const kept = Object.fromEntries(capture.sites.map((x) => [x.id, captureGeometryId(x.id)]));
+    return {
+      ...freshCase('lower'), sites: capture.sites, components, caseGeometries: new Map([...own.values()].map((g) => [g.id, g])),
+      geometryBySite: { ...kept, ...exported }, alignment: result, alignedWith: { surfaces, geometryBySite: kept },
+    };
+  };
+
+  it('each implant keeps its own body from the positions file, in its implant frame (back at the site it is the body of the file)', () => {
+    expect([...own.keys()]).toEqual(capture.sites.map((x) => x.id));
+    capture.sites.forEach((site) => {
+      const g = own.get(site.id)!;
+      expect([g.id, g.name, g.kind, g.group]).toEqual([`capture:${site.id}`, 'Body from the file', 'capture', 'capture']);
+      const back = transformMesh(g.mesh, site.matrix).positions, shell = components[site.componentIndex!]!.positions;
+      expect(back.length).toBe(shell.length);
+      expect(Math.max(...back.map((v, i) => Math.abs(v - shell[i]!)))).toBeLessThan(1e-4);
+    });
+    const { componentIndex: _, ...loose } = capture.sites[0]!; // a position without a body in the file
+    expect(capturedBodies([loose], components, 'x').size).toBe(0);
+  });
+
+  it('an exchange after the alignment: the export changes, the alignment stays measured with the bodies it was made with', () => {
+    const before = aligned();
+    expect(exchangedSites(before)).toEqual([]);
+    expect(capture.sites.map((x) => [alignedBody(before, x.id), bodyOf(before, before.geometryBySite[x.id])])).toEqual(capture.sites.map(() => ['capture', 'capture']));
+    const after = aligned(Object.fromEntries(capture.sites.map((x) => [x.id, 'lib-healing-cap'])));
+    expect(exchangedSites(after).map((x) => x.id)).toEqual(capture.sites.map((x) => x.id));
+    expect(alignedBody(after, 'site-2')).toBe('capture');
+    expect(bodyOf(after, after.geometryBySite['site-2'])).toBe('lib-healing-cap');
+    expect(measuredBodies(after)).toBe(after.alignedWith); // re-measures and the map keep using the file's bodies
+    expect(chosenBodies(after).geometryBySite['site-2']).toBe('lib-healing-cap'); // a new alignment uses what is in place
+    const one = aligned({ 'site-3': 'lib-healing-cap' });
+    expect(exchangedSites(one).map((x) => x.id)).toEqual(['site-3']);
+    // aligned with the captured shells ('capture' surfaces): only exporting something else is an exchange
+    expect(exchangedSites(aligned({}, 'capture'))).toEqual([]);
+    expect(exchangedSites(aligned({ 'site-1': 'lib-healing-cap' }, 'capture')).map((x) => x.id)).toEqual(['site-1']);
+    // no alignment, nothing exchanged; a first manual pose is measured with what is in place
+    const loose = { ...after, alignment: null, alignedWith: null };
+    expect(exchangedSites(loose)).toEqual([]);
+    expect(measuredBodies(loose)).toEqual(chosenBodies(loose));
+  });
+
+  it('the color map leaves the exchanged parts (all of them: no map), stays on the captured shells', () => {
+    const map = (s: CaseState): CaseState => ({ ...s, deviation: new Map(capture.sites.map((x) => [x.id, new Float32Array(3)])) });
+    const before = map(aligned());
+    expect(shownDeviation(before)).toBe(before.deviation);
+    expect([...shownDeviation(map(aligned({ 'site-3': 'g' })))!.keys()]).toEqual(['site-1', 'site-2', 'site-4']);
+    expect(shownDeviation(map(aligned(Object.fromEntries(capture.sites.map((x) => [x.id, 'g'])))))).toBeNull();
+    const shells = map(aligned(Object.fromEntries(capture.sites.map((x) => [x.id, 'g'])), 'capture'));
+    expect(shownDeviation(shells)).toBe(shells.deviation); // drawn on the shells, which are the aligned bodies
+    expect(shownDeviation(freshCase())).toBeNull();
+  });
+
+  it('report.json matchedWith: the body each implant was aligned with, by id and name', () => {
+    const names = (id: string): string => ({ 'lib-healing-cap': 'Healing cap', g: 'G' })[id] ?? '?';
+    const after = aligned({ 'site-1': 'lib-healing-cap' });
+    const fileBody = { id: 'capture', name: 'Body from the file' };
+    expect(matchedBodies(after, names, 'Body from the file')).toEqual(Object.fromEntries(capture.sites.map((x) => [x.id, fileBody])));
+    const withG = { ...after, alignedWith: { surfaces: 'replacement' as const, geometryBySite: Object.fromEntries(capture.sites.map((x) => [x.id, 'g'])) } };
+    expect(matchedBodies(withG, names, 'x')['site-1']).toEqual({ id: 'g', name: 'G' });
+    // without an alignment, what is exported
+    expect(matchedBodies({ ...after, alignment: null }, names, 'x')['site-1']).toEqual({ id: 'lib-healing-cap', name: 'Healing cap' });
+  });
+
+  it('"No exchange" is aligned as the captured shells: the pieces inside them are never in the scan', () => {
+    const shells = capture.components!.map((x) => x.shell);
+    const own2 = capturedBodies(capture.sites, components, 'x'); // components: the whole bodies
+    const parts = alignmentParts(capture.sites, (id) => own2.get(id)?.mesh, shells, 'replacement', () => true);
+    parts.forEach((p, i) => expect(p.mesh).toBe(shells[capture.sites[i]!.componentIndex!]));
+    const placed = alignmentParts(capture.sites, (id) => own2.get(id)?.mesh, shells, 'replacement'); // any other geometry: placed whole
+    expect(countTriangles(placed[0]!.mesh)).toBe(countTriangles(body));
+  });
+
+  it('a new detection drops what was made for the old frames (picks, "No exchange" bodies, assemblies, the alignment); the jaw and the pose stay', () => {
+    const pose = multiply(fromTranslation([1, 2, 3]), identity());
+    const sample = { id: 'sample-body', name: 'S', mesh: body, kind: 'sample' as const, group: 'sample' };
+    const assembly = { id: 'asm-1-site-1', name: 'A', mesh: body, kind: 'assembly' as const, group: 'asm-1' };
+    const before: CaseState = {
+      ...aligned({ 'site-2': 'lib-healing-cap' }), jaw: { mesh: c.jaw, originalBytes: new Uint8Array(1), format: 'stl' }, assembly: pose,
+      lastAlignedPose: pose, lastAttempt: result, deviation: new Map(), referenceId: 'ref-1', excluded: new Set(['site-4']),
+    };
+    before.caseGeometries = new Map([...before.caseGeometries, [sample.id, sample], [assembly.id, assembly]]);
+    const sites = capture.sites.map((x) => ({ ...x, matrix: multiply(x.matrix, fromTranslation([0, 0, 0.5])) }));
+    const { patch, dropped } = redetected(before, sites, [5]);
+    expect(patch).toMatchObject({ sites, unresolved: [5], geometryBySite: {}, alignment: null, alignedWith: null, lastAttempt: null, lastAlignedPose: null, deviation: null, needsReference: false });
+    expect(patch.excluded!.size).toBe(0);
+    expect([...patch.caseGeometries!.keys()]).toEqual(['sample-body']);
+    expect(dropped.sort()).toEqual([...capture.sites.map((x) => captureGeometryId(x.id)), 'asm-1-site-1'].sort());
+    expect(['jaw', 'assembly', 'surfaces', 'components', 'bodies'].filter((k) => k in patch)).toEqual([]);
+  });
+
+  it('a pick for all implants goes on to step 3, or back to step 4 once step 3 is done', () => {
+    expect(stepAfterGeometry(freshCase())).toBe(3);
+    expect(stepAfterGeometry({ jaw: { mesh: c.jaw, originalBytes: new Uint8Array(1), format: 'stl' }, jawSkipped: false })).toBe(4);
+    expect(stepAfterGeometry({ jaw: null, jawSkipped: true })).toBe(4); // "Export without a jaw scan" was chosen
+  });
+});
+
+describe('library', () => {
+  it('cleans names and makes them unique ignoring case', () => {
+    expect(cleanName('  H6.6\u0007 cap  ')).toBe('H6.6 cap');
+    expect(uniqueName('Cap', ['cap', 'Cap (2)'])).toBe('Cap (3)');
+    expect(matchesQuery('Pilar cicatrización', 'CICATRIZACION')).toBe(true);
+  });
+  it('memory fallback: add, favorite first, rename, limit, remove, import never overwrites', async () => {
+    const lib = await Library.open(false);
+    expect(lib.persistent).toBe(false);
+    const body = makeScanBody();
+    const a = await lib.add('Cap', body);
+    await lib.add('cap', body);
+    expect(lib.list().map((m) => m.name)).toEqual(['Cap', 'cap (2)']);
+    await lib.setFavorite(lib.list()[1]!.id, true);
+    expect(lib.list()[0]!.name).toBe('cap (2)');
+    expect((await lib.rename(a.id, 'Cap (2)')).name).toBe('Cap (2) (2)');
+    const r = await lib.importEntries([{ name: 'Cap', favorite: false, mesh: body }]);
+    expect(r).toMatchObject({ renamed: 0, skipped: 0 });
+    while (lib.size < LIBRARY_LIMIT) await lib.add('x', body);
+    await expect(lib.add('y', body)).rejects.toMatchObject({ code: 'libraryFull' });
+    expect((await lib.importEntries([{ name: 'z', favorite: false, mesh: body }])).skipped).toBe(1);
+    await lib.remove(a.id);
+    expect(lib.has(a.id)).toBe(false);
+    expect(await lib.get(lib.list()[0]!.id)).not.toBeNull();
+  });
+  it('library file round trip, bad entries skipped, wrong schema refused', () => {
+    const body = makeScanBody();
+    const bytes = encodeLibraryFile([{ name: 'A', favorite: true, mesh: body }]);
+    const json = JSON.parse(new TextDecoder().decode(bytes));
+    json.entries.push({ name: 'broken', stl: 'AAAA' });
+    const back = decodeLibraryFile(utf8(JSON.stringify(json)));
+    expect(back.skipped).toBe(1);
+    expect(back.entries[0]!.name).toBe('A');
+    expect(back.entries[0]!.favorite).toBe(true);
+    expect(back.entries[0]!.mesh.indices.length).toBe(body.indices.length);
+    expect(() => decodeLibraryFile(utf8('{"schema":"other"}'))).toThrow(LibraryFileError);
+    expect(() => decodeLibraryFile(utf8('not json'))).toThrow(LibraryFileError);
+  });
+});
+
+describe('lead (email gate)', () => {
+  const store = (): StorageLike & { data: Map<string, string> } => {
+    const data = new Map<string, string>();
+    return { data, getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) };
+  };
+  const env = (s: StorageLike, fetchFn: typeof fetch, hook = 'https://hook.test/x') => ({ storage: s, hook, lang: 'en', page: 'https://expertsddt.com/ddt-xchange/', fetchFn, warn: () => {} });
+  it('none -> pending -> sent, payload has exactly four keys', async () => {
+    const s = store();
+    let body = '';
+    expect(needsEmail(s)).toBe(true);
+    const state = await submitLead('a@b.co', env(s, (async (_u: unknown, init?: RequestInit) => { body = String(init?.body); return new Response('', { status: 200 }); }) as typeof fetch));
+    expect(state).toBe('sent');
+    expect(JSON.parse(body)).toEqual({ source: 'ddt-xchange', email: 'a@b.co', lang: 'en', page: 'https://expertsddt.com/ddt-xchange/' });
+    expect(s.data.get(LEAD_KEY)).toBe('{"v":1,"state":"sent"}');
+  });
+  it('failure keeps pending (email kept) and a retry sends it', async () => {
+    const s = store();
+    expect(await submitLead('a@b.co', env(s, (async () => { throw new Error('offline'); }) as typeof fetch))).toBe('pending');
+    expect(readLead(s)).toEqual({ v: 1, state: 'pending', email: 'a@b.co' });
+    expect(needsEmail(s)).toBe(false);
+    await retryPending(env(s, (async () => new Response('', { status: 200 })) as typeof fetch));
+    expect(readLead(s)?.state).toBe('sent');
+  });
+  it('unset webhook -> sent without a request', async () => {
+    const s = store();
+    let called = false;
+    expect(await submitLead('a@b.co', env(s, (async () => { called = true; return new Response(''); }) as typeof fetch, ''))).toBe('sent');
+    expect(called).toBe(false);
+  });
+});
+
+describe('jobs', () => {
+  const c = makeSyntheticCase({ implants: 4, seed: 5 });
+  const csv = utf8(encodeMicronMapperCSV(c.frames));
+  const stl = writeBinarySTL(c.captureMesh);
+  it('position file + capture mesh: linked sites, one source per file, no name anywhere', () => {
+    const r = readCapture([{ bytes: csv, extension: 'csv' }, { bytes: stl, extension: 'stl' }]);
+    expect(r.format).toBe('micronmapper-csv');
+    expect(r.sources.map((s) => `${s.kind}:${s.count}`)).toEqual(['positions:4', 'mesh:4']);
+    expect(r.sites.map((s) => s.componentIndex)).toEqual([0, 1, 2, 3]);
+    expect(r.components!.length).toBe(4);
+  });
+  it('a BTH export + an STL of caps with inserts: 4 bodies, each position on its cap (one frame)', () => {
+    const { body } = capWithInsert();
+    const files = [{ bytes: utf8(encodeMicronMapperExport(c.frames, 'BTH')), extension: 'csv' }, { bytes: writeBinarySTL(placeBodies(c.frames, body)), extension: 'stl' }];
+    const r = readCapture(files);
+    expect(r.sources.map((s) => `${s.kind}:${s.count}`)).toEqual(['positions:4', 'mesh:4']);
+    expect(r.sites.map((s) => [s.label, s.componentIndex])).toEqual([['BTH01', 0], ['BTH02', 1], ['BTH03', 2], ['BTH04', 3]]);
+    expect(r.framesDiffer).toBeUndefined();
+    // The same STL picked as the geometry: one body (cap + insert) at every position.
+    expect(readGeometry(files[1]!, r.sites).plan.kind).toBe('normalized');
+  });
+  it('each body as the file holds it (cap, insert, a fragment beside it) and its outer shell, on the same vertices', () => {
+    const { cap, body } = capWithInsert();
+    const fragment = transformMesh(speck, multiply(c.frames[0]!, fromTranslation([3.5, 0, 2]))); // a speck beside body 1
+    const files = [{ bytes: utf8(encodeMicronMapperExport(c.frames, 'BTH')), extension: 'csv' }, { bytes: writeBinarySTL(mergeMeshes([placeBodies(c.frames, body), fragment])), extension: 'stl' }];
+    const r = readCapture(files);
+    expect(r.components!.map((x) => x.fragment)).toEqual([false, false, false, false, true]);
+    expect(r.components!.slice(0, 4).map((x) => countTriangles(x.mesh))).toEqual([1, 0, 0, 0].map((k) => countTriangles(body) + k * countTriangles(speck)));
+    for (const x of r.components!.slice(0, 4)) {
+      expect(countTriangles(x.shell)).toBe(countTriangles(cap)); // what is shown, linked and aligned
+      expect(x.shell.positions).toBe(x.mesh.positions); // the same vertices: a colour map of the shell fits the body
+      expect(Array.from(x.shell.indices)).toEqual(Array.from(x.mesh.indices.subarray(0, x.shell.indices.length)));
+      expect(x.normals.length).toBe(x.mesh.positions.length);
+    }
+    expect(r.components![4]!.shell).toBe(r.components![4]!.mesh);
+    expect(r.sites.map((s) => s.componentIndex)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('files in different frames: no position is linked, framesDiffer, and the STL as geometry is not at the sites', () => {
+    const moved = transformMesh(c.captureMesh, randomRigid(3, Math.PI, 40));
+    const files = [{ bytes: csv, extension: 'csv' }, { bytes: writeBinarySTL(moved), extension: 'stl' }];
+    const r = readCapture(files);
+    expect(r.framesDiffer).toBe(true);
+    expect(r.sites.every((s) => s.componentIndex === undefined)).toBe(true);
+    const plan = readGeometry(files[1]!, r.sites).plan;
+    expect(plan.kind === 'fixed' && plan.atSites).toBe(false);
+    expect(plan.kind).toBe('fixed');
+    // Use only the CSV / only the STL.
+    const positions = captureOnly(r, 'positions');
+    expect([positions.format, positions.sources.map((s) => s.kind), positions.sites.length, positions.mesh, positions.components]).toEqual(['micronmapper-csv', ['positions'], 4, undefined, undefined]);
+    const mesh = captureOnly(r, 'mesh');
+    expect([mesh.format, mesh.sources.map((s) => s.kind), mesh.sites.length, mesh.mesh === r.mesh, mesh.components?.length]).toEqual(['stl', ['mesh'], 0, true, 4]);
+    expect(readCapture(files.slice(1)).framesDiffer).toBeUndefined(); // a mesh alone has nothing to disagree with
+  });
+  it('two meshes are refused; a bad second file reports its position', () => {
+    expect(() => readCapture([{ bytes: stl, extension: 'stl' }, { bytes: stl, extension: 'stl' }])).toThrow(UiError);
+    try {
+      readCapture([{ bytes: csv, extension: 'csv' }, { bytes: new Uint8Array(0), extension: 'csv' }]);
+      expect.unreachable();
+    } catch (e) {
+      expect(isXchangeError(e) && e.code === 'FILE_EMPTY' && e.details.file === 2 && e.details.files === 2).toBe(true);
+    }
+  });
+  it('client <-> handler through an in-process worker, cancel then reuse', async () => {
+    const fake = (): WorkerLike => {
+      const listeners: ((e: MessageEvent) => void)[] = [];
+      const handle = createJobsHandler((m) => setTimeout(() => listeners.forEach((l) => l({ data: m } as MessageEvent)), 0));
+      return { postMessage: (m) => setTimeout(() => handle(m as { id: number; job: JobRequest }), 0), addEventListener: (t, l) => { if (t === 'message') listeners.push(l as never); }, terminate: () => {} };
+    };
+    const client = new JobsClient(fake);
+    const xml = utf8(encodeScanAdaptorXML(c.frames, ['11', '12', '13', '14']));
+    const ac = new AbortController();
+    const first = client.run({ type: 'readCapture', files: [{ bytes: xml, extension: 'xml' }] }, [], ac.signal);
+    ac.abort();
+    await expect(first).rejects.toMatchObject({ code: 'CANCELLED' });
+    const r = await client.run<{ sites: ImplantSite[] }>({ type: 'readCapture', files: [{ bytes: xml, extension: 'xml' }] });
+    expect(r.sites.map((s) => s.label)).toEqual(['11', '12', '13', '14']);
+    await expect(client.run({ type: 'readCapture', files: [{ bytes: new Uint8Array(0), extension: 'csv' }] })).rejects.toMatchObject({ code: 'FILE_EMPTY' });
+    client.dispose();
+  });
+});

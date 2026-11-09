@@ -250,6 +250,7 @@ function initSplits() {
     // mobile: sober — chars become words, lines stay (cheap)
     const mode = coarse && el.dataset.split === 'chars' ? 'words' : el.dataset.split; // chars | words | lines
     el.style.visibility = 'visible';
+    if (reduced) { (el.closest('[data-reveal-scope]') || el).classList.add('is-inview'); return; }
     const split = new SplitText(el, { type: mode === 'chars' ? 'chars,words' : mode, aria: 'none', mask: mode === 'lines' ? 'lines' : undefined, linesClass: 'split-line', wordsClass: 'split-word', charsClass: 'split-char' });
     const targets = mode === 'chars' ? split.chars : mode === 'words' ? split.words : split.lines;
     const delay = +(el.dataset.delay || 0);
@@ -629,6 +630,14 @@ let swapped = false;
 boot();
 document.addEventListener('astro:page-load', () => { if (!swapped) return; swapped = false; boot(); });
 document.addEventListener('astro:before-swap', (e) => { navType = e.navigationType; lastPoint = null; teardown(); });
+// app-like pages (DDT Xchange) pause or drive the shared smooth scroll through events: the Lenis instance is private
+document.addEventListener('scroll-lock', (e) => (lenis ? (e.detail ? lenis.stop() : lenis.start()) : (document.body.style.overflow = e.detail ? 'hidden' : '')));
+// the fixed nav must not cover the target, with or without Lenis (reduced motion); Lenis already subtracts scroll-margin
+document.addEventListener('scroll-to', (e) => {
+  const el = e.detail;
+  if (lenis) lenis.scrollTo(el, { offset: (parseFloat(getComputedStyle(el).scrollMarginTop) || 0) - navOffset() });
+  else window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - navOffset() });
+});
 document.addEventListener('astro:after-swap', () => {
   swapped = true;
   document.documentElement.classList.add('motion'); // the swap replaced every <html> attribute

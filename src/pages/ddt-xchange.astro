@@ -1,0 +1,598 @@
+---
+// DDT Xchange: free browser tool (UI-DESIGN.md). Static copy is server-rendered from the tool's typed
+// dictionaries; the client bundle (src/xchange/ui/main.ts) only fills lists and states.
+import Base from '../layouts/Base.astro';
+import Cta from '../components/Cta.astro';
+import { useI18n } from '../i18n/index.js';
+import en from '../xchange/ui/i18n/en';
+import es from '../xchange/ui/i18n/es';
+import { fmt, num } from '../xchange/ui/i18n/format';
+import { LIMITS } from '../xchange/core/limits';
+import { VIEW_KEYS } from '../xchange/viewer/presets';
+import '../xchange/ui/xchange.css';
+
+const { t, lang, href } = useI18n(Astro);
+const c = lang === 'es' ? es : en;
+const L = lang === 'es' ? 'es' : 'en';
+const hook = import.meta.env.PUBLIC_N8N_FORM_WEBHOOK || '';
+const MB = 1024 * 1024;
+const limitVars = {
+  jawMb: num(L, LIMITS.jaw.maxBytes / MB), jawTri: num(L, LIMITS.jaw.maxTriangles), jawWarn: num(L, LIMITS.jaw.warnTriangles),
+  capMb: num(L, LIMITS.capture.maxBytes / MB), capTri: num(L, LIMITS.capture.maxTriangles), capBodies: num(L, LIMITS.capture.maxComponents),
+  geoMb: num(L, LIMITS.geometry.maxBytes / MB), geoTri: num(L, LIMITS.geometry.maxTriangles),
+  posMb: num(L, LIMITS.positions.maxBytes / MB), posMax: num(L, LIMITS.positions.maxPositions), zipMb: num(L, LIMITS.bundle.maxBytes / MB),
+};
+const origin = Astro.site?.origin ?? '';
+const softwareApp = {
+  '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'DDT Xchange', applicationCategory: 'DesignApplication',
+  operatingSystem: 'Web browser', offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, inLanguage: lang, publisher: { '@id': `${origin}/#org` },
+};
+const steps = c.steps.names;
+// Stage icons: our own 24 px line drawings in the site's 1.8 stroke (xch__ico), all solid; "~" marks a faint line (the
+// far half of a turn, a mirror axis).
+const ICO = {
+  layers: ['M12 3.5l8.5 4.5-8.5 4.5L3.5 8z', 'M3.5 12l8.5 4.5 8.5-4.5', 'M3.5 16l8.5 4.5 8.5-4.5'],
+  map: ['M3.5 10h17v7h-17z', 'M9.2 10v7M14.8 10v7', 'M13 4.5h3.6L14.8 7z'],
+  // jaw transparency: a drop, half hatched (a half-hatched circle read as the Section block beside it at 20 px)
+  xray: ['M12 3.5C14.6 7 18 10.4 18 14.5a6 6 0 0 1-12 0C6 10.4 9.4 7 12 3.5z', 'M12 3.5v17M12 10.05l3.6-1.8M12 13.85l5.3-2.65M12 17.98l5.95-2.98'],
+  keys: ['M4.5 6.5h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z', 'M7 10h.01M10.3 10h.01M13.7 10h.01M17 10h.01M8 14h8'],
+  fsOn: ['M14 4h6v6M20 4l-6 6M10 20H4v-6M4 20l6-6'],
+  fsOff: ['M20 10h-6V4M14 10l6-6M4 14h6v6M10 14l-6 6'],
+  fit: ['M4 8.5v-3A1.5 1.5 0 0 1 5.5 4h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3', 'M10.5 9.5h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z'],
+  arch: ['M5 5.5c0 8 3 14 7 14s7-6 7-14h-4c0 5.5-1.3 9-3 9s-3-3.5-3-9z'],
+  top: ['M12 19.5v-15M6 10.5l6-6 6 6'],
+  bottom: ['M12 4.5v15M6 13.5l6 6 6-6'],
+  left: ['M19.5 12h-15M10.5 6l-6 6 6 6'],
+  right: ['M4.5 12h15M13.5 6l6 6-6 6'],
+  front: ['M18 6L6 18M6 9.5V18h8.5'],
+  back: ['M6 18L18 6M9.5 6H18v8.5'],
+  // rotations: the solid arc and its head turn about the axis the ellipse is drawn around; the dashed half is behind
+  tiltForward: ['~M12 3.5a6 8.5 0 0 0 0 17', 'M12 3.5a6 8.5 0 0 1 3.44 15.46', 'M18.4 18.45l-2.96.51.53-2.95'],
+  tiltBack: ['~M12 3.5a6 8.5 0 0 0 0 17', 'M12 20.5a6 8.5 0 0 0 3.44-15.46', 'M18.4 5.55l-2.96-.51.53 2.95'],
+  turnLeft: ['~M3.5 12a8.5 6 0 0 1 17 0', 'M20.5 12a8.5 6 0 0 1-15.46 3.44', 'M5.55 18.4l-.51-2.96 2.95.53'],
+  turnRight: ['~M3.5 12a8.5 6 0 0 1 17 0', 'M3.5 12a8.5 6 0 0 0 15.46 3.44', 'M18.45 18.4l.51-2.96-2.95.53'],
+  rollCcw: ['M17.66 6.34A8 8 0 1 0 20 12', 'M17.9 14.4L20 12l2.1 2.4'],
+  rollCw: ['M6.34 6.34A8 8 0 1 1 4 12', 'M6.1 14.4L4 12l-2.1 2.4'],
+  // moves: an arrow leaving a bar (the ↥ family), so they never read as views or as "0"
+  up: ['M12 19.5V5M7 10l5-5 5 5', 'M7 19.5h10'],
+  down: ['M12 4.5V19M7 14l5 5 5-5', 'M7 4.5h10'],
+  moveLeft: ['M19.5 12H5M10 7l-5 5 5 5', 'M19.5 7v10'],
+  moveRight: ['M4.5 12H19M14 7l5 5-5 5', 'M4.5 7v10'],
+  flipOver: ['~M3.5 12h17', 'M8 9.5l4-5 4 5z', 'M8 14.5l4 5 4-5z'],
+  turnAround: ['~M12 3.5v17', 'M9.5 8l-5 4 5 4z', 'M14.5 8l5 4-5 4z'],
+  // slice B: a block on a section line, the removed half faint and the kept half hatched (the drawing convention for a
+  // cut face; a cut cylinder read as a database icon at 20 px); two points and the line between them
+  section: ['~M12 5H7a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h5', 'M12 5h5a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5', 'M12 2.5v19', 'M12 10.5L17.5 5', 'M12 16.5l8-8', 'M15.5 19l4.5-4.5'],
+  distance: ['M7.1 16.9l9.8-9.8', 'M3.5 18.5a2 2 0 1 0 4 0a2 2 0 1 0-4 0', 'M16.5 5.5a2 2 0 1 0 4 0a2 2 0 1 0-4 0'],
+} as const;
+const paths = (n: keyof typeof ICO): string => ICO[n].map((d) => (d[0] === '~' ? `<path class="xch__ico-faint" d="${d.slice(1)}"/>` : `<path d="${d}"/>`)).join('');
+// views dial: Fit in the hub, six directions around it (screen up = Top, the depth diagonal = Front/Back); keys from VIEW_KEYS
+const keyOf = (p: string): string | undefined => Object.entries(VIEW_KEYS).find(([, v]) => v === p)?.[0];
+const tip = (p: string, name: string): string => (keyOf(p) ? fmt(L, c.view.tip, { name, key: keyOf(p)! }) : name);
+const dial = [['fit', c.view.fit], ['top', c.view.top], ['back', c.view.back], ['right', c.view.right], ['bottom', c.view.bottom], ['front', c.view.front], ['left', c.view.left]] as const;
+const pad = [
+  ['rotate', [['tiltForward', 'tiltForward', 'rx', -1], ['tiltBack', 'tiltBack', 'rx', 1], ['turnLeft', 'turnLeft', 'ry', -1], ['turnRight', 'turnRight', 'ry', 1], ['rollCcw', 'rollCcw', 'rz', 1], ['rollCw', 'rollCw', 'rz', -1]]],
+  ['move', [['up', 'up', 'ty', 1], ['down', 'down', 'ty', -1], ['left', 'moveLeft', 'tx', -1], ['right', 'moveRight', 'tx', 1]]],
+  ['flip', [['flipOver', 'flipOver', 'fx', 1], ['turnAround', 'turnAround', 'fy', 1]]],
+] as const;
+const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['parts', c.display.parts], ['capture', c.display.capture], ['labels', c.display.labels], ['map', c.display.map]] as const;
+---
+<Base title={t.meta.xchange} description={t.meta.xchangeDesc}>
+  <Fragment slot="head"><script type="application/ld+json" set:html={JSON.stringify(softwareApp)}></script></Fragment>
+
+  <section class="page-hero xch-hero" data-nav-solid-from data-scene>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="wrap grid-2">
+      <div class="stack">
+        <span class="pill" data-reveal="up">{c.hero.pill}</span>
+        <h1 class="h-display" data-split="words">{c.hero.title}</h1>
+        <p class="lead" data-reveal="up" data-delay=".3">{c.hero.lead}</p>
+        <div class="cta-row" data-reveal="up" data-delay=".45">
+          <a class="btn btn--white" href="#workspace" data-magnetic>{c.hero.start} <span class="arrow">↓</span></a>
+          <a class="btn btn--ghost" href="#workspace" data-xch-demo>{c.hero.demo}</a>
+        </div>
+        <p class="xch-hero__privacy" data-reveal="up" data-delay=".55">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          {c.hero.privacy}
+        </p>
+      </div>
+      <div class="xch-hero__visual" data-reveal="iris" aria-hidden="true">
+        <div class="xch-hero__disc"><span class="xch-hero__ringwrap" data-parallax="0.25"><span class="xch-hero__ring"></span></span>
+          <svg class="xch-hero__arch" viewBox="0 0 200 160" fill="none">
+            <path d="M24 30c4 62 34 104 76 104s72-42 76-104" stroke="#8fc1ff" stroke-width="10" stroke-linecap="round" opacity=".35"/>
+            <path d="M24 30c4 62 34 104 76 104s72-42 76-104" stroke="#8fc1ff" stroke-width="2" stroke-linecap="round"/>
+            {[[38, 82], [72, 120], [128, 120], [162, 82]].map(([x, y], i) => (
+              <g transform={`translate(${x} ${y})`}><rect x="-8" y="-14" width="16" height="22" rx="4" fill="#fff"/><rect x="-8" y="-14" width="16" height="5" rx="2" fill="#046bd2"/><text y="26" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">{i + 1}</text></g>
+            ))}
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="workspace" class="section xch" data-scene aria-labelledby="xch-title">
+    <div class="wrap">
+      <header class="xch__head" data-reveal-scope>
+        <div class="stack">
+          <span class="eyebrow" data-reveal="up">{c.ws.eyebrow}</span>
+          <h2 id="xch-title" class="h-xl" data-split="lines">{c.ws.title} <span class="underline-accent">{c.ws.titleAccent}</span></h2>
+          <p class="lead" data-reveal="up" data-delay=".2">{c.ws.lead}</p>
+        </div>
+        <div class="xch__case cta-row" data-reveal="up" data-delay=".3">
+          <span class="pill xch__samplepill" data-sample-pill hidden>{c.ws.samplePill}</span>
+          <button type="button" class="btn btn--outline xch-btn-sm" data-exit-sample hidden>{c.ws.exitSample}</button>
+          <button type="button" class="btn btn--outline xch-btn-sm" data-new-case>{c.ws.newCase}</button>
+          <button type="button" class="btn btn--primary xch-btn-sm" data-xch-demo>{c.ws.demo} <span class="arrow">→</span></button>
+        </div>
+      </header>
+
+      <div class="xch__reveal" data-stagger=".1">
+        <div id="xchange" class="xch__shell card" data-lang={lang} data-hook={hook} aria-busy="true">
+          <nav class="xch__stepper" aria-label={c.steps.label}>
+            <ol>
+              {steps.map((name, i) => (
+                <li>
+                  <button type="button" class="xch__step" data-step={i + 1} aria-describedby={`xch-steplock-${i + 1}`}>
+                    <span class="xch__dot"><span class="xch__num">{i + 1}</span><svg class="xch__tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+                    <span class="xch__steptext"><span class="xch__stepname">{name}</span>{i === 2 && <span class="xch__stepopt">{c.steps.optional}</span>}<span class="sr-only" data-step-state></span></span>
+                  </button>
+                  <span class="xch__steplock" id={`xch-steplock-${i + 1}`} data-step-lock></span>
+                </li>
+              ))}
+            </ol>
+            <span class="xch__track" aria-hidden="true"><i></i></span>
+          </nav>
+
+          <div class="xch__body">
+            <div class="xch__panel">
+              <!-- Step 1 -->
+              <section class="xch__pane" data-pane="1" aria-labelledby="xch-h1">
+                <span class="eyebrow">{fmt(L, c.panel.stepOf, { n: 1 })}</span>
+                <h3 class="xch__h" id="xch-h1" tabindex="-1">{c.s1.title}</h3>
+                <p class="xch__text">{c.s1.text}</p>
+                <div class="xch__group">
+                  <p class="xch__label" id="xch-arch-label">{c.s1.arch}</p>
+                  <div class="xch__arch" role="radiogroup" aria-labelledby="xch-arch-label" data-arch-group>
+                    <button type="button" role="radio" aria-checked="false" class="xch__archcard" data-arch="upper">
+                      <svg viewBox="0 0 48 32" aria-hidden="true"><path d="M6 26C8 10 16 5 24 5s16 5 18 21"/></svg><span>{c.s1.upper}</span>
+                    </button>
+                    <button type="button" role="radio" aria-checked="false" class="xch__archcard" data-arch="lower">
+                      <svg viewBox="0 0 48 32" aria-hidden="true"><path d="M6 6c2 16 10 21 18 21s16-5 18-21"/></svg><span>{c.s1.lower}</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="xch__drop" data-drop="capture">
+                  <i class="xch__dropicon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></i>
+                  <p class="xch__droptitle">{c.s1.drop}</p>
+                  <p class="xch__or">{c.s1.or}</p>
+                  <button type="button" class="btn btn--primary" data-pick="capture">{c.s1.choose} <span class="arrow">↑</span></button>
+                  <p class="xch__formats">{c.s1.formats}</p>
+                  <p class="note">{c.s1.excel}</p>
+                  <button type="button" class="xch__textbtn" data-xch-demo>{c.ws.demo}</button>
+                </div>
+                <div class="xch__busy" data-busy="1" hidden></div>
+                <div class="xch__sources" data-sources hidden>
+                  <p class="xch__label">{c.s1.sources}</p>
+                  <ul class="xch__list" data-list="sources"></ul>
+                  <button type="button" class="btn btn--outline xch-btn-sm" data-pick="capture">{c.s1.replace}</button>
+                </div>
+                <div class="xch__sub" data-ref hidden>
+                  <p class="xch__subtitle">{c.s1.refTitle}</p>
+                  <p class="xch__small">{c.s1.refText}</p>
+                  <ul class="xch__lib" data-list="ref"></ul>
+                  <button type="button" class="btn btn--outline xch-btn-sm" data-pick="reference">{c.s1.refLoad}</button>
+                  <div data-namefield="reference"></div>
+                </div>
+                <div class="xch__notes" data-notes="1"></div>
+                <div class="xch__group" data-implants-wrap="1" hidden>
+                  <p class="xch__label">{c.s1.implants} <span class="xch__count" data-implant-count="1"></span></p>
+                  <ul class="xch__list xch__implants" data-list="implants1" data-lenis-prevent></ul>
+                </div>
+                <div class="xch__alerts" data-alerts="1"></div>
+                <footer class="xch__foot">
+                  <p class="xch__reason" data-reason="1" id="xch-reason-1"></p>
+                  <div class="cta-row"><button type="button" class="btn btn--primary" data-next="1" aria-describedby="xch-reason-1">{c.panel.continue} <span class="arrow">→</span></button></div>
+                </footer>
+              </section>
+
+              <!-- Step 2 -->
+              <section class="xch__pane" data-pane="2" aria-labelledby="xch-h2" hidden>
+                <span class="eyebrow">{fmt(L, c.panel.stepOf, { n: 2 })}</span>
+                <h3 class="xch__h" id="xch-h2" tabindex="-1">{c.s2.title}</h3>
+                <p class="xch__text">{c.s2.text}</p>
+                <div class="xch__group">
+                  <p class="xch__label" id="xch-apply-label">{c.s2.applyTo}</p>
+                  <div class="xch__seg" role="radiogroup" aria-labelledby="xch-apply-label" data-apply-group>
+                    <button type="button" role="radio" aria-checked="true" data-apply="all"></button>
+                    <button type="button" role="radio" aria-checked="false" data-apply="one"></button>
+                  </div>
+                </div>
+                <div class="xch__group">
+                  <p class="xch__label">{c.s1.implants}</p>
+                  <ul class="xch__list xch__implants" data-list="implants2" data-lenis-prevent></ul>
+                </div>
+                <div class="xch__sub xch__library">
+                  <div class="xch__libhead">
+                    <div><p class="xch__subtitle">{c.lib.title}</p><p class="xch__small">{c.lib.where}</p></div>
+                    <div class="xch__menuwrap">
+                      <button type="button" class="xch__iconbtn" data-lib-menu aria-expanded="false" aria-controls="xch-libmenu" aria-label={c.lib.menu}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button>
+                      <div class="xch__menu" id="xch-libmenu" hidden>
+                        <button type="button" data-lib-import>{c.lib.import}</button>
+                        <button type="button" data-lib-export>{c.lib.export}</button>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn--outline xch-btn-sm" data-pick="geometry">{c.lib.load} <span class="arrow">↑</span></button>
+                  <p class="xch__formats">{c.lib.formats}</p>
+                  <div data-namefield="geometry"></div>
+                  <label class="xch__filter" data-lib-filter hidden><span class="sr-only">{c.lib.filter}</span><input type="search" placeholder={c.lib.filter} /></label>
+                  <div class="xch__busy" data-busy="lib" hidden></div>
+                  <div data-list="lib"></div>
+                </div>
+                <div class="xch__notes" data-notes="2"></div>
+                <div class="xch__alerts" data-alerts="2"></div>
+                <footer class="xch__foot">
+                  <p class="xch__reason" data-reason="2" id="xch-reason-2"></p>
+                  <div class="cta-row">
+                    <button type="button" class="btn btn--outline" data-back="2"><span class="arrow">←</span> {c.panel.back}</button>
+                    <button type="button" class="btn btn--primary" data-next="2" aria-describedby="xch-reason-2">{c.panel.continue} <span class="arrow">→</span></button>
+                  </div>
+                </footer>
+              </section>
+
+              <!-- Step 3 -->
+              <section class="xch__pane" data-pane="3" aria-labelledby="xch-h3" hidden>
+                <span class="eyebrow">{fmt(L, c.panel.stepOfOptional, { n: 3 })}</span>
+                <h3 class="xch__h" id="xch-h3" tabindex="-1">{c.s3.title}</h3>
+                <p class="xch__text">{c.s3.text}</p>
+                <div class="xch__drop" data-drop="jaw">
+                  <i class="xch__dropicon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></i>
+                  <p class="xch__droptitle">{c.s3.drop}</p>
+                  <p class="xch__or">{c.s1.or}</p>
+                  <div class="cta-row xch__center">
+                    <button type="button" class="btn btn--primary" data-pick="jaw">{c.s3.choose} <span class="arrow">↑</span></button>
+                    <button type="button" class="btn btn--outline" data-sample-jaw hidden>{c.s3.sample}</button>
+                  </div>
+                  <p class="xch__formats">{c.s3.formats}</p>
+                </div>
+                <div class="xch__busy" data-busy="3" hidden></div>
+                <div class="xch__sub xch__jawcard" data-jawcard hidden>
+                  <p class="xch__subtitle"><span class="xch-chip xch-chip--ok" data-jaw-chip></span></p>
+                  <p class="xch__small" data-jaw-meta></p>
+                  <div class="cta-row">
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-pick="jaw">{c.s3.replace}</button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-jaw-remove>{c.s3.remove}</button>
+                  </div>
+                </div>
+                <div class="xch__skip">
+                  <button type="button" class="btn btn--primary" data-skip>{c.s3.skip} <span class="arrow">→</span></button>
+                  <p class="note">{c.s3.skipNote}</p>
+                </div>
+                <div class="xch__notes" data-notes="3"></div>
+                <div class="xch__alerts" data-alerts="3"></div>
+                <footer class="xch__foot">
+                  <p class="xch__reason" data-reason="3" id="xch-reason-3"></p>
+                  <div class="cta-row">
+                    <button type="button" class="btn btn--outline" data-back="3"><span class="arrow">←</span> {c.panel.back}</button>
+                    <button type="button" class="btn btn--primary" data-next="3" hidden>{c.panel.continue} <span class="arrow">→</span></button>
+                  </div>
+                </footer>
+              </section>
+
+              <!-- Step 4 -->
+              <section class="xch__pane" data-pane="4" aria-labelledby="xch-h4" hidden>
+                <span class="eyebrow">{fmt(L, c.panel.stepOf, { n: 4 })}</span>
+                <h3 class="xch__h" id="xch-h4" tabindex="-1" data-s4-title>{c.s4.titleAlign}</h3>
+                <p class="xch__text" data-s4-text>{c.s4.textAlign}</p>
+
+                <div class="xch__block" data-sec="align">
+                  <p class="xch__subtitle">{c.s4.alignment}</p>
+                  <div class="cta-row">
+                    <button type="button" class="btn btn--primary xch-btn-sm" data-align="auto">{c.al.auto} <span class="arrow">→</span></button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-align="guided">{c.al.guided}</button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-align="refine" hidden>{c.al.refine}</button>
+                  </div>
+                  <div class="xch__group" data-surf-block>
+                    <p class="xch__label" id="xch-surf-label">{c.al.surfaces}</p>
+                    <div class="xch__seg" role="radiogroup" aria-labelledby="xch-surf-label" aria-describedby="xch-surf-help" data-surf-group>
+                      <button type="button" role="radio" aria-checked="true" data-surf="replacement">{c.al.surfReplacement}</button>
+                      <button type="button" role="radio" aria-checked="false" data-surf="capture" aria-describedby="xch-surf-off">{c.al.surfCapture}</button>
+                    </div>
+                    <p class="xch__small" id="xch-surf-help">{c.al.surfHelp}</p>
+                    <p class="xch__small xch__muted" id="xch-surf-off" data-surf-off hidden>{c.al.surfCaptureOff}</p>
+                  </div>
+                  <div class="xch__busy" data-busy="align" hidden></div>
+                  <p class="xch__small" data-not-yet>{c.al.notYet}</p>
+                  <div class="xch__result" data-result hidden></div>
+                  <p class="note" data-exchanged hidden></p>
+                </div>
+
+                <div class="xch__block" data-sec="guided" hidden>
+                  <p class="xch__subtitle" tabindex="-1">{c.gp.title}</p>
+                  <p class="xch__small">{c.gp.text}</p>
+                  <p class="xch__small xch__muted">{c.gp.keyboard}</p>
+                  <ol class="xch__gplist" data-list="guided"></ol>
+                  <p class="note" data-gp-note hidden></p>
+                  <div class="cta-row">
+                    <button type="button" class="btn btn--primary xch-btn-sm" data-gp="align"></button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-gp="back">{c.gp.back}</button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-gp="skip">{c.gp.skip}</button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-gp="restart">{c.gp.restart}</button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-gp="cancel">{c.gp.cancel}</button>
+                  </div>
+                </div>
+
+                <div class="xch__block" data-sec="manual">
+                  <p class="xch__subtitle">{c.s4.manual}</p>
+                  <p class="xch__small">{c.s4.manualText}</p>
+                  <div class="cta-row">
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-manual="jaw">{c.s4.moveToJaw}</button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-manual="undo">{c.s4.undo}</button>
+                    <button type="button" class="btn btn--outline xch-btn-sm" data-manual="reset">{c.s4.reset}</button>
+                  </div>
+                </div>
+
+                <div class="xch__block" data-sec="review" hidden>
+                  <ul class="xch__list xch__implants" data-list="implants4" data-lenis-prevent></ul>
+                </div>
+
+                <div class="xch__block xch__export" id="xch-export" data-sec="export" tabindex="-1">
+                  <p class="xch__subtitle">{c.ex.title}</p>
+                  <p class="xch__small" data-ex-text></p>
+                  <details class="xch__what">
+                    <summary>{c.ex.what}</summary>
+                    <ul data-ex-files></ul>
+                  </details>
+                  <dl class="xch__summary">
+                    <div><dt>{c.ex.sum.coords}</dt><dd data-sum="coords"></dd></div>
+                    <div><dt>{c.ex.sum.implants}</dt><dd data-sum="implants"></dd></div>
+                    <div><dt>{c.ex.sum.geometry}</dt><dd><span data-sum="geometry"></span> <button type="button" class="xch__textbtn" data-change-geometry aria-label={c.ex.sum.changeLabel}>{c.ex.sum.change}</button></dd></div>
+                    <div><dt>{c.ex.sum.alignment}</dt><dd data-sum="alignment"></dd></div>
+                  </dl>
+                  <p class="note">{c.al.flags.visualCheckRequired}</p>
+                  <ul class="xch__warns" data-ex-warn></ul>
+                  <p class="xch__reason" data-reason="4" id="xch-reason-4"></p>
+                  <div class="cta-row">
+                    <button type="button" class="btn btn--primary" data-export aria-describedby="xch-reason-4">{c.ex.button} <span class="arrow">↓</span></button>
+                  </div>
+                  <div class="xch__busy" data-busy="export" hidden></div>
+                  <p class="xch__small" data-ex-last hidden><span></span> <button type="button" class="xch__textbtn" data-ex-again>{c.ex.again}</button></p>
+                </div>
+                <div class="xch__alerts" data-alerts="4"></div>
+                <footer class="xch__foot">
+                  <div class="cta-row"><button type="button" class="btn btn--outline" data-back="4"><span class="arrow">←</span> {c.panel.back}</button></div>
+                </footer>
+              </section>
+            </div>
+
+            <div class="xch__stagewrap">
+              <a class="xch__skiplink" href="#xch-export" data-skip-view>{c.view.skip}</a>
+              <div class="xch__stage" role="application" aria-roledescription={c.view.role} aria-label={c.view.label} aria-describedby="xch-view-help" tabindex="0" data-lenis-prevent>
+                <p id="xch-view-help" class="sr-only">{c.view.help}</p>
+                <p id="xch-view-gp" class="sr-only">{c.gp.keyboard}</p>
+                <p id="xch-view-dist" class="sr-only">{c.dist.keyboard}</p>
+                <div class="xch__toolbar" role="toolbar" aria-label={c.view.toolbar} aria-orientation="vertical">
+                  <button type="button" class="xch__tool" data-display-btn aria-expanded="false" aria-controls="xch-display" aria-label={c.view.display} data-tip={c.view.display}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('layers')} /></button>
+                  <button type="button" class="xch__tool" data-map-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="C" aria-label={c.display.map} data-tip={fmt(L, c.view.tip, { name: c.display.map, key: 'C' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('map')} /></button>
+                  <button type="button" class="xch__tool" data-xray-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="T" aria-label={c.view.xray} data-tip={fmt(L, c.view.tip, { name: c.view.xray, key: 'T' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('xray')} /></button>
+                  <button type="button" class="xch__tool" data-section-btn aria-expanded="false" aria-disabled="true" aria-controls="xch-section" aria-keyshortcuts="P" aria-label={c.section.title} data-tip={fmt(L, c.view.tip, { name: c.section.title, key: 'P' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('section')} /></button>
+                  <button type="button" class="xch__tool" data-dist-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="R" aria-label={c.dist.button} data-tip={fmt(L, c.view.tip, { name: c.dist.button, key: 'R' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('distance')} /></button>
+                  <span class="xch__sep" aria-hidden="true"></span>
+                  <button type="button" class="xch__tool" data-keys-btn aria-label={c.view.shortcuts} aria-keyshortcuts="?" data-tip={fmt(L, c.view.tip, { name: c.view.shortcuts, key: '?' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('keys')} /></button>
+                  <button type="button" class="xch__tool" data-fs-btn data-on={c.view.exitFullscreen} data-off={c.view.fullscreen} aria-label={c.view.fullscreen} data-tip={c.view.fullscreen} hidden><svg class="xch__ico xch__fs-on" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('fsOn')} /><svg class="xch__ico xch__fs-off" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('fsOff')} /></button>
+                </div>
+                {/* the popovers follow the icon bar: Tab from their last control goes on to the views dial, not off the stage */}
+                <div class="xch__display" id="xch-display" role="group" aria-labelledby="xch-display-title" data-lenis-prevent data-display hidden>
+                  <p class="xch__subtitle" id="xch-display-title">{c.display.title}</p>
+                  {switches.map(([id, label]) => <button type="button" role="switch" aria-checked="false" class="xch__switch" data-switch={id}><span>{label}</span><i aria-hidden="true"></i></button>)}
+                  <label class="xch__range">{c.display.jawOpacity}<input type="range" min="0" max="100" step="5" value="100" data-range="jawOpacity" /><output></output></label>
+                  <label class="xch__range">{c.display.partOpacity}<input type="range" min="0" max="100" step="5" value="100" data-range="partOpacity" /><output></output></label>
+                  <label class="xch__range">{c.display.fov}<input type="range" min="1" max="60" step="1" value="1" data-range="fovDeg" /><output></output></label>
+                  <label class="xch__range">{c.display.speed}<input type="range" min="1" max="5" step="1" value="3" data-range="speed" /><output></output></label>
+                </div>
+                <div class="xch__display xch__section" id="xch-section" role="group" aria-labelledby="xch-section-title" data-lenis-prevent data-section hidden>
+                  <p class="xch__subtitle" id="xch-section-title">{c.section.title}</p>
+                  <label class="xch__range">{c.section.position}<input type="range" min="-10" max="10" step="0.1" value="0" data-section-range /><output></output></label>
+                  <button type="button" role="switch" aria-checked="false" class="xch__switch" data-section-switch="flipped"><span>{c.section.flip}</span><i aria-hidden="true"></i></button>
+                  <button type="button" role="switch" aria-checked="false" class="xch__switch" data-section-switch="follow"><span>{c.section.follow}</span><i aria-hidden="true"></i></button>
+                  <p class="xch__small">{c.section.hint}</p>
+                  <button type="button" class="btn btn--outline xch-btn-sm" data-section-off>{c.section.off}</button>
+                </div>
+                <div class="xch__views" role="toolbar" aria-label={c.view.views}>
+                  <div class="xch__dial">
+                    <svg class="xch__axes" viewBox="-1 -1 2 2" aria-hidden="true"><path d="M0-1V1M-1 0H1M-.7071.7071L.7071-.7071" /></svg>
+                    {dial.map(([id, label]) => <button type="button" class={`xch__tool xch__dir xch__dir--${id}`} data-view={id} aria-pressed="false" aria-label={label} aria-keyshortcuts={keyOf(id)} data-tip={tip(id, label)}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths(id)} /></button>)}
+                  </div>
+                  <button type="button" class="xch__tool xch__home" data-view="occlusal" aria-pressed="false" aria-keyshortcuts={keyOf('occlusal')} aria-label={c.view.occlusal} data-tip={tip('occlusal', c.view.defaultView)}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('arch')} /><span>{c.view.occlusal}</span></button>
+                </div>
+                <div class="xch__bar" aria-hidden="true" hidden><i></i></div>
+                <div class="xch__labels" aria-hidden="true"></div>
+                <div class="xch__empty" data-empty>
+                  <p class="xch__emptytitle">{c.view.empty}</p>
+                  <p>{c.view.emptyText}</p>
+                  <p class="xch__loading" data-loading>{c.ws.loading}</p>
+                </div>
+                <div class="xch__pad" role="toolbar" aria-label={c.pad.label} aria-describedby="xch-pad-hint" aria-orientation="vertical" data-pad hidden>
+                  {pad.map(([group, items]) => (
+                    <div class="xch__padgroup" role="group" aria-label={c.pad[group]} data-g={group}>
+                      <span class="xch__padcap" aria-hidden="true">{c.pad[group]}</span>
+                      {items.map(([key, ico, op, dir]) => <button type="button" class="xch__tool xch__padbtn" data-pad-op={op} data-pad-dir={dir} data-pad-key={key} aria-label={fmt(L, c.pad[key], { deg: 30, mm: 1 })} data-tip={fmt(L, c.pad[key], { deg: 30, mm: 1 })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths(ico)} /></button>)}
+                    </div>
+                  ))}
+                  <button type="button" class="xch__tool xch__padfine" data-pad-fine aria-pressed="false">{c.pad.fine}</button>
+                  <p class="xch__padhint" id="xch-pad-hint" aria-hidden="true">{c.pad.hint}</p>
+                </div>
+                <div class="xch__legend" role="img" aria-label={c.legend.aria} data-legend hidden>
+                  <p class="xch__legendtitle">{c.legend.title}<span>µm</span></p>
+                  <span class="xch__ramp" aria-hidden="true"></span>
+                  <span class="xch__ticks" aria-hidden="true"><span>0</span><span>25</span><span>50</span><span>75</span><span>100+</span></span>
+                  <p class="xch__legendhidden">{c.legend.hidden}</p>
+                  <p class="xch__legendsub" data-legend-sub></p>
+                </div>
+                <div class="xch__readout" aria-hidden="true" data-readout hidden></div>
+                <div class="xch__crosshair" aria-hidden="true"></div>
+                <div class="xch__ctrlchip" aria-hidden="true" data-ctrlchip hidden>{c.pad.ctrlHint}</div>
+                <div class="xch__hintchip" aria-hidden="true" data-disthint hidden>{c.dist.hint}</div>
+                <div class="xch__dropover" aria-hidden="true" data-dropover><p></p></div>
+                <div class="xch__lost" data-lost hidden>
+                  <p class="xch__emptytitle">{c.view.lost}</p>
+                  <p>{c.view.lostText}</p>
+                  <button type="button" class="btn btn--primary xch-btn-sm" data-restart>{c.view.restart}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="xch__smallscreen card">
+        <i class="xch__smallicon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></i>
+        <h3 class="h-lg">{c.small.title}</h3>
+        <p>{c.small.text}</p>
+        <div class="cta-row">
+          <button type="button" class="btn btn--primary" data-copy-link data-ok={c.say.linkCopied} data-fail={c.ui.copyFailed}>{c.small.copy}</button>
+          <button type="button" class="btn btn--outline" data-share-link hidden>{c.small.share}</button>
+        </div>
+      </div>
+      <noscript><p class="note">{c.ws.noscript}</p></noscript>
+    </div>
+
+    <div class="xch__toasts" role="status" aria-live="polite"></div>
+    <p id="xch-status" class="sr-only" role="status" aria-live="polite"></p>
+
+    <dialog id="xch-email" class="xch-dialog" aria-labelledby="xch-email-title" data-lenis-prevent>
+      <form class="xch-dialog__form" novalidate>
+        <button type="button" class="xch-dialog__close" data-close aria-label={c.email.close}>×</button>
+        <h2 class="h-lg" id="xch-email-title">{c.email.title}</h2>
+        <p>{c.email.text}</p>
+        <div class="xch-dialog__field">
+          <label for="xch-email-input">{c.email.label}</label>
+          <input id="xch-email-input" type="email" name="email" required autocomplete="email" inputmode="email" maxlength="160" placeholder={c.email.placeholder} aria-describedby="xch-email-hint" data-invalid={c.email.invalid} />
+          <span class="xch-dialog__hint" id="xch-email-hint">{c.email.hint}</span>
+        </div>
+        <input type="text" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
+        <p class="xch-dialog__note">{c.email.note} <a href={href('/privacy-policy/')} target="_blank" rel="noopener">{c.email.privacy}</a></p>
+        <p class="xch-dialog__note">{c.email.once}</p>
+        <div class="cta-row">
+          <button class="btn btn--primary" type="submit">{c.email.submit} <span class="arrow">↓</span></button>
+          <button class="btn btn--outline" type="button" data-close>{c.email.later}</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="xch-confirm" class="xch-dialog" aria-labelledby="xch-confirm-title" data-lenis-prevent>
+      <div class="xch-dialog__form">
+        <h2 class="h-lg" id="xch-confirm-title" data-confirm-title></h2>
+        <p data-confirm-text></p>
+        <div class="cta-row">
+          <button class="btn btn--primary" type="button" data-confirm-yes><span></span> <span class="arrow">→</span></button>
+          <button class="btn btn--outline" type="button" data-confirm-no></button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="xch-keys" class="xch-dialog xch-dialog--wide" aria-labelledby="xch-keys-title" data-lenis-prevent>
+      <div class="xch-dialog__form">
+        <button type="button" class="xch-dialog__close" data-close aria-label={c.keys.close}>×</button>
+        <h2 class="h-lg" id="xch-keys-title">{c.keys.title}</h2>
+        <div class="xch-keys__wrap">
+          <table class="xch-keys">
+            <thead><tr><th scope="col">{c.keys.colAction}</th><th scope="col">{c.keys.colMouse}</th><th scope="col">{c.keys.colKeys}</th></tr></thead>
+            <tbody>{c.keys.rows.map(([a, m, k]) => <tr><th scope="row">{a}</th><td>{m}</td><td>{k}</td></tr>)}</tbody>
+          </table>
+        </div>
+        <p class="xch-dialog__note">{c.keys.touch}</p>
+        <div class="cta-row"><button class="btn btn--outline" type="button" data-close>{c.keys.close}</button></div>
+      </div>
+    </dialog>
+  </section>
+
+  <section id="help" class="section section--mist xch-help" data-scene>
+    <div class="wrap">
+      <header class="xch-help__head" data-reveal-scope>
+        <span class="eyebrow" data-reveal="up">{c.help.eyebrow}</span>
+        <h2 class="h-xl" id="xch-help-title" tabindex="-1" data-split="lines">{c.help.title} <span class="underline-accent">{c.help.titleAccent}</span></h2>
+        <p class="lead" data-reveal="up" data-delay=".2">{c.help.lead}</p>
+      </header>
+      <h3 class="xch-help__sub" data-reveal="up">{c.help.howTitle}</h3>
+      <div class="grid-4" data-stagger=".12">
+        {c.help.how.map((s, i) => <div class="card xch-step"><b>0{i + 1}</b><h3>{s.t}</h3><p>{s.d}</p></div>)}
+      </div>
+      <div class="grid-3 xch-help__cards" data-stagger=".12">
+        <div class="card"><h3>{c.help.import.title}</h3><ul>{c.help.import.items.map((x) => <li>{x}</li>)}</ul></div>
+        <div class="card"><h3>{c.help.limits.title}</h3><ul>{c.help.limits.items.map((x) => <li>{fmt(L, x, limitVars)}</li>)}</ul></div>
+        <div class="card"><h3>{c.help.check.title}</h3><ul>{c.help.check.items.map((x) => <li>{x}</li>)}</ul></div>
+      </div>
+      <div class="card xch-help__keys" data-reveal="up">
+        <h3>{c.help.keysTitle}</h3>
+        <div class="xch-keys__wrap">
+          <table class="xch-keys">
+            <thead><tr><th scope="col">{c.keys.colAction}</th><th scope="col">{c.keys.colMouse}</th><th scope="col">{c.keys.colKeys}</th></tr></thead>
+            <tbody>{c.keys.rows.map(([a, m, k]) => <tr><th scope="row">{a}</th><td>{m}</td><td>{k}</td></tr>)}</tbody>
+          </table>
+        </div>
+        <p class="note">{c.keys.touch}</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="section xch-faq" data-scene>
+    <div class="wrap">
+      <header class="xch-help__head" data-reveal-scope>
+        <span class="eyebrow" data-reveal="up">{c.faq.eyebrow}</span>
+        <h2 class="h-xl" data-split="lines">{c.faq.title} <span class="underline-accent">{c.faq.titleAccent}</span></h2>
+      </header>
+      <div class="xch-faq__list" data-stagger=".06">
+        {c.faq.items.map((f) => <details class="xch-faq__item"><summary><h3>{f.q}</h3><span class="xch-faq__chev" aria-hidden="true"></span></summary><p>{f.a}</p></details>)}
+      </div>
+    </div>
+  </section>
+
+  <Cta title={c.cta.title} text={c.cta.text} />
+</Base>
+
+<script>
+  import { mount, type Mounted } from '../xchange/ui/main';
+  let app: Mounted | null = null;
+  const start = (): void => {
+    const root = document.getElementById('xchange');
+    if (!root || app) return; // another page, or already mounted
+    app = mount(root);
+  };
+  document.addEventListener('astro:page-load', start);
+  document.addEventListener('astro:before-swap', () => { app?.dispose(); app = null; });
+  start(); // first visit through a client-side navigation: the module may run after page-load fired
+</script>
+
+<style>
+  .xch-hero__privacy { display: flex; gap: .5rem; align-items: center; font-size: .9rem; color: #c7d6ee; }
+  .xch-hero__privacy svg { color: #8fc1ff; flex: none; }
+  .xch-hero__visual { display: grid; place-items: center; }
+  .xch-hero__disc { position: relative; width: min(380px, 70vw); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; }
+  .xch-hero__ringwrap { position: absolute; inset: 0; }
+  .xch-hero__ring { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 200deg, #046bd2, #1d3273, #2a7abf, #046bd2); box-shadow: 0 50px 100px -40px rgba(4,107,210,.9), inset 0 0 0 18px rgba(255,255,255,.06); animation: xchSpin 30s linear infinite; }
+  .xch-hero__arch { position: relative; width: 62%; height: auto; }
+  @keyframes xchSpin { to { transform: rotate(360deg) } }
+  .xch-help__head { display: grid; gap: 1.1rem; margin-bottom: 2.5rem; max-width: 62ch; }
+  .xch-help__sub { font-size: 1.15rem; margin-bottom: 1.2rem; }
+  .xch-step { display: grid; gap: .6rem; align-content: start; }
+  .xch-step b { font-size: 2.4rem; font-weight: 800; color: transparent; -webkit-text-stroke: 1.5px rgba(4,107,210,.5); line-height: 1; }
+  .xch-step h3 { font-size: 1.15rem; }
+  .xch-help__cards { margin-top: 1.5rem; }
+  .xch-help__cards h3, .xch-help__keys h3 { font-size: 1.15rem; margin-bottom: .8rem; }
+  .xch-help__cards ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .5rem; font-size: .92rem; }
+  .xch-help__keys { margin-top: 1.5rem; display: grid; gap: 1rem; }
+  .xch-faq { interpolate-size: allow-keywords; }
+  .xch-faq__list { display: grid; gap: .75rem; max-width: 860px; }
+  .xch-faq__item { background: var(--mist); border-radius: 18px; padding: 0 1.3rem; }
+  .xch-faq__item summary { list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.1rem 0; cursor: pointer; min-height: 48px; }
+  .xch-faq__item summary::-webkit-details-marker { display: none; }
+  .xch-faq__item h3 { font-size: 1.05rem; font-weight: 600; letter-spacing: -.01em; }
+  .xch-faq__item p { padding-bottom: 1.2rem; max-width: 70ch; }
+  .xch-faq__chev { width: 12px; height: 12px; border-right: 2px solid var(--blue); border-bottom: 2px solid var(--blue); transform: rotate(45deg) translate(-3px, -3px); transition: transform .35s var(--ease-out); flex: none; }
+  .xch-faq__item[open] .xch-faq__chev { transform: rotate(225deg); }
+  .xch-faq__item::details-content { block-size: 0; overflow: clip; transition: block-size .5s var(--ease-out), content-visibility .5s allow-discrete; }
+  .xch-faq__item[open]::details-content { block-size: auto; }
+  :global([data-theme="dark"]) .xch-faq__chev { border-color: #6fb6ff; }
+  @media (max-width: 960px) { .xch-hero__visual { order: -1; } .xch-hero__disc { width: min(240px, 60vw); } }
+</style>

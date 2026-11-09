@@ -6,7 +6,7 @@ const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; ExpertsDDT-smoke)' };
 const get = (p, opt = {}) => fetch(site + p, { headers: UA, redirect: 'manual', ...opt });
 
 const checks = [
-  ...['/', '/es/', '/services/', '/es/services/', '/store/', '/exocad-libraries/', '/contact/', '/terms-and-conditions/', '/refund-policy/', '/privacy-policy/'].map((p) => ({
+  ...['/', '/es/', '/services/', '/es/services/', '/store/', '/exocad-libraries/', '/ddt-xchange/', '/es/ddt-xchange/', '/contact/', '/terms-and-conditions/', '/refund-policy/', '/privacy-policy/'].map((p) => ({
     name: `200 ${p}`, run: async () => { const r = await get(p); const t = await r.text(); return r.status === 200 && t.includes('<title>') || `status ${r.status}`; } })),
   { name: 'robots.txt', run: async () => { const r = await get('/robots.txt'); const t = await r.text(); const blocked = /Disallow:\s*\/\s*$/m.test(t); return (r.status === 200 && blocked === !!process.env.EXPECT_NOINDEX) || `status ${r.status}, disallow-all=${blocked}`; } },
   { name: 'sitemap', run: async () => { const r = process.env.EXPECT_NOINDEX ? { status: 200 } : await get('/sitemap-index.xml'); return r.status === 200 || `status ${r.status}`; } },
