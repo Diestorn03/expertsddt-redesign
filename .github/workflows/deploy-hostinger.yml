@@ -4,6 +4,8 @@ name: Deploy to Hostinger
 # Production runs wait for approval (GitHub Environment "production" with required reviewers).
 # Rollback = run this workflow again with an older tag/commit in "ref".
 on:
+  push:
+    branches: [main]   # every push to main updates staging (production is manual and needs approval)
   workflow_dispatch:
     inputs:
       target:
@@ -23,12 +25,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: hostinger-${{ inputs.target }}
+  group: hostinger-${{ inputs.target || 'staging' }}
   cancel-in-progress: false
 
 env:
   # Pinned to commit SHAs (supply-chain safety): checkout v4, setup-node v4, upload/download-artifact v4, FTP-Deploy-Action v4.3.5
-  SITE_URL: ${{ inputs.target == 'production' && 'https://expertsddt.com' || vars.STAGING_URL }}
+  SITE_URL: ${{ (inputs.target || 'staging') == 'production' && 'https://expertsddt.com' || vars.STAGING_URL }}
 
 jobs:
   build:
@@ -36,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -58,13 +60,13 @@ jobs:
           PUBLIC_GA_ID: ${{ vars.PUBLIC_GA_ID }}
           PUBLIC_SHOW_REVIEWS: ${{ vars.PUBLIC_SHOW_REVIEWS }}
           PUBLIC_WHATSAPP: ${{ vars.PUBLIC_WHATSAPP || '15106760418' }}
-          PUBLIC_NOINDEX: ${{ inputs.target == 'staging' && '1' || '' }}
+          PUBLIC_NOINDEX: ${{ (inputs.target || 'staging') == 'staging' && '1' || '' }}
       - name: Audit the built site (links, SEO basics, hreflang, sitemap)
         run: npm run test:dist
         env:
-          ALLOW_NOINDEX: ${{ inputs.target == 'staging' && '1' || '' }}
+          ALLOW_NOINDEX: ${{ (inputs.target || 'staging') == 'staging' && '1' || '' }}
       - name: Integrations missing in production are reported, not blocking
-        if: inputs.target == 'production'
+        if: (inputs.target || 'staging') == 'production'
         run: |
           for v in PUBLIC_SHOP_URL PUBLIC_N8N_FORM_WEBHOOK PUBLIC_GCAL_EMBED; do
             eval "val=\${$v}"; [ -z "$val" ] && echo "::warning::$v is not set: its fallback is live (store: /store/ and contact; forms: mailto, library leads not recorded; booking: WhatsApp)"
@@ -81,13 +83,13 @@ jobs:
           if grep -v '^[[:space:]]*#' dist/.htaccess | grep -q 'shop.expertsddt.com'; then echo "::error::shop redirect left in .htaccess"; exit 1; fi
           grep -c 'R=302' dist/.htaccess
       - name: Shopify store is public and every linked product exists
-        if: inputs.target == 'production' && vars.PUBLIC_SHOP_URL != ''
+        if: (inputs.target || 'staging') == 'production' && vars.PUBLIC_SHOP_URL != ''
         run: npm run check:shop
         env:
           PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: site-${{ inputs.target }}
+          name: site-${{ inputs.target || 'staging' }}
           path: dist
           include-hidden-files: true   # .htaccess
           retention-days: 90
@@ -95,14 +97,14 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment: ${{ inputs.target }}   # production: required reviewers + environment secrets (FTP_*)
+    environment: ${{ inputs.target || 'staging' }}   # production: required reviewers + environment secrets (FTP_*)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: site-${{ inputs.target }}
+          name: site-${{ inputs.target || 'staging' }}
           path: dist
       - name: Upload to Hostinger over FTPS
         uses: SamKirkland/FTP-Deploy-Action@8e83cea8672e3fbcbb9fdafff34debf6ae4c5f65
@@ -114,7 +116,7 @@ jobs:
           protocol: ftps
           local-dir: ./dist/
           server-dir: ${{ vars.FTP_SERVER_DIR }}
-          dry-run: ${{ inputs.dry_run }}
+          dry-run: ${{ inputs.dry_run == true }}
           # Never touch what the content panel manages on the server (libraries zip + manifest, uploaded media)
           exclude: |
             **/.git*
@@ -129,4 +131,4 @@ jobs:
         run: node scripts/smoke.mjs
         env:
           SITE_URL: ${{ env.SITE_URL }}
-          EXPECT_NOINDEX: ${{ inputs.target == 'staging' && '1' || '' }}
+          EXPECT_NOINDEX: ${{ (inputs.target || 'staging') == 'staging' && '1' || '' }}
