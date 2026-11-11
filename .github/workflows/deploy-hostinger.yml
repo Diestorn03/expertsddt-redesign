@@ -123,6 +123,7 @@ jobs:
             downloads/libraries/**
             uploads/**
             portal/**
+            staging/**
       - name: Smoke test the live URL
         if: ${{ !inputs.dry_run }}
         run: node scripts/smoke.mjs
