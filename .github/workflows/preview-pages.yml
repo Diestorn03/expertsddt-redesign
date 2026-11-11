@@ -41,6 +41,7 @@ jobs:
           PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
           PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
           PUBLIC_WHATSAPP: ${{ vars.PUBLIC_WHATSAPP || '15106760418' }}
+          PUBLIC_NOINDEX: '1' # the preview is a copy of the live site: keep it out of search results
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
