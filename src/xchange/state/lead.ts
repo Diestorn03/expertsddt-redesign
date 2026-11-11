@@ -63,7 +63,8 @@ export async function submitLead(email: string, env: LeadEnv): Promise<LeadState
   try {
     const r = await (env.fetchFn ?? fetch)(env.hook, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // text/plain: a simple request, so the Google Apps Script endpoint needs no CORS preflight; the body is still JSON
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ source: LEAD_SOURCE, email, lang: env.lang, page: env.page }),
       keepalive: true,
     });

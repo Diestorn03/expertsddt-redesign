@@ -70,7 +70,7 @@ const hook = import.meta.env.PUBLIC_N8N_FORM_WEBHOOK || '';
       try {
         const hook = dlg.dataset.hook;
         if (hook) {
-          const r = await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'exocad-libraries', ...data, version: m.version, lang: dlg.dataset.lang, page: location.href }) });
+          const r = await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ source: 'exocad-libraries', ...data, version: m.version, lang: dlg.dataset.lang, page: location.href }) });
           if (!r.ok) throw new Error(String(r.status));
         } else console.warn('PUBLIC_N8N_FORM_WEBHOOK is not set: the lead was not recorded.');
         const url = download(m);
