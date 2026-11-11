@@ -2,10 +2,17 @@
 // Runs without Apache: `npm run test:redirects`. Rules with %{...} conditions (https/www) are skipped.
 import { readFileSync } from 'node:fs';
 
-const rules = readFileSync(new URL('../public/.htaccess', import.meta.url), 'utf8')
-  .split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('RewriteRule'))
-  .map((l) => { const [, pattern, sub, flags = ''] = l.match(/^RewriteRule\s+(\S+)\s+(\S+)(?:\s+\[([^\]]*)\])?/); return { pattern, sub, flags: flags.split(',') }; })
-  .filter((r) => !r.sub.includes('%{'));
+// A RewriteRule that follows RewriteCond lines (host guard, https, www) is conditional: not simulated here.
+let cond = false;
+const rules = [];
+for (const raw of readFileSync(new URL('../public/.htaccess', import.meta.url), 'utf8').split(/\r?\n/)) {
+  const l = raw.trim();
+  if (l.startsWith('RewriteCond')) { cond = true; continue; }
+  if (!l.startsWith('RewriteRule')) continue;
+  const skip = cond; cond = false;
+  const [, pattern, sub, flags = ''] = l.match(/^RewriteRule\s+(\S+)\s+(\S+)(?:\s+\[([^\]]*)\])?/);
+  if (!skip && !sub.includes('%{')) rules.push({ pattern, sub, flags: flags.split(',') });
+}
 
 function resolve(path) { // path without the leading slash, like Apache in a per-directory context
   for (const r of rules) {

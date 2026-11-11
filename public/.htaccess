@@ -4,15 +4,23 @@
 Options -Indexes
 ErrorDocument 404 /404.html
 ErrorDocument 410 /404.html
-DirectoryIndex index.html
+DirectoryIndex index.html index.php
+
+# The client portal lives in public_html/portal (portal.expertsddt.com) and inherits this file: every rule below applies
+# to expertsddt.com only (DDT_SITE), so the portal keeps its own redirects, caching and security headers.
+SetEnvIf Host "^(www\.|staging\.)?expertsddt\.com$" DDT_SITE
 
 <IfModule mod_rewrite.c>
 RewriteEngine On
 
+# Any other host (portal.expertsddt.com, staging): not this site's rules
+RewriteCond %{HTTP_HOST} !^(www\.|staging\.)?expertsddt\.com$ [NC]
+RewriteRule ^ - [L]
+
 # ---- HTTPS + canonical host (no www) ---------------------------------------
 RewriteCond %{HTTPS} off
 RewriteCond %{HTTP:X-Forwarded-Proto} !https
-RewriteRule ^ https://expertsddt.com%{REQUEST_URI} [L,R=301]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 RewriteCond %{HTTP_HOST} ^www\. [NC]
 RewriteRule ^ https://expertsddt.com%{REQUEST_URI} [L,R=301]
 
@@ -79,26 +87,26 @@ ExpiresByType application/xml "access plus 1 hour"
 <IfModule mod_headers.c>
 # Images, video, fonts, JS and CSS: one day (the content panel may replace a file under the same name)
 <FilesMatch "\.(js|css|woff2?|webp|png|jpg|jpeg|svg|mp4|ico)$">
-Header set Cache-Control "public, max-age=86400"
+Header set Cache-Control "public, max-age=86400" env=DDT_SITE
 </FilesMatch>
 # Only /_astro/ files carry a content hash in their name, so those can be cached for a year
 Header set Cache-Control "public, max-age=31536000, immutable" env=IS_ASTRO
 <FilesMatch "\.(html|xml|txt)$">
-Header set Cache-Control "no-cache"
+Header set Cache-Control "no-cache" env=DDT_SITE
 </FilesMatch>
 # Downloads may be replaced under the same name (guide PDF): revalidate
 <FilesMatch "\.(pdf|zip)$">
-Header set Cache-Control "no-cache"
+Header set Cache-Control "no-cache" env=DDT_SITE
 </FilesMatch>
 
 # ---- Security headers --------------------------------------------------------
-Header always set X-Content-Type-Options "nosniff"
-Header always set X-Frame-Options "SAMEORIGIN"
-Header always set Referrer-Policy "strict-origin-when-cross-origin"
-Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-Header always set Strict-Transport-Security "max-age=31536000"
-Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+Header always set X-Content-Type-Options "nosniff" env=DDT_SITE
+Header always set X-Frame-Options "SAMEORIGIN" env=DDT_SITE
+Header always set Referrer-Policy "strict-origin-when-cross-origin" env=DDT_SITE
+Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" env=DDT_SITE
+Header always set Strict-Transport-Security "max-age=31536000" env=DDT_SITE
+Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups" env=DDT_SITE
 # Inline scripts/styles are used by the theme bootstrap and analytics, so 'unsafe-inline' stays until they are hashed.
 # Everything else is an allow-list: tighten connect-src with the real n8n / Apps Script hosts before launch.
-Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data:; img-src 'self' data: https://www.google-analytics.com https://*.googletagmanager.com; media-src 'self'; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://n8n.wigoqd.easypanel.host https://script.google.com https://script.googleusercontent.com; frame-src https://calendar.google.com https://www.youtube-nocookie.com; object-src 'none'; base-uri 'self'; form-action 'self' https://script.google.com; frame-ancestors 'self'; upgrade-insecure-requests"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data:; img-src 'self' data: https://www.google-analytics.com https://*.googletagmanager.com; media-src 'self'; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://n8n.wigoqd.easypanel.host https://script.google.com https://script.googleusercontent.com; frame-src https://calendar.google.com https://www.youtube-nocookie.com; object-src 'none'; base-uri 'self'; form-action 'self' https://script.google.com; frame-ancestors 'self'; upgrade-insecure-requests" env=DDT_SITE
 </IfModule>
