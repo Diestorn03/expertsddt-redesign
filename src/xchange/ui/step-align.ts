@@ -59,6 +59,10 @@ export class AlignStep {
   private alignedResult: AlignmentResult | null = null;
   private mapShown = false;
   guided: Guided | null = null;
+  /** Once aligned, the hand controls (drag, pad, move to jaw) are locked until the box is ticked, so nothing moves by accident. */
+  private unlocked = false;
+  private hadAlignment = false;
+  locked(): boolean { return !!this.app.s.alignment && !this.unlocked; }
   private exportUrl: string | null = null;
   private exportLine = '';
   private resultKey: unknown = null;
@@ -89,6 +93,11 @@ export class AlignStep {
     radiogroup(q(this.pane4, '[data-surf-group]'), (b) => this.setSurfaces(b.dataset.surf as 'replacement' | 'capture'), signal);
     for (const b of qa<HTMLButtonElement>(this.pane4, '[data-gp]')) b.addEventListener('click', () => this.guidedAction(b.dataset.gp!), { signal });
     q(this.pane4, '[data-manual="jaw"]').addEventListener('click', () => this.moveToJaw(), { signal });
+    q<HTMLInputElement>(this.pane4, '[data-manual-unlock]').addEventListener('change', (e) => {
+      this.unlocked = (e.target as HTMLInputElement).checked;
+      this.renderAlign();
+      this.app.stage?.update();
+    }, { signal });
     q(this.pane4, '[data-manual="undo"]').addEventListener('click', () => this.undo(), { signal });
     q(this.pane4, '[data-manual="reset"]').addEventListener('click', () => this.reset(), { signal });
     const exportBtn = q<HTMLButtonElement>(this.pane4, '[data-export]');
@@ -109,7 +118,7 @@ export class AlignStep {
   mode(): ControlMode {
     if (this.guided) return 'guided';
     if (this.app.stage?.measuring) return 'measure';
-    return this.app.shown === 4 && this.app.s.jaw ? 'set' : 'camera';
+    return this.app.shown === 4 && this.app.s.jaw && !this.locked() ? 'set' : 'camera';
   }
 
   controlCallbacks(): ControlCallbacks {
@@ -356,7 +365,7 @@ export class AlignStep {
   /** Adjust pad: 30° / 1 mm per click, 5° / 0.1 mm with Shift, in screen axes about the set's center. */
   pad(op: string, dir: number, shift: boolean): void {
     const v = this.app.viewer;
-    if (!v || !this.app.s.jaw) return;
+    if (!v || !this.app.s.jaw || this.locked()) return;
     v.finishPose(); // a quick second click starts from the committed pose, not from the in-between one
     const pose = v.assembly.matrix.clone();
     const pivot = v.setCenter();
@@ -378,7 +387,7 @@ export class AlignStep {
   private moveToJaw(): void {
     const v = this.app.viewer;
     const jaw = v?.jawCenter();
-    if (!v || !jaw) return;
+    if (!v || !jaw || this.locked()) return;
     v.finishPose();
     this.commitPose(toEngine(translatePose(v.assembly.matrix.clone(), jaw.sub(v.setCenter()))));
   }
@@ -648,6 +657,10 @@ export class AlignStep {
     const app = this.app, s = app.s, c = app.c;
     const jaw = s.jaw;
     q(this.pane3, '[data-drop="jaw"]').hidden = !!jaw;
+    if (s.arch) { // "Import the upper jaw scan": not to be mistaken for the implant position file of step 1
+      q(this.pane3, '.xch__h').textContent = c.s3.titleArch[s.arch];
+      q(this.pane3, '[data-drop="jaw"] .xch__droptitle').textContent = c.s3.dropArch[s.arch];
+    }
     q(this.pane3, '[data-sample-jaw]').hidden = !s.sample || !!jaw;
     q(this.pane3, '[data-jawcard]').hidden = !jaw;
     q(this.pane3, '[data-next="3"]').hidden = !jaw && !s.jawSkipped;
@@ -691,8 +704,14 @@ export class AlignStep {
     }) : '';
     for (const b of qa(this.pane4, '[data-manual]')) {
       const kind = b.dataset.manual;
-      b.setAttribute('aria-disabled', String(kind === 'undo' ? !s.undo.length : kind === 'reset' ? !s.lastAlignedPose : false));
+      b.setAttribute('aria-disabled', String(kind === 'undo' ? !s.undo.length : kind === 'reset' ? !s.lastAlignedPose : kind === 'jaw' ? this.locked() : false));
     }
+    // a new alignment locks the hand controls again
+    if (s.alignment && !this.hadAlignment) this.unlocked = false;
+    this.hadAlignment = !!s.alignment;
+    q(this.pane4, '[data-unlock-wrap]').hidden = !s.alignment;
+    q(this.pane4, '[data-unlock-hint]').hidden = !s.alignment || this.unlocked;
+    q<HTMLInputElement>(this.pane4, '[data-manual-unlock]').checked = this.unlocked;
     this.renderResult();
     if (g) this.renderGuided(g);
   }
@@ -706,6 +725,13 @@ export class AlignStep {
     this.resultKey = key;
     box.hidden = !r && !s.measuring;
     if (!r && !s.measuring) { box.replaceChildren(); return; }
+    if (s.measuring && r && box.childElementCount > 1) { // the card stays at its height, dimmed, until the new numbers arrive
+      box.classList.add('is-measuring');
+      box.setAttribute('aria-busy', 'true');
+      return;
+    }
+    box.classList.remove('is-measuring');
+    box.removeAttribute('aria-busy');
     if (s.measuring || !r) {
       box.classList.remove('is-attempt');
       box.replaceChildren(app.chip('', c.al.measuring, 'info'));

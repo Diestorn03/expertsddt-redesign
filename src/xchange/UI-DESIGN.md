@@ -21,7 +21,7 @@ Contents: 0 Read me first · 1 Where it lives · 2 Page structure · 3 Site inte
   prototype screens `work/sheets/v01_*`, `v02_*`. The prototype is a behavior reference only: no code, data or copy
   is reused.
 - Site: `src/styles/global.css`, `src/layouts/Base.astro`, `src/scripts/motion.js`, `src/components/{LibraryDownload,
-  Cta,Analytics,Apex}.astro`, `src/pages/{index,services,exocad-libraries,contact}.astro`, `src/i18n/*`,
+  Cta,Analytics,WhatsAppFloat}.astro`, `src/pages/{index,services,exocad-libraries,contact}.astro`, `src/i18n/*`,
   `public/.htaccess`, `docs/n8n/web-leads.workflow.json`.
 
 ### 0.2 Rules for the implementer
@@ -288,7 +288,7 @@ the same module instance motion.js uses) or CSS transitions, with this vocabular
 | Guided point pin | placed | `scale 0 → 1` | .45 s `back.out(1.6)` |
 | Distance point, value pill | placed (the pill with the second point) | `scale 0 → 1` through `--pop` | .45 s `back.out(1.6)` |
 | Current guided target | waiting | label ring pulse (the `.fab__dot` `pulse` keyframes) | 2.2 s infinite |
-| Floats (WhatsApp, Apex) | stage ≥ 50 % in view | `html.xch-in-view .floats { opacity:0; transform: translateY(16px); pointer-events:none }` (they would cover the stage's bottom-right corner; they come back on the help section) | CSS .35 s `var(--ease-out)` |
+| Floats (WhatsApp) | stage ≥ 50 % in view | `html.xch-in-view .floats { opacity:0; transform: translateY(16px); pointer-events:none }` (they would cover the stage's bottom-right corner; they come back on the help section) | CSS .35 s `var(--ease-out)` |
 
 GSAP eases map to site tokens: `expo.out` ≈ `--ease-out` (`cubic-bezier(.16,1,.3,1)`), `power3.inOut` ≈ the loader
 curve; `power3.out` and `back.out(1.6)` are what motion.js uses for reveals. No CustomEase. **No ScrollTrigger**:
@@ -386,7 +386,7 @@ document.addEventListener('astro:before-swap', () => { app?.dispose(); app = nul
 ### 3.8 CSP and privacy guardrails
 
 - Today's header: `script-src 'self' 'unsafe-inline' …`, no `worker-src` (falls back to `script-src`), `connect-src
-  'self' … https://n8n.wigoqd.easypanel.host …`, `img-src 'self' data: …`. The tool must keep working after
+  'self' … …`, `img-src 'self' data: …`. The tool must keep working after
   `'unsafe-inline'` is removed:
   - no inline script, no `eval`/`new Function`, no CDN; workers are `new Worker(new URL('./x.worker.ts',
     import.meta.url), { type: 'module' })`, emitted under `/_astro/` (`'self'`), never `blob:` workers;

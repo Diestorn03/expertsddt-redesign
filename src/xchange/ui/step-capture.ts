@@ -26,7 +26,11 @@ export class CaptureStep {
   constructor(private readonly app: App) {
     const { root, signal } = app;
     this.pane = q(root, '[data-pane="1"]');
-    radiogroup(q(this.pane, '[data-arch-group]'), (b) => this.setArch(b.dataset.arch as Arch), signal);
+    radiogroup(q(this.pane, '[data-arch-group]'), (b) => void this.chooseArch(b.dataset.arch as Arch, b), signal);
+    // the arch cards are the file pickers: drop a file on one and it is that arch's file
+    for (const b of this.pane.querySelectorAll<HTMLButtonElement>('[data-arch]')) {
+      dropZone(b, (files) => { this.setArch(b.dataset.arch as Arch); void this.importFiles(files, b); }, signal);
+    }
     for (const b of this.pane.querySelectorAll<HTMLButtonElement>('[data-pick="capture"]')) {
       b.addEventListener('click', async () => { const files = await pickFiles(ACCEPT.capture, true); if (files.length) void this.importFiles(files, b); }, { signal });
     }
@@ -42,6 +46,25 @@ export class CaptureStep {
   setArch(arch: Arch): void {
     this.app.store.set({ arch });
     if (this.app.viewer) this.app.viewer.arch = arch;
+    this.maybeAdvance();
+  }
+
+  /** A click on an arch card: with no file yet it opens the picker for that arch; with a file it answers "upper or lower?". */
+  private async chooseArch(arch: Arch, opener: Element): Promise<void> {
+    this.setArch(arch);
+    if (this.app.s.sources.length) return;
+    const files = await pickFiles(ACCEPT.capture, true);
+    if (files.length) void this.importFiles(files, opener);
+  }
+
+  /** A clean capture with its arch known goes straight to step 2; anything that needs a look keeps the user here (UI-DESIGN §5.3). */
+  private maybeAdvance(): void {
+    const app = this.app;
+    app.later(() => {
+      const s = app.s;
+      if (app.shown !== 1 || step1Blocker(s) !== null || this.warnings.length || this.mixed || s.unresolved.length) return;
+      app.go(2);
+    }, 600);
   }
 
   /** Reads and parses every file in the jobs worker; an error leaves the case untouched. */
@@ -116,6 +139,7 @@ export class CaptureStep {
     app.viewer?.view('occlusal', true);
     if (r.sites.length) app.say.say(app.plural(app.c.say.captureOk, r.sites.length));
     this.rowsKey = '';
+    this.maybeAdvance();
   }
 
   /** Mesh-only capture: fits the picked capture scan body to every body, at once. */
@@ -181,6 +205,9 @@ export class CaptureStep {
     const app = this.app, s = app.s, c = app.c;
     setChecked(q(this.pane, '[data-arch-group]'), s.arch, 'data-arch');
     const hasCapture = s.sources.length > 0;
+    const asking = hasCapture && !s.arch; // a file came in before the arch was picked
+    q(this.pane, '[data-arch-label]').textContent = asking ? c.s1.archAsk : c.s1.arch;
+    q(this.pane, '[data-arch-group]').parentElement?.classList.toggle('is-asking', asking);
     q(this.pane, '[data-drop="capture"]').hidden = hasCapture;
     q(this.pane, '[data-sources]').hidden = !hasCapture;
     fillKeep(q(this.pane, '[data-list="sources"]'), s.sources.map((src) => {

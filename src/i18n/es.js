@@ -14,7 +14,7 @@ export default {
     coursesDesc: 'Capacitación online de Exocad por Fernando Polanco: aprende las librerías de dientes y encía virtual y domina el flujo digital a tu ritmo.',
     storeDesc: 'Plantillas, librerías de Exocad, cursos y pilares de cicatrización de Fernando Polanco. Pago seguro en nuestra tienda Shopify.',
     librariesDesc: 'Librerías de implantes ExpertsDDT gratis para Exocad: componentes listos para fabricante, geometrías de scan body y STL de fotogrametría.',
-    contactDesc: 'Reserva una consulta de una hora con Experts DDT, escríbenos o chatea por WhatsApp. Online o presencial en Florida.',
+    contactDesc: 'Reserva una consulta de una hora con Experts DDT, escríbenos o chatea por WhatsApp. Online o presencial en California.',
     termsDesc: 'Términos y condiciones de venta de equipos y productos físicos de Fernando Polanco DDT LLC.',
     refundDesc: 'Política de devoluciones, reembolsos y cancelación de cursos de Experts DDT.',
     privacyDesc: 'Cómo Fernando Polanco DDT LLC recopila, usa y protege la información personal en expertsddt.com.',
@@ -26,7 +26,7 @@ export default {
     home: 'Inicio', about: 'Nosotros', services: 'Servicios', courses: 'Cursos online', store: 'Tienda', libraries: 'Librerías de implantes',
     booking: 'Reservas', book: 'Reservar', cart: 'Carrito', portal: 'Doctor Portal', contact: 'Contacto y reservas',
     menu: 'Abrir menú', theme: 'Alternar modo oscuro', toDark: 'Modo oscuro', toLight: 'Modo claro', langSwitch: 'English', langCode: 'EN',
-    whatsapp: 'Chatear por WhatsApp', apex: 'Pregúntale a Apex', apexLabel: 'Chatea con Apex, nuestro concierge digital',
+    whatsapp: 'Chatear por WhatsApp',
   },
   hero: {
     eyebrow: '✦ Fernando Polanco DDT · desde 2019',
@@ -80,7 +80,7 @@ export default {
   stats: {
     keywords: ['Exocad', 'All-on-X', 'Escaneo facial', 'Escaneo intraoral', 'Impresión 3D', 'Fotogrametría', 'CBCT', 'Zirconia', 'Guías quirúrgicas', 'PMMA', 'Diseño de sonrisa'],
     items: [
-      { v: 2019, label: 'Fundada en Florida, EE. UU.' },
+      { v: 2019, label: 'Fundada en California, EE. UU.' },
       { v: 13, suffix: '+', label: 'Años de colaboración diaria con dentistas y pacientes' },
       { v: 10, prefix: '<', suffix: 's', label: 'Para capturar un escaneo facial, de mordida o de prótesis en alta resolución' },
       { v: 80, suffix: '%', label: 'De tiempo de sillón ahorrado con la tecnología de escaneo facial 5.0' },
@@ -113,14 +113,14 @@ export default {
   cta: {
     eyebrow: 'Conoce más sobre nosotros',
     title: '¿Listo para ser <span class="cta__accent">100% digital?</span>',
-    text: 'Reserva una consulta de 1 hora, habla con nuestro equipo o pídele a Apex, nuestro concierge digital, que te guíe por servicios y flujos de trabajo.',
+    text: 'Reserva una consulta de 1 hora, habla con nuestro equipo o escríbenos por WhatsApp.',
     book: 'Reserva tu sesión',
   },
   footer: {
     blurb: 'Fernando Polanco DDT LLC. Servicios de diseño de alto nivel, implementaciones de odontología digital, capacitación práctica y soporte clínico y técnico integral desde 2019.',
     navigate: 'Navegación', portal: 'Doctor Portal', contact: 'Conoce más sobre nosotros',
     signup: 'Regístrate como doctor', login: 'Iniciar sesión', libraries: 'Librerías gratis para Exocad', xchange: 'DDT Xchange (herramienta gratis)', support: 'Soporte técnico',
-    location: 'Florida, Estados Unidos', languages: 'Disponible en inglés y español',
+    location: 'California, Estados Unidos', languages: 'Disponible en inglés y español',
     legal: { terms: 'Términos y condiciones', refund: 'Política de reembolso', privacy: 'Política de privacidad' },
     rights: 'Todos los derechos reservados.',
   },
@@ -142,7 +142,7 @@ export default {
         { id: 'manufacturing', n: '02', t: 'Impresión 3D y manufactura final', p: 'Producción de arcada completa mediante impresión 3D, PMMA y zirconia final. Creación de modelos o prótesis de arcada completa con tecnología de impresión 3D.', cta: 'Agenda una consulta', tags: ['Impresión 3D', 'PMMA', 'Zirconia', 'Modelos'] },
         { id: 'scanning', n: '03', t: 'Tecnología de vanguardia en escaneo facial 3D', p: 'Incorporación de tecnología avanzada de escaneo facial para mayor precisión en el diagnóstico y la planificación. Captura escaneos faciales, de mordida y de prótesis en menos de 10 segundos y ahorra hasta un 80% del tiempo de sillón.', cta: 'Reserva tu sesión ahora', tags: ['Escaneo facial 5.0', 'Fotogrametría', 'CBCT'] },
         { id: 'training', n: '04', t: 'Capacitación especializada', p: 'Capacitación integral en el uso de tecnología de escaneo intraoral y facial, así como Exocad, impresión 3D, fresado y acabado; esencial para lograr tiempos de entrega rápidos.', cta: 'Agenda una consulta', tags: ['Escaneo intraoral', 'Exocad', 'Fresado', 'Acabado'] },
-        { id: 'support', n: '05', t: 'Visitas de consultoría y soporte', p: 'Ofrecemos visitas locales a consultorios en Florida para agilizar el proceso de tratamiento y la atención al paciente. También recibirás soporte experto especializado exactamente cuando lo necesites.', cta: 'Reserva tu sesión ahora', tags: ['Visitas en sitio', 'Florida', 'Soporte bajo demanda'] },
+        { id: 'support', n: '05', t: 'Visitas de consultoría y soporte', p: 'Ofrecemos visitas locales a consultorios en California para agilizar el proceso de tratamiento y la atención al paciente. También recibirás soporte experto especializado exactamente cuando lo necesites.', cta: 'Reserva tu sesión ahora', tags: ['Visitas en sitio', 'California', 'Soporte bajo demanda'] },
       ],
     },
     courses: {
@@ -195,11 +195,11 @@ export default {
     contact: {
       eyebrow: 'Contacto', title: 'Hablemos de tu flujo de trabajo.',
       lead: 'Reserva una consulta, solicita soporte o simplemente saluda. Respondemos rápido.',
-      bookingPill: 'Reservas', bookingTitle: 'Consulta', duration: '1 hora', mode: 'Online o presencial en Florida',
+      bookingPill: 'Reservas', bookingTitle: 'Consulta', duration: '1 hora', mode: 'Online o presencial en California',
       bookingText: 'Elige un horario en nuestro calendario y te confirmamos el mismo día. La zona horaria se detecta automáticamente.',
       bookingCta: 'Reserva por WhatsApp',
       calendarNote: 'Dinos qué día y hora te convienen por WhatsApp, teléfono o el formulario y lo confirmamos en el día.',
-      channels: { phone: 'Teléfono', email: 'Correo', portal: 'Doctor Portal', concierge: 'Concierge', conciergeText: 'Apex, nuestro concierge digital, te guía por servicios y flujos de trabajo 24/7.', whatsapp: 'WhatsApp' },
+      channels: { phone: 'Teléfono', email: 'Correo', portal: 'Doctor Portal', whatsapp: 'WhatsApp' },
       form: { title: 'Envíanos un mensaje', name: 'Nombre', email: 'Correo electrónico', clinic: 'Clínica o laboratorio', message: '¿Cómo podemos ayudarte?', send: 'Enviar mensaje', sending: 'Enviando…', sent: '¡Gracias! Te responderemos en breve.', error: 'Algo salió mal. Por favor escríbenos directamente por correo.', note: 'Respondemos en un día hábil.' },
     },
   },

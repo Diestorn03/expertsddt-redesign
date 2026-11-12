@@ -96,7 +96,7 @@ function viewerVsStl(v: Viewer, siteId: string, stl: Uint8Array, firstTriangle =
 function padStep(v: Viewer, start: Mat4): { step: AlignStep; committed: Mat4[] } {
   const committed: Mat4[] = [];
   const s = { jaw: demo.jaw, assembly: start };
-  const fake = { app: { viewer: v, s }, commitPose: (m: Mat4): void => { committed.push(m); s.assembly = m; v.setAssembly(m, 'step'); } };
+  const fake = { app: { viewer: v, s }, locked: (): boolean => false, commitPose: (m: Mat4): void => { committed.push(m); s.assembly = m; v.setAssembly(m, 'step'); } };
   return { step: fake as unknown as AlignStep, committed };
 }
 

@@ -55,7 +55,6 @@ jobs:
           # Public settings, set under Settings > Secrets and variables > Actions > Variables
           PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
           PUBLIC_N8N_FORM_WEBHOOK: ${{ vars.PUBLIC_N8N_FORM_WEBHOOK }}
-          PUBLIC_N8N_CHAT_WEBHOOK: ${{ vars.PUBLIC_N8N_CHAT_WEBHOOK }}
           PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
           PUBLIC_GA_ID: ${{ vars.PUBLIC_GA_ID }}
           PUBLIC_SHOW_REVIEWS: ${{ vars.PUBLIC_SHOW_REVIEWS }}

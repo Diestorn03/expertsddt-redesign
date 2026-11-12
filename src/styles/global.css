@@ -208,7 +208,7 @@ a.sr-only:focus-visible { position: fixed; top: .75rem; left: .75rem; width: aut
 .socials a { width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); display: grid; place-items: center; transition: background .3s, transform .3s var(--ease-out), border-color .3s; }
 .socials a:hover { background: var(--blue); color: #fff; transform: translateY(-3px); border-color: var(--blue); }
 
-/* ---------- floating actions (WhatsApp + Apex) ---------- */
+/* ---------- floating actions (WhatsApp) ---------- */
 .floats { position: fixed; right: 1rem; bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 80; display: grid; gap: .6rem; justify-items: end; }
 .wa, .fab {
   display: inline-flex; align-items: center; gap: .55rem; padding: .5rem 1rem .5rem .6rem;

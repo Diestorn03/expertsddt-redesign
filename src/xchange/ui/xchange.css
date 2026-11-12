@@ -488,3 +488,20 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
   .xch__stage.is-hold::after { transition: none; }
   .xch__stage.is-hold:not(.is-held)::after { opacity: 0; }
 }
+
+/* ---------- Fernando's review (2026-11-11) ---------- */
+/* a wider workspace: the stage is where the eyes are */
+.xch__wrap { width: min(1640px, 100% - 2rem); }
+/* the arch cards are the file pickers: click to choose, or drop the file on them */
+.xch__archcard small { font-size: .72rem; font-weight: 500; color: var(--xch-quiet, var(--muted)); text-align: center; text-wrap: balance; }
+.xch__archcard.is-over { outline: 2px dashed var(--blue); outline-offset: 2px; }
+.xch__group.is-asking .xch__archcard { animation: xch-ask 1.4s var(--ease-out) 2; }
+@keyframes xch-ask { 50% { box-shadow: 0 0 0 4px color-mix(in oklab, var(--blue) 35%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .xch__group.is-asking .xch__archcard { animation: none; } }
+/* the result card keeps its height while a new measurement runs, so the page does not jump */
+.xch__result.is-measuring { opacity: .5; transition: opacity .2s var(--ease-out); }
+/* once aligned, the manual controls are locked until the user unlocks them */
+.xch__check { display: flex; align-items: center; gap: .6rem; min-height: 44px; font-weight: 600; cursor: pointer; }
+.xch__check input { width: 20px; height: 20px; accent-color: var(--blue); }
+[data-pad][inert] { opacity: .4; filter: grayscale(.6); }
+.xch__block[data-sec="manual"] [aria-disabled="true"] { opacity: .45; pointer-events: none; }

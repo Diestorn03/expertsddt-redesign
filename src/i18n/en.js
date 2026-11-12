@@ -15,7 +15,7 @@ export default {
     coursesDesc: 'Online Exocad training by Fernando Polanco: learn the teeth and virtual gingiva libraries and master the digital workflow at your own pace.',
     storeDesc: 'Templates, Exocad libraries, courses and healing abutments by Fernando Polanco. Secure checkout in our Shopify store.',
     librariesDesc: 'Free ExpertsDDT implant libraries for Exocad: manufacturer-ready components, scan-body geometries and photogrammetry STLs.',
-    contactDesc: 'Book a one-hour consultation with Experts DDT, send us a message or chat on WhatsApp. Online or on-site in Florida.',
+    contactDesc: 'Book a one-hour consultation with Experts DDT, send us a message or chat on WhatsApp. Online or on-site in California.',
     termsDesc: 'Terms and conditions of sale of equipment and physical products by Fernando Polanco DDT LLC.',
     refundDesc: 'Returns, refunds and course cancellation policy for Experts DDT products and services.',
     privacyDesc: 'How Fernando Polanco DDT LLC collects, uses and protects personal information on expertsddt.com.',
@@ -27,7 +27,7 @@ export default {
     home: 'Home', about: 'About us', services: 'Services', courses: 'Online courses', store: 'Store', libraries: 'Implant libraries',
     booking: 'Booking', book: 'Book', cart: 'Cart', portal: 'Doctor portal', contact: 'Contact & booking',
     menu: 'Open menu', theme: 'Toggle dark mode', toDark: 'Dark mode', toLight: 'Light mode', langSwitch: 'Español', langCode: 'ES',
-    whatsapp: 'Chat on WhatsApp', apex: 'Ask Apex', apexLabel: 'Chat with Apex, our digital concierge',
+    whatsapp: 'Chat on WhatsApp',
   },
   hero: {
     eyebrow: '✦ Fernando Polanco DDT · since 2019',
@@ -81,7 +81,7 @@ export default {
   stats: {
     keywords: ['Exocad', 'All-on-X', 'Facial scanning', 'Intraoral scanning', '3D printing', 'Photogrammetry', 'CBCT', 'Zirconia', 'Surgical guides', 'PMMA', 'Smile design'],
     items: [
-      { v: 2019, label: 'Founded in Florida, USA' },
+      { v: 2019, label: 'Founded in California, USA' },
       { v: 13, suffix: '+', label: 'Years of daily collaboration with dentists and patients' },
       { v: 10, prefix: '<', suffix: 's', label: 'To capture a high-resolution facial, bite or denture scan' },
       { v: 80, suffix: '%', label: 'Chair time saved with 5.0 facial scanning technology' },
@@ -114,14 +114,14 @@ export default {
   cta: {
     eyebrow: 'Get to know more about us',
     title: 'Ready to go <span class="cta__accent">fully digital?</span>',
-    text: 'Book a 1-hour consultation, talk to our team, or ask Apex, our digital concierge, to guide you through services and workflows.',
+    text: 'Book a 1-hour consultation, talk to our team, or chat with us on WhatsApp.',
     book: 'Book your session',
   },
   footer: {
     blurb: 'Fernando Polanco DDT LLC. High-level design services, digital dentistry implementations, hands-on training and comprehensive clinical & technical support since 2019.',
     navigate: 'Navigate', portal: 'Doctor portal', contact: 'Get to know more about us',
     signup: 'Sign up as doctor', login: 'Log in', libraries: 'Free Exocad libraries', xchange: 'DDT Xchange (free tool)', support: 'Technical support',
-    location: 'Florida, United States', languages: 'Available in English and Spanish',
+    location: 'California, United States', languages: 'Available in English and Spanish',
     legal: { terms: 'Terms & conditions', refund: 'Refund policy', privacy: 'Privacy policy' },
     rights: 'All rights reserved.',
   },
@@ -143,7 +143,7 @@ export default {
         { id: 'manufacturing', n: '02', t: '3D printing and final manufacturing', p: 'Full arch production via 3D printing, PMMA, and final Zirconia. Creation of models or full-arch prostheses using 3D printing technology.', cta: 'Schedule a consultation', tags: ['3D printing', 'PMMA', 'Zirconia', 'Models'] },
         { id: 'scanning', n: '03', t: 'Cutting-edge 3D facial scanning technology', p: 'Incorporation of advanced facial scanning technology for higher precision in diagnosis and planning. Capture facial, bite and denture scans in under 10 seconds and save up to 80% of chair time.', cta: 'Book your session now', tags: ['Facial scanning 5.0', 'Photogrammetry', 'CBCT'] },
         { id: 'training', n: '04', t: 'Specialized training', p: 'Comprehensive training on the use of intraoral and facial scanning technology, as well as Exocad, 3D printing, milling, and finishing; essential for achieving fast turnaround times.', cta: 'Schedule a consultation', tags: ['Intraoral scanning', 'Exocad', 'Milling', 'Finishing'] },
-        { id: 'support', n: '05', t: 'Consulting visits & support', p: 'We offer local visits to offices in Florida to streamline the process of treatment and patient care. You will also receive specialized expert support exactly when you need it.', cta: 'Book your session now', tags: ['On-site visits', 'Florida', 'On-demand support'] },
+        { id: 'support', n: '05', t: 'Consulting visits & support', p: 'We offer local visits to offices in California to streamline the process of treatment and patient care. You will also receive specialized expert support exactly when you need it.', cta: 'Book your session now', tags: ['On-site visits', 'California', 'On-demand support'] },
       ],
     },
     courses: {
@@ -196,11 +196,11 @@ export default {
     contact: {
       eyebrow: 'Contact', title: 'Let’s talk about your workflow.',
       lead: 'Book a consultation, request support or just say hello. We answer fast.',
-      bookingPill: 'Booking', bookingTitle: 'Consultation', duration: '1 hour', mode: 'Online or on-site in Florida',
+      bookingPill: 'Booking', bookingTitle: 'Consultation', duration: '1 hour', mode: 'Online or on-site in California',
       bookingText: 'Choose a slot in our calendar and we’ll confirm within the day. Time zones are detected automatically.',
       bookingCta: 'Book on WhatsApp',
       calendarNote: 'Tell us the day and time that suit you by WhatsApp, phone or the form below and we will confirm within the day.',
-      channels: { phone: 'Phone', email: 'Email', portal: 'Doctor portal', concierge: 'Concierge', conciergeText: 'Apex, our digital concierge, guides you through services and workflows 24/7.', whatsapp: 'WhatsApp' },
+      channels: { phone: 'Phone', email: 'Email', portal: 'Doctor portal', whatsapp: 'WhatsApp' },
       form: { title: 'Send a message', name: 'Name', email: 'Email', clinic: 'Clinic or lab', message: 'How can we help?', send: 'Send message', sending: 'Sending…', sent: 'Thank you! We’ll get back to you shortly.', error: 'Something went wrong. Please email us directly.', note: 'We reply within one business day.' },
     },
   },

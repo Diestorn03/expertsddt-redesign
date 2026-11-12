@@ -256,6 +256,7 @@ export class Stage {
     const any = this.hasContent;
     q(this.el, '[data-empty]').hidden = any && !!app.viewer;
     q(this.el, '[data-pad]').hidden = !(app.shown === 4 && s.jaw && !app.alignStep?.guided && !this.measure);
+    q<HTMLElement>(this.el, '[data-pad]').inert = !!app.alignStep?.locked?.(); // locked once aligned (step-align.ts)
     // nothing shown: nothing to cut or measure (as the map and the transparency wait for a measurement and a jaw)
     q(this.el, '[data-section-btn]').setAttribute('aria-disabled', String(!any));
     // no distance during guided points: the button says why

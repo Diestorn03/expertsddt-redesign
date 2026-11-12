@@ -92,7 +92,7 @@ export function mount(root: HTMLElement): Mounted {
   }, { rootMargin: '100% 0px' });
   near.observe(root);
   observers.push(near);
-  // the floats (WhatsApp, Apex) would cover the stage's corner while it fills the view; in the one-column layouts
+  // the floats (WhatsApp) would cover the stage's corner while it fills the view; in the one-column layouts
   // (< 1180 px, zoomed laptops) they would cover panel controls, so there they hide while any of the tool shows
   const stage = root.querySelector('.xch__stage');
   const narrow = matchMedia('(max-width: 1179.98px)');

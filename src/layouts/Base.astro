@@ -13,7 +13,7 @@ import poppins800 from '@fontsource/poppins/files/poppins-latin-800-normal.woff2
 import 'lenis/dist/lenis.css';
 import { useI18n } from '../i18n/index.js';
 import Analytics from '../components/Analytics.astro';
-import Apex from '../components/Apex.astro';
+import WhatsAppFloat from '../components/WhatsAppFloat.astro';
 
 interface Props { title: string; description?: string; noindex?: boolean }
 const { t, lang, href, asset, alt, path, base } = useI18n(Astro);
@@ -216,7 +216,7 @@ const schema = {
 
     <!-- in <body>: its banner <div> inside <head> ended the head early and pushed the page preloads into the body -->
     <Analytics />
-    <Apex />
+    <WhatsAppFloat />
     <script src="../scripts/motion.js"></script>
   </body>
 </html>
