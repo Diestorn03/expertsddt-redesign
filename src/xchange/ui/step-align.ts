@@ -775,16 +775,21 @@ export class AlignStep {
       h('caption', '', { text: c.al.table.caption }),
       h('thead', '', {}, h('tr', '', {}, h('th', '', { scope: 'col', text: c.al.table.implant }), h('th', 'n', { scope: 'col', text: c.al.table.rms }), h('th', 'n', { scope: 'col', text: fmt(app.lang, c.al.table.within, { tol }) }), h('th', '', { scope: 'col', text: c.al.table.status }))),
       h('tbody', '', {}, ...rows)));
+    // the status and the three numbers are what is read at a glance; the rest waits in a disclosure (open when the fit needs a look)
+    const details = h('details', 'xch__what', {},
+      h('summary', '', { text: c.al.details }),
+      h('p', 'xch__small', { text: fmt(app.lang, c.al.visible, { pct: Math.round(r.visible * 100) }) }),
+      help,
+      h('p', 'xch__small', { text: `${c.al.method}: ${c.al.methods[r.method]}` }),
+      table);
+    details.open = status === 'weak' || status === 'failed';
     box.replaceChildren(...([
       h('div', 'xch__row', {}, chip),
       h('p', 'xch__small', { text: explain }),
       failed ? h('p', 'xch__label', { text: c.al.lastAttempt }) : null,
       metrics,
-      h('p', 'xch__small', { text: fmt(app.lang, c.al.visible, { pct: Math.round(r.visible * 100) }) }),
-      help,
-      h('p', 'xch__small', { text: `${c.al.method}: ${c.al.methods[r.method]}` }),
       flags.length ? h('ul', 'xch__flags', {}, ...flags) : null,
-      table,
+      details,
     ].filter(Boolean) as Node[]));
     app.motion.chip(chip);
     app.motion.rows(rows);

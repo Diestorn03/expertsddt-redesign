@@ -410,6 +410,7 @@ const en = {
     stage: { prepare: 'Preparing surfaces', coarse: 'Searching for the best position', fine: 'Refining', metrics: 'Measuring the fit' },
     progress: '{stage} · {pct} %',
     progressLabel: 'Alignment progress',
+    details: 'Details and per-implant table',
     measuring: 'Measuring…',
     status: { good: 'Good fit', acceptable: 'Acceptable', weak: 'Weak', ambiguous: 'Ambiguous', failed: 'No usable fit' },
     explain: {

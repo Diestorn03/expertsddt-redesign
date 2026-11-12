@@ -410,6 +410,7 @@ const es: Copy = {
     stage: { prepare: 'Preparando superficies', coarse: 'Buscando la mejor posición', fine: 'Afinando', metrics: 'Midiendo el ajuste' },
     progress: '{stage} · {pct} %',
     progressLabel: 'Progreso de la alineación',
+    details: 'Detalles y tabla por implante',
     measuring: 'Midiendo…',
     status: { good: 'Buen ajuste', acceptable: 'Aceptable', weak: 'Débil', ambiguous: 'Ambiguo', failed: 'Sin ajuste útil' },
     explain: {
