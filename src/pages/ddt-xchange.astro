@@ -69,12 +69,7 @@ const paths = (n: keyof typeof ICO): string => ICO[n].map((d) => (d[0] === '~' ?
 // views dial: Fit in the hub, six directions around it (screen up = Top, the depth diagonal = Front/Back); keys from VIEW_KEYS
 const keyOf = (p: string): string | undefined => Object.entries(VIEW_KEYS).find(([, v]) => v === p)?.[0];
 const tip = (p: string, name: string): string => (keyOf(p) ? fmt(L, c.view.tip, { name, key: keyOf(p)! }) : name);
-const dial = [['fit', c.view.fit], ['top', c.view.top], ['back', c.view.back], ['right', c.view.right], ['bottom', c.view.bottom], ['front', c.view.front], ['left', c.view.left]] as const;
-const pad = [
-  ['rotate', [['tiltForward', 'tiltForward', 'rx', -1], ['tiltBack', 'tiltBack', 'rx', 1], ['turnLeft', 'turnLeft', 'ry', -1], ['turnRight', 'turnRight', 'ry', 1], ['rollCcw', 'rollCcw', 'rz', 1], ['rollCw', 'rollCw', 'rz', -1]]],
-  ['move', [['up', 'up', 'ty', 1], ['down', 'down', 'ty', -1], ['left', 'moveLeft', 'tx', -1], ['right', 'moveRight', 'tx', 1]]],
-  ['flip', [['flipOver', 'flipOver', 'fx', 1], ['turnAround', 'turnAround', 'fy', 1]]],
-] as const;
+const dial = [['fit', c.view.fit], ['top', c.view.top], ['right', c.view.right], ['bottom', c.view.bottom], ['left', c.view.left]] as const;
 const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['parts', c.display.parts], ['capture', c.display.capture], ['labels', c.display.labels], ['map', c.display.map]] as const;
 ---
 <Base title={t.meta.xchange} description={t.meta.xchangeDesc}>
@@ -161,15 +156,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                     </button>
                   </div>
                 </div>
-                <div class="xch__drop" data-drop="capture">
-                  <i class="xch__dropicon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></i>
-                  <p class="xch__droptitle">{c.s1.drop}</p>
-                  <p class="xch__or">{c.s1.or}</p>
-                  <button type="button" class="btn btn--primary" data-pick="capture">{c.s1.choose} <span class="arrow">↑</span></button>
-                  <p class="xch__formats">{c.s1.formats}</p>
-                  <p class="note">{c.s1.excel}</p>
-                  <button type="button" class="xch__textbtn" data-xch-demo>{c.ws.demo}</button>
-                </div>
+                <p class="xch__formats" data-formats="1">{c.s1.drop} {c.s1.formats} {c.s1.excel}</p>
                 <div class="xch__busy" data-busy="1" hidden></div>
                 <div class="xch__sources" data-sources hidden>
                   <p class="xch__label">{c.s1.sources}</p>
@@ -214,20 +201,16 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <div class="xch__sub xch__library">
                   <div class="xch__libhead">
                     <div><p class="xch__subtitle">{c.lib.title}</p><p class="xch__small">{c.lib.where}</p></div>
-                    <div class="xch__menuwrap">
-                      <button type="button" class="xch__iconbtn" data-lib-menu aria-expanded="false" aria-controls="xch-libmenu" aria-label={c.lib.menu}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button>
-                      <div class="xch__menu" id="xch-libmenu" hidden>
-                        <button type="button" data-lib-import>{c.lib.import}</button>
-                        <button type="button" data-lib-export>{c.lib.export}</button>
-                      </div>
-                    </div>
                   </div>
                   <button type="button" class="btn btn--outline xch-btn-sm" data-pick="geometry">{c.lib.load} <span class="arrow">↑</span></button>
                   <p class="xch__formats">{c.lib.formats}</p>
                   <div data-namefield="geometry"></div>
-                  <label class="xch__filter" data-lib-filter hidden><span class="sr-only">{c.lib.filter}</span><input type="search" placeholder={c.lib.filter} /></label>
                   <div class="xch__busy" data-busy="lib" hidden></div>
-                  <div data-list="lib"></div>
+                  <details class="xch__libpick" data-libpick>
+                    <summary data-libpick-label>{c.lib.choose}</summary>
+                    <label class="xch__filter" data-lib-filter hidden><span class="sr-only">{c.lib.filter}</span><input type="search" placeholder={c.lib.filter} /></label>
+                    <div data-list="lib"></div>
+                  </details>
                 </div>
                 <div class="xch__notes" data-notes="2"></div>
                 <div class="xch__alerts" data-alerts="2"></div>
@@ -290,16 +273,6 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <div class="cta-row">
                     <button type="button" class="btn btn--primary xch-btn-sm" data-align="auto">{c.al.auto} <span class="arrow">→</span></button>
                     <button type="button" class="btn btn--outline xch-btn-sm" data-align="guided">{c.al.guided}</button>
-                    <button type="button" class="btn btn--outline xch-btn-sm" data-align="refine" hidden>{c.al.refine}</button>
-                  </div>
-                  <div class="xch__group" data-surf-block>
-                    <p class="xch__label" id="xch-surf-label">{c.al.surfaces}</p>
-                    <div class="xch__seg" role="radiogroup" aria-labelledby="xch-surf-label" aria-describedby="xch-surf-help" data-surf-group>
-                      <button type="button" role="radio" aria-checked="true" data-surf="replacement">{c.al.surfReplacement}</button>
-                      <button type="button" role="radio" aria-checked="false" data-surf="capture" aria-describedby="xch-surf-off">{c.al.surfCapture}</button>
-                    </div>
-                    <p class="xch__small" id="xch-surf-help">{c.al.surfHelp}</p>
-                    <p class="xch__small xch__muted" id="xch-surf-off" data-surf-off hidden>{c.al.surfCaptureOff}</p>
                   </div>
                   <div class="xch__busy" data-busy="align" hidden></div>
                   <p class="xch__small" data-not-yet>{c.al.notYet}</p>
@@ -327,11 +300,6 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <label class="xch__check" data-unlock-wrap hidden><input type="checkbox" data-manual-unlock /> <span>{c.s4.unlock}</span></label>
                   <p class="xch__small xch__muted" data-unlock-hint hidden>{c.s4.unlockHint}</p>
                   <p class="xch__small">{c.s4.manualText}</p>
-                  <div class="cta-row">
-                    <button type="button" class="btn btn--outline xch-btn-sm" data-manual="jaw">{c.s4.moveToJaw}</button>
-                    <button type="button" class="btn btn--outline xch-btn-sm" data-manual="undo">{c.s4.undo}</button>
-                    <button type="button" class="btn btn--outline xch-btn-sm" data-manual="reset">{c.s4.reset}</button>
-                  </div>
                 </div>
 
                 <div class="xch__block" data-sec="review" hidden>
@@ -375,7 +343,6 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <p id="xch-view-dist" class="sr-only">{c.dist.keyboard}</p>
                 <div class="xch__toolbar" role="toolbar" aria-label={c.view.toolbar} aria-orientation="vertical">
                   <button type="button" class="xch__tool" data-display-btn aria-expanded="false" aria-controls="xch-display" aria-label={c.view.display} data-tip={c.view.display}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('layers')} /></button>
-                  <button type="button" class="xch__tool" data-map-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="C" aria-label={c.display.map} data-tip={fmt(L, c.view.tip, { name: c.display.map, key: 'C' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('map')} /></button>
                   <button type="button" class="xch__tool" data-xray-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="T" aria-label={c.view.xray} data-tip={fmt(L, c.view.tip, { name: c.view.xray, key: 'T' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('xray')} /></button>
                   <button type="button" class="xch__tool" data-section-btn aria-expanded="false" aria-disabled="true" aria-controls="xch-section" aria-keyshortcuts="P" aria-label={c.section.title} data-tip={fmt(L, c.view.tip, { name: c.section.title, key: 'P' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('section')} /></button>
                   <button type="button" class="xch__tool" data-dist-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="R" aria-label={c.dist.button} data-tip={fmt(L, c.view.tip, { name: c.dist.button, key: 'R' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('distance')} /></button>
@@ -402,7 +369,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 </div>
                 <div class="xch__views" role="toolbar" aria-label={c.view.views}>
                   <div class="xch__dial">
-                    <svg class="xch__axes" viewBox="-1 -1 2 2" aria-hidden="true"><path d="M0-1V1M-1 0H1M-.7071.7071L.7071-.7071" /></svg>
+                    <svg class="xch__axes" viewBox="-1 -1 2 2" aria-hidden="true"><path d="M0-1V1M-1 0H1" /></svg>
                     {dial.map(([id, label]) => <button type="button" class={`xch__tool xch__dir xch__dir--${id}`} data-view={id} aria-pressed="false" aria-label={label} aria-keyshortcuts={keyOf(id)} data-tip={tip(id, label)}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths(id)} /></button>)}
                   </div>
                   <button type="button" class="xch__tool xch__home" data-view="occlusal" aria-pressed="false" aria-keyshortcuts={keyOf('occlusal')} aria-label={c.view.occlusal} data-tip={tip('occlusal', c.view.defaultView)}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('arch')} /><span>{c.view.occlusal}</span></button>
@@ -414,16 +381,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <p>{c.view.emptyText}</p>
                   <p class="xch__loading" data-loading>{c.ws.loading}</p>
                 </div>
-                <div class="xch__pad" role="toolbar" aria-label={c.pad.label} aria-describedby="xch-pad-hint" aria-orientation="vertical" data-pad hidden>
-                  {pad.map(([group, items]) => (
-                    <div class="xch__padgroup" role="group" aria-label={c.pad[group]} data-g={group}>
-                      <span class="xch__padcap" aria-hidden="true">{c.pad[group]}</span>
-                      {items.map(([key, ico, op, dir]) => <button type="button" class="xch__tool xch__padbtn" data-pad-op={op} data-pad-dir={dir} data-pad-key={key} aria-label={fmt(L, c.pad[key], { deg: 30, mm: 1 })} data-tip={fmt(L, c.pad[key], { deg: 30, mm: 1 })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths(ico)} /></button>)}
-                    </div>
-                  ))}
-                  <button type="button" class="xch__tool xch__padfine" data-pad-fine aria-pressed="false">{c.pad.fine}</button>
-                  <p class="xch__padhint" id="xch-pad-hint" aria-hidden="true">{c.pad.hint}</p>
-                </div>
+                <button type="button" class="xch__mapbtn" data-map-btn aria-pressed="false" aria-keyshortcuts="C" hidden><i aria-hidden="true"></i>{c.display.map}</button>
                 <div class="xch__legend" role="img" aria-label={c.legend.aria} data-legend hidden>
                   <p class="xch__legendtitle">{c.legend.title}<span>µm</span></p>
                   <span class="xch__ramp" aria-hidden="true"></span>

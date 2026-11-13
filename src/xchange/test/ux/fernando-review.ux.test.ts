@@ -70,3 +70,41 @@ describe('once aligned, the hand controls are locked until the box is ticked', (
     expect(step.mode()).toBe('set');
   });
 });
+
+describe('a mesh-only capture identifies its scan body by itself (2026-11-12)', () => {
+  const run = async (results: Record<string, { found: number; provisional?: number; unresolved?: number }>, favorite = '') => {
+    const mesh = {};
+    const tried: string[] = [];
+    const detect = vi.fn(async () => {});
+    const app = {
+      s: { captureMesh: mesh }, lang: 'en', c: { s1: { identifying: '{n}/{total}' }, say: { identified: '{name}' } },
+      library: { list: () => Object.keys(results).map((id) => ({ id, favorite: id === favorite })) },
+      loadGeometry: async (id: string) => ({ mesh: id }),
+      jobs: { run: async (job: { reference: string }) => {
+        tried.push(job.reference);
+        const r = results[job.reference]!;
+        const sites = [...Array(r.found).fill({ flags: {} }), ...Array(r.provisional ?? 0).fill({ flags: { provisional: true } })];
+        return { sites, unresolved: Array(r.unresolved ?? 0).fill(0), warnings: [] };
+      } },
+      busy: () => ({ set() {}, done() {} }), toasts: { show: vi.fn() }, geometryName: (id: string) => id,
+    };
+    const step = Object.create(CaptureStep.prototype) as CaptureStep;
+    Object.assign(step, { app, detect });
+    await (step as unknown as { identify(m: unknown): Promise<void> }).identify(mesh);
+    return { detect, tried, toast: app.toasts.show };
+  };
+  it('keeps the geometry that finds the most bodies', async () => {
+    const { detect, toast } = await run({ a: { found: 1, unresolved: 3 }, b: { found: 4 }, c: { found: 2, unresolved: 2 } });
+    expect(detect).toHaveBeenCalledWith('b');
+    expect(toast).toHaveBeenCalledWith('b');
+  });
+  it('tries the favorites first and stops at a full match', async () => {
+    const { tried, detect } = await run({ a: { found: 4 }, b: { found: 4 } }, 'b');
+    expect(tried).toEqual(['b']);
+    expect(detect).toHaveBeenCalledWith('b');
+  });
+  it('nothing found: the list stays for a manual pick', async () => {
+    const { detect } = await run({ a: { found: 0, unresolved: 4 } });
+    expect(detect).not.toHaveBeenCalled();
+  });
+});

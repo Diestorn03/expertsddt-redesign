@@ -43,6 +43,7 @@ function captureStep(lang: 'en' | 'es' = 'en') {
     stage: { setDisplay: vi.fn() }, say: { say: vi.fn() }, toasts: { show: vi.fn() },
     plural: (t: Parameters<typeof plural>[1], n: number, v: Record<string, string | number> = {}) => plural(lang, t, n, v),
     later: (_fn: () => void, _ms: number): void => {}, // the auto-advance to step 2 (step-capture maybeAdvance) is not under test here
+    library: { list: (): never[] => [] }, // no saved geometries: a mesh-only capture waits for a manual pick
   };
   const step = Object.create(CaptureStep.prototype) as CaptureStep;
   Object.assign(step, { app, warnings: [], mixed: null, rowsKey: '', pane: fakeElement() });

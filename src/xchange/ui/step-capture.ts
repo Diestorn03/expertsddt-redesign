@@ -35,7 +35,6 @@ export class CaptureStep {
       b.addEventListener('click', async () => { const files = await pickFiles(ACCEPT.capture, true); if (files.length) void this.importFiles(files, b); }, { signal });
     }
     q(this.pane, '[data-pick="reference"]').addEventListener('click', () => void app.geometry.loadFromPicker('reference'), { signal });
-    dropZone(q(this.pane, '[data-drop="capture"]'), (files) => void this.importFiles(files, null), signal);
   }
 
   clearWarnings(): void {
@@ -62,7 +61,7 @@ export class CaptureStep {
     const app = this.app;
     app.later(() => {
       const s = app.s;
-      if (app.shown !== 1 || step1Blocker(s) !== null || this.warnings.length || this.mixed || s.unresolved.length) return;
+      if (app.shown !== 1 || step1Blocker(s) !== null || this.mixed || s.unresolved.length || this.warnings.some((w) => w.code === 'MESH_UNITS_SUSPECT')) return;
       app.go(2);
     }, 600);
   }
@@ -139,7 +138,40 @@ export class CaptureStep {
     app.viewer?.view('occlusal', true);
     if (r.sites.length) app.say.say(app.plural(app.c.say.captureOk, r.sites.length));
     this.rowsKey = '';
-    this.maybeAdvance();
+    if (mesh && !r.sites.length) void this.identify(mesh);
+    else this.maybeAdvance();
+  }
+
+  /**
+   * A mesh-only capture: every saved geometry is tried as the capture scan body and the one that finds the most bodies
+   * is used, so nobody has to know which scan body it was. With no match the list stays for a manual pick.
+   */
+  private async identify(mesh: NonNullable<CaptureResult['mesh']>): Promise<void> {
+    const app = this.app;
+    // ponytail: tries up to 12 geometries one after the other (favorites first); a size prefilter if the library grows
+    const ids = app.library.list().sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 12).map((m) => m.id);
+    if (!ids.length) return;
+    const job = (this.job = new AbortController());
+    const busy = app.busy('1', fmt(app.lang, app.c.s1.identifying, { n: 1, total: ids.length }), () => job.abort());
+    let best: { id: string; found: number; provisional: number } | null = null;
+    try {
+      for (const [i, id] of ids.entries()) {
+        busy.set(i / ids.length, fmt(app.lang, app.c.s1.identifying, { n: i + 1, total: ids.length }));
+        const ref = await app.loadGeometry(id);
+        if (!ref) continue;
+        const r = await app.jobs.run<DetectResult>({ type: 'detect', mesh, reference: ref.mesh }, [], job.signal);
+        const provisional = r.sites.filter((x) => x.flags.provisional).length, found = r.sites.length - provisional;
+        if (found > (best?.found ?? 0) || (best && found === best.found && provisional < best.provisional)) best = { id, found, provisional };
+        if (found && !provisional && !r.unresolved.length) break; // every body found: no need to try the rest
+      }
+    } catch {
+      return; // cancelled, or a geometry that can't be read: the list stays for a manual pick
+    } finally {
+      busy.done();
+    }
+    if (!best || app.s.captureMesh !== mesh) return;
+    await this.detect(best.id);
+    app.toasts.show(fmt(app.lang, app.c.say.identified, { name: app.geometryName(best.id) }));
   }
 
   /** Mesh-only capture: fits the picked capture scan body to every body, at once. */
@@ -169,6 +201,7 @@ export class CaptureStep {
       const provisional = r.sites.filter((s) => s.flags.provisional).length;
       const d = app.c.say.detected, parts = { found: r.sites.length - provisional, provisional, unresolved: r.unresolved.length };
       // zero parts are left out (UI-DESIGN §12.7); "found" is always said
+      this.maybeAdvance();
       app.say.say((['found', 'provisional', 'unresolved'] as const).filter((k) => k === 'found' || parts[k] > 0).map((k) => fmt(app.lang, d[k], parts)).join(' '));
       this.rowsKey = '';
     } catch (e) {
@@ -208,7 +241,7 @@ export class CaptureStep {
     const asking = hasCapture && !s.arch; // a file came in before the arch was picked
     q(this.pane, '[data-arch-label]').textContent = asking ? c.s1.archAsk : c.s1.arch;
     q(this.pane, '[data-arch-group]').parentElement?.classList.toggle('is-asking', asking);
-    q(this.pane, '[data-drop="capture"]').hidden = hasCapture;
+    q(this.pane, '[data-formats="1"]').hidden = hasCapture;
     q(this.pane, '[data-sources]').hidden = !hasCapture;
     fillKeep(q(this.pane, '[data-list="sources"]'), s.sources.map((src) => {
       const fmtName = (c.format as Record<string, string>)[src.format] ?? src.format;
@@ -220,11 +253,10 @@ export class CaptureStep {
     if (!ref.hidden) app.geometry.renderList(q(ref, '[data-list="ref"]'), 'reference');
 
     // notes: warnings, unresolved bodies, round bodies, provisional banner
-    const notes: HTMLElement[] = this.warnings.map((w) => noteCard(warningMessage(c, app.lang, w, s.captureMesh ? 'capture' : 'positions')));
+    const notes: HTMLElement[] = this.warnings.filter((w) => w.code !== 'SITE_INDEX_AMBIGUOUS').map((w) => noteCard(warningMessage(c, app.lang, w, s.captureMesh ? 'capture' : 'positions')));
     const frames = this.framesNote();
     if (frames) notes.unshift(frames);
     if (s.unresolved.length) notes.push(noteCard(app.plural(c.s1.unresolved, s.unresolved.length, { list: s.unresolved.map((i) => i + 1).join(', ') })));
-    if (s.sites.some((x) => x.flags.indexAmbiguous)) notes.push(noteCard(c.s1.roundNote, 'info'));
     const prov = pendingProvisional(s);
     if (prov.length) {
       const show = h('button', 'btn btn--outline xch-btn-sm', { type: 'button', text: c.s1.provShow });

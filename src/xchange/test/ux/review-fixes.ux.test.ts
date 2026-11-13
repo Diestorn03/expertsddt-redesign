@@ -33,11 +33,9 @@ const rec = (props: Record<string, unknown> = {}): FakeElement => {
 };
 const attr = (el: FakeElement, k: string): string | undefined => (el.attrs as Record<string, string>)[k];
 
-/** A real Stage over fake elements; the pad holds one rotate and one move button. */
+/** A real Stage over fake elements. */
 function realStage(lang: 'en' | 'es' = 'en', s: Record<string, unknown> = {}) {
-  const root = rec(), stageEl = root.querySelector('.xch__stage'), pad = stageEl.querySelector('[data-pad]');
-  const tilt = rec({ dataset: { padOp: 'rx', padDir: '-1', padKey: 'tiltForward' } }), up = rec({ dataset: { padOp: 'ty', padDir: '1', padKey: 'up' } });
-  pad.querySelectorAll = (sel: string): FakeElement[] => (sel === '[data-pad-op]' || sel === '[data-pad-key]' ? [tilt, up] : []);
+  const root = rec(), stageEl = root.querySelector('.xch__stage');
   const said: string[] = [];
   const state = { assembly: new Float64Array(16) as Mat4, sites: [], captureMesh: null, jaw: {}, surfaces: 'replacement', deviation: null, components: [], ...s };
   const viewer = { finishPose: vi.fn(), setMeasure: vi.fn(), setSection: vi.fn((): number => 10), sectionReach: vi.fn((): number => 10), hasJawColors: false };
@@ -45,36 +43,10 @@ function realStage(lang: 'en' | 'es' = 'en', s: Record<string, unknown> = {}) {
     root, section: rec(), signal: new AbortController().signal, lang, c: lang === 'es' ? es : en, s: state, shown: 4,
     viewer, say: { say: (t: string) => void said.push(t) }, alignStep: { guided: null, pad: vi.fn() },
   };
-  return { stage: new Stage(app as unknown as App), stageEl, pad, tilt, up, said, app, viewer, state };
+  return { stage: new Stage(app as unknown as App), stageEl, said, app, viewer, state };
 }
 const click = (el: FakeElement, props: Record<string, unknown> = {}): void => void el.dispatchEvent(Object.assign(new Event('click'), { detail: 1, ...props }));
 
-describe('the adjust pad on a tablet: Fine', () => {
-  it('Fine makes every click a 5° · 0.1 mm step, as Shift does; the buttons say the step they make', () => {
-    const { tilt, up, pad, app } = realStage();
-    click(tilt);
-    expect(app.alignStep.pad).toHaveBeenLastCalledWith('rx', -1, false);
-    click(tilt, { shiftKey: true });
-    expect(app.alignStep.pad).toHaveBeenLastCalledWith('rx', -1, true);
-    const fine = pad.querySelector('[data-pad-fine]');
-    click(fine);
-    expect(attr(fine, 'aria-pressed')).toBe('true');
-    click(up);
-    expect(app.alignStep.pad).toHaveBeenLastCalledWith('ty', 1, true);
-    expect([attr(tilt, 'aria-label'), tilt.dataset]).toEqual(['Tilt forward 5°', expect.objectContaining({ tip: 'Tilt forward 5°' })]);
-    expect(attr(up, 'aria-label')).toBe('Move up 0.1 mm');
-    click(fine);
-    expect([attr(fine, 'aria-pressed'), attr(tilt, 'aria-label'), attr(up, 'aria-label')]).toEqual(['false', 'Tilt forward 30°', 'Move up 1 mm']);
-    click(up);
-    expect(app.alignStep.pad).toHaveBeenLastCalledWith('ty', 1, false);
-  });
-
-  it('Spanish: a decimal comma in the fine step', () => {
-    const { pad, up } = realStage('es');
-    click(pad.querySelector('[data-pad-fine]'));
-    expect(attr(up, 'aria-label')).toBe('Mover hacia arriba 0,1 mm');
-  });
-});
 
 describe('Section and Distance wait for something to show, as the map and the transparency do', () => {
   it('on an empty stage both buttons are disabled and inert; P and R do nothing', () => {

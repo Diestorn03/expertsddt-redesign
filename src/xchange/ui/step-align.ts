@@ -88,18 +88,13 @@ export class AlignStep {
       b.addEventListener('click', () => { if (isOff(b)) app.say.say(app.c.al.running); else run(); }, { signal });
     };
     alignBtn('auto', () => void this.autoAlign());
-    alignBtn('refine', () => void this.autoAlign(app.s.assembly));
     alignBtn('guided', () => this.startGuided());
-    radiogroup(q(this.pane4, '[data-surf-group]'), (b) => this.setSurfaces(b.dataset.surf as 'replacement' | 'capture'), signal);
     for (const b of qa<HTMLButtonElement>(this.pane4, '[data-gp]')) b.addEventListener('click', () => this.guidedAction(b.dataset.gp!), { signal });
-    q(this.pane4, '[data-manual="jaw"]').addEventListener('click', () => this.moveToJaw(), { signal });
     q<HTMLInputElement>(this.pane4, '[data-manual-unlock]').addEventListener('change', (e) => {
       this.unlocked = (e.target as HTMLInputElement).checked;
       this.renderAlign();
       this.app.stage?.update();
     }, { signal });
-    q(this.pane4, '[data-manual="undo"]').addEventListener('click', () => this.undo(), { signal });
-    q(this.pane4, '[data-manual="reset"]').addEventListener('click', () => this.reset(), { signal });
     const exportBtn = q<HTMLButtonElement>(this.pane4, '[data-export]');
     exportBtn.addEventListener('click', () => void this.onExport(exportBtn), { signal });
     q(this.pane4, '[data-ex-again]').addEventListener('click', () => this.downloadAgain(), { signal });
@@ -292,16 +287,6 @@ export class AlignStep {
     app.viewer?.setDeviation(shownDeviation(app.s), app.s.surfaces, (id) => app.s.sites.find((x) => x.id === id)?.componentIndex);
   }
 
-  /** Comparing other surfaces is an explicit re-measure: the current pose is measured with them from now on. */
-  private setSurfaces(surfaces: 'replacement' | 'capture'): void {
-    const app = this.app;
-    if (surfaces === app.s.surfaces) return;
-    app.store.set({ surfaces, deviation: null, ...(app.s.alignment ? { alignedWith: chosenBodies({ surfaces, geometryBySite: app.s.geometryBySite }) } : {}) });
-    this.applyDeviation();
-    app.stage.setDisplay({ capture: surfaces === 'capture', parts: true });
-    if (app.s.alignment) this.scheduleMeasure();
-  }
-
   /**
    * An exchange keeps the alignment (UI-DESIGN §5.2, alignedWith): nothing is re-measured with the new geometry, which
    * is often not the body the jaw scan shows (workflow 2). Only the map leaves the exchanged parts.
@@ -384,13 +369,6 @@ export class AlignStep {
     this.commitPose(toEngine(next));
   }
 
-  private moveToJaw(): void {
-    const v = this.app.viewer;
-    const jaw = v?.jawCenter();
-    if (!v || !jaw || this.locked()) return;
-    v.finishPose();
-    this.commitPose(toEngine(translatePose(v.assembly.matrix.clone(), jaw.sub(v.setCenter()))));
-  }
 
   undo(): void {
     const app = this.app;
@@ -404,13 +382,6 @@ export class AlignStep {
     app.say.say(app.c.say.undone);
   }
 
-  private reset(): void {
-    const app = this.app, pose = app.s.lastAlignedPose;
-    if (!pose || !this.alignedResult) return;
-    app.store.set({ assembly: pose, undo: pushUndo(app.s.undo, app.s.assembly), alignment: this.alignedResult, exportedSinceChange: false });
-    app.viewer?.setAssembly(pose, 'step');
-    this.scheduleMeasure();
-  }
 
   /* ---------------- guided points ---------------- */
 
@@ -687,13 +658,7 @@ export class AlignStep {
     if (!jaw) fillKeep(q(this.pane4, '[data-list="implants4"]'), app.implantRows(4), app.focusKey);
     const running = !!this.alignJob;
     for (const b of qa(this.pane4, '[data-align]')) b.setAttribute('aria-disabled', String(running));
-    q(this.pane4, '[data-align="refine"]').hidden = !s.alignment;
     const captureOk = canMatchCapture(activeSites(s), s.components);
-    const surf = q(this.pane4, '[data-surf-group]');
-    setChecked(surf, s.surfaces, 'data-surf');
-    q(surf, '[data-surf="capture"]').setAttribute('aria-disabled', String(!captureOk));
-    q(this.pane4, '[data-surf-off]').hidden = captureOk;
-    q(this.pane4, '[data-surf-block]').hidden = !captureOk; // one possible choice is no choice (position files)
     q(this.pane4, '[data-not-yet]').hidden = !!(s.alignment || s.lastAttempt) || running;
     const exchanged = exchangedSites(s);
     const note = q(this.pane4, '[data-exchanged]');

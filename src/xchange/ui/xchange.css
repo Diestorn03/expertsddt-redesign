@@ -503,5 +503,29 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
 /* once aligned, the manual controls are locked until the user unlocks them */
 .xch__check { display: flex; align-items: center; gap: .6rem; min-height: 44px; font-weight: 600; cursor: pointer; }
 .xch__check input { width: 20px; height: 20px; accent-color: var(--blue); }
-[data-pad][inert] { opacity: .4; filter: grayscale(.6); }
 .xch__block[data-sec="manual"] [aria-disabled="true"] { opacity: .45; pointer-events: none; }
+
+/* ---------- Fernando's review (2026-11-12) ---------- */
+/* step 1: the formats are a quiet line under the arch cards */
+.xch__formats[data-formats] { margin-top: .6rem; }
+/* step 2: the geometry list is a dropdown */
+.xch__libpick { margin-top: .6rem; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); }
+.xch__libpick > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: .6rem; min-height: 48px; padding: .5rem .9rem; font-weight: 600; cursor: pointer; border-radius: 12px; }
+.xch__libpick > summary::-webkit-details-marker { display: none; }
+.xch__libpick > summary::after { content: ''; width: 9px; height: 9px; flex: none; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .25s var(--ease-out); }
+.xch__libpick[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.xch__libpick > summary:hover { color: var(--blue); }
+.xch__libpick[open] { padding-bottom: .6rem; }
+.xch__libpick[open] > :not(summary) { margin-inline: .6rem; }
+/* rows: rename and delete show on hover or focus, so the name gets the room (always shown on touch screens) */
+.xch__libpick .xch__libitem .xch__iconbtn[data-key^="ren:"], .xch__libpick .xch__libitem .xch__iconbtn[data-key^="del:"] { display: none; }
+.xch__libpick .xch__libitem:is(:hover, :focus-within) .xch__iconbtn { display: grid; }
+@media (hover: none) { .xch__libpick .xch__libitem .xch__iconbtn { display: grid !important; } }
+.xch__libpick .xch__iconbtn { width: 32px; height: 32px; flex: none; }
+/* the viewer: the color map is a labeled on/off button where the adjust pad was */
+.xch__mapbtn { position: absolute; left: .7rem; top: .7rem; z-index: 3; display: inline-flex; align-items: center; gap: .55rem; min-height: 40px; padding: .4rem 1rem .4rem .7rem; border-radius: 999px; border: 1px solid var(--xch-glass-line); background: var(--xch-glass); box-shadow: var(--xch-float); color: var(--ink); font-weight: 600; font-size: .85rem; cursor: pointer; }
+.xch__mapbtn i { width: 30px; height: 18px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 25%, transparent); position: relative; transition: background .25s; }
+.xch__mapbtn i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .25s var(--ease-out); }
+.xch__mapbtn[aria-pressed="true"] i { background: linear-gradient(90deg, #22c55e, #facc15, #ef4444); }
+.xch__mapbtn[aria-pressed="true"] i::after { transform: translateX(12px); }
+.xch__mapbtn:hover { color: var(--blue); }

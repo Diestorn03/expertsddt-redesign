@@ -532,7 +532,7 @@ describe('Stage · the section popover and the distance tool (B2, B3)', () => {
     expect(st.measuring).toBe(true);
     expect(viewer.finishPose).toHaveBeenCalled();
     expect(viewer.setMeasure).toHaveBeenLastCalledWith([], '', -1);
-    expect([f.el.classList.contains('is-measure'), attr(sub('[data-dist-btn]'), 'aria-pressed'), sub('[data-disthint]').hidden, sub('[data-pad]').hidden]).toEqual([true, 'true', false, true]);
+    expect([f.el.classList.contains('is-measure'), attr(sub('[data-dist-btn]'), 'aria-pressed'), sub('[data-disthint]').hidden]).toEqual([true, 'true', false]);
     expect(attr(f.el, 'aria-describedby')).toBe('xch-view-help xch-view-dist');
     st.measurePoint([1, 1, 1]);
     expect(viewer.setMeasure).toHaveBeenLastCalledWith([[1, 1, 1]], '', 0);
@@ -548,7 +548,7 @@ describe('Stage · the section popover and the distance tool (B2, B3)', () => {
     st.measureKey('Escape');
     expect(st.measuring).toBe(false);
     expect(said.at(-1)).toBe('Distance tool closed.');
-    expect([f.el.classList.contains('is-measure'), attr(sub('[data-dist-btn]'), 'aria-pressed'), sub('[data-disthint]').hidden, sub('[data-pad]').hidden]).toEqual([false, 'false', true, false]);
+    expect([f.el.classList.contains('is-measure'), attr(sub('[data-dist-btn]'), 'aria-pressed'), sub('[data-disthint]').hidden]).toEqual([false, 'false', true]);
     expect(attr(f.el, 'aria-describedby')).toBe('xch-view-help');
   });
 

@@ -60,7 +60,7 @@ export const LOOK = {
   /** The ring's opacity where the scan hides the part (the buried side), so the outline never floats over the gum. */
   ringHidden: 0.4,
   /** Default view and Fit: the visible box fills this share of the stage, a margin left for the chrome in the corners. */
-  frame: 0.8,
+  frame: 0.72, // 0.8 put the corner implants and their labels under the views dial and the icon bar (Fernando, 2026-11-12)
   /** The same on a touch screen, where the 44 px chrome takes more of a smaller stage. */
   frameTouch: 0.68,
 } as const;

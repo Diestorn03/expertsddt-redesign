@@ -43,8 +43,6 @@ export class Stage {
   private section: (Section & { r: number }) | null = null;
   /** B3: the distance points and the implant-set pose they were taken on; null while the tool is off. */
   private measure: { points: Vec3[]; pose: Mat4 } | null = null;
-  /** The adjust pad's Fine toggle: every click steps 5° · 0.1 mm, as with Shift. */
-  private fine = false;
 
   constructor(private readonly app: App) {
     const { root, signal } = app;
@@ -121,11 +119,6 @@ export class Stage {
     };
     this.el.addEventListener('pointerout', tipBack, { signal });
     this.el.addEventListener('focusout', tipBack, { signal });
-    const pad = q(this.el, '[data-pad]');
-    roving(pad, signal);
-    for (const b of qa<HTMLButtonElement>(pad, '[data-pad-op]')) b.addEventListener('click', (e) => app.alignStep.pad(b.dataset.padOp!, Number(b.dataset.padDir), e.shiftKey || this.fine), { signal });
-    // Fine: 5° · 0.1 mm per click without Shift (a tablet has none; neither has a screen reader's click)
-    q(pad, '[data-pad-fine]').addEventListener('click', () => { this.fine = !this.fine; this.syncPad(); }, { signal });
     q(this.el, '[data-restart]').addEventListener('click', () => { q(this.el, '[data-lost]').hidden = true; app.restartViewer(); }, { signal });
     // handled here on every step (an in-page anchor would go to the router and Lenis, and drop focus)
     const skip = q<HTMLAnchorElement>(root, '[data-skip-view]');
@@ -227,7 +220,7 @@ export class Stage {
     q(this.el, '[data-legend]').hidden = !mapped;
     const map = q(this.el, '[data-map-btn]'), xray = q(this.el, '[data-xray-btn]');
     map.setAttribute('aria-pressed', String(mapped));
-    map.setAttribute('aria-disabled', String(!drawable));
+    map.hidden = !drawable; // a labeled on/off button, there only when there is a map to show
     xray.setAttribute('aria-pressed', String(d.jawOpacity < 1));
     xray.setAttribute('aria-disabled', String(!app.s?.jaw));
     for (const sw of qa(this.pop, '[data-switch]')) {
@@ -255,8 +248,6 @@ export class Stage {
     if (this.measure && s.assembly !== this.measure.pose) { this.endMeasure(); return; }
     const any = this.hasContent;
     q(this.el, '[data-empty]').hidden = any && !!app.viewer;
-    q(this.el, '[data-pad]').hidden = !(app.shown === 4 && s.jaw && !app.alignStep?.guided && !this.measure);
-    q<HTMLElement>(this.el, '[data-pad]').inert = !!app.alignStep?.locked?.(); // locked once aligned (step-align.ts)
     // nothing shown: nothing to cut or measure (as the map and the transparency wait for a measurement and a jaw)
     q(this.el, '[data-section-btn]').setAttribute('aria-disabled', String(!any));
     // no distance during guided points: the button says why
@@ -303,18 +294,6 @@ export class Stage {
   private get hasContent(): boolean {
     const s = this.app.s;
     return !!s && (s.sites.length > 0 || !!s.captureMesh || !!s.jaw);
-  }
-
-  /** The adjust pad's step: 30° · 1 mm, or with Fine 5° · 0.1 mm; each button's name and tooltip say the step it makes. */
-  private syncPad(): void {
-    const { lang, c } = this.app, pad = q(this.el, '[data-pad]');
-    q(pad, '[data-pad-fine]').setAttribute('aria-pressed', String(this.fine));
-    const step = this.fine ? { deg: 5, mm: num(lang, 0.1, 1) } : { deg: 30, mm: 1 };
-    for (const b of qa(pad, '[data-pad-key]')) {
-      const name = fmt(lang, c.pad[b.dataset.padKey as keyof typeof c.pad], step);
-      b.setAttribute('aria-label', name);
-      b.dataset.tip = name;
-    }
   }
 
   toggleJawOpacity(): void {

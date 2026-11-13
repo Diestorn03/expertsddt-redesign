@@ -39,13 +39,6 @@ export class GeometryStep {
     }, signal);
     q(this.pane, '[data-pick="geometry"]').addEventListener('click', () => void this.loadFromPicker('apply'), { signal });
     dropZone(q(this.pane, '.xch__library'), (files) => void this.loadFile(files[0]!, 'apply'), signal);
-    const menuBtn = q(this.pane, '[data-lib-menu]'), menu = q(this.pane, '#xch-libmenu');
-    const closeMenu = (): void => { menu.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); };
-    menuBtn.addEventListener('click', () => { const open = menu.hidden; menu.hidden = !open; menuBtn.setAttribute('aria-expanded', String(open)); if (open) q(menu, 'button').focus(); }, { signal });
-    menu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); menuBtn.focus(); } }, { signal });
-    document.addEventListener('click', (e) => { if (!menu.hidden && !menu.parentElement!.contains(e.target as Node)) closeMenu(); }, { signal });
-    q(menu, '[data-lib-import]').addEventListener('click', () => { closeMenu(); void this.importLibrary(); }, { signal });
-    q(menu, '[data-lib-export]').addEventListener('click', () => { closeMenu(); void this.exportLibrary(); }, { signal });
     q<HTMLInputElement>(this.pane, '[data-lib-filter] input').addEventListener('input', (e) => { this.query = (e.target as HTMLInputElement).value; this.render(); }, { signal });
     if (!app.library.persistent) {
       const m = app.c.ui.storageUnavailable;
@@ -221,6 +214,7 @@ export class GeometryStep {
     const app = this.app, c = app.c;
     const prev = { geometryBySite: app.s.geometryBySite, caseGeometries: app.s.caseGeometries };
     const changed = Object.keys(geometryBySite).filter((k) => geometryBySite[k] !== prev.geometryBySite[k]);
+    q<HTMLDetailsElement>(app.root, '[data-libpick]').open = false; // a pick closes the dropdown
     app.store.set({ geometryBySite, caseGeometries, exportedSinceChange: false });
     app.syncSites(changed);
     app.alignStep.onGeometryChanged();
@@ -432,6 +426,9 @@ export class GeometryStep {
     fillKeep(q(this.pane, '[data-list="implants2"]'), app.implantRows(2), app.focusKey);
     q(this.pane, '[data-lib-filter]').hidden = app.library.size < 10;
     this.renderList(q(this.pane, '[data-list="lib"]'), 'apply');
+    // the list is a dropdown: closed it says the geometry in use (one for all), or asks for one
+    const inUse = [...new Set(activeSites(s).map((x) => s.geometryBySite[x.id]).filter(Boolean))] as string[];
+    q(this.pane, '[data-libpick-label]').textContent = inUse.length === 1 ? app.geometryName(inUse[0]!) : c.lib.choose;
     fill(q(this.pane, '[data-notes="2"]'), this.notes);
     const missing = missingGeometry(s);
     q(this.pane, '[data-next="2"]').setAttribute('aria-disabled', String(missing > 0));
