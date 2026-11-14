@@ -20,7 +20,7 @@ const { t, lang, href, asset, alt, path, base } = useI18n(Astro);
 const { title, description = t.meta.description } = Astro.props;
 // staging builds (PUBLIC_NOINDEX=1) must never be indexed
 const noindex = Astro.props.noindex || !!import.meta.env.PUBLIC_NOINDEX;
-const shop = import.meta.env.PUBLIC_SHOP_URL;
+import { shop } from '../shop.js';
 const site = (Astro.site?.origin ?? '') + base;
 const links = [
   [href('/'), t.nav.home], [href('/#about'), t.nav.about], [href('/services/'), t.nav.services], [href('/courses/'), t.nav.courses],

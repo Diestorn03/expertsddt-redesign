@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import Cta from '../components/Cta.astro';
 import LibraryDownload from '../components/LibraryDownload.astro';
 import { useI18n } from '../i18n/index.js';
+import { shop } from '../shop.js';
 const { t, href } = useI18n(Astro);
 const l = t.pages.libraries;
 ---
@@ -16,7 +17,7 @@ const l = t.pages.libraries;
         <p class="lead" data-reveal="up" data-delay=".3">{l.lead}</p>
         <div class="cta-row" data-reveal="up" data-delay=".45">
           <button type="button" class="btn btn--white" data-lib-open data-magnetic>{l.download} <span class="arrow">↓</span></button>
-          <a class="btn btn--ghost" href={href('/store/')}>{l.premium}</a>
+          <a class="btn btn--ghost" href={shop}>{l.premium}</a>
         </div>
         <p class="lib__ver" data-reveal="up" data-delay=".55"><small data-lib-version></small></p>
       </div>
