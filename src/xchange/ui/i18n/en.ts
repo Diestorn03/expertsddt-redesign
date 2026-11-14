@@ -502,7 +502,7 @@ const en = {
     hint: 'Personal, company or office',
     placeholder: 'name@clinic.com',
     submit: 'Continue to download',
-    later: 'Not now',
+    later: 'Cancel',
     close: 'Close',
     note: 'We only receive this email address: your files and patient data never leave this computer. You can unsubscribe at any time.',
     privacy: 'Privacy policy (opens in a new tab)',

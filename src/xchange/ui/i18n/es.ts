@@ -502,7 +502,7 @@ const es: Copy = {
     hint: 'Personal, de la empresa o del consultorio',
     placeholder: 'nombre@clinica.com',
     submit: 'Continuar con la descarga',
-    later: 'Ahora no',
+    later: 'Cancelar',
     close: 'Cerrar',
     note: 'Solo recibimos este correo: tus archivos y los datos de pacientes nunca salen de esta computadora. Puedes darte de baja cuando quieras.',
     privacy: 'Política de privacidad (se abre en otra pestaña)',
