@@ -49,11 +49,17 @@ export class CaptureStep {
   }
 
   /** A click on an arch card: with no file yet it opens the picker for that arch; with a file it answers "upper or lower?". */
+  private picking = false;
   private async chooseArch(arch: Arch, opener: Element): Promise<void> {
     this.setArch(arch);
-    if (this.app.s.sources.length) return;
-    const files = await pickFiles(ACCEPT.capture, true);
-    if (files.length) void this.importFiles(files, opener);
+    if (this.app.s.sources.length || this.picking) return; // a double click opens one chooser
+    this.picking = true;
+    try {
+      const files = await pickFiles(ACCEPT.capture, true);
+      if (files.length) void this.importFiles(files, opener);
+    } finally {
+      this.picking = false;
+    }
   }
 
   /** A clean capture with its arch known goes straight to step 2; anything that needs a look keeps the user here (UI-DESIGN §5.3). */

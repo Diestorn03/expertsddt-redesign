@@ -75,13 +75,7 @@ jobs:
           PUBLIC_SHOP_URL: ${{ vars.PUBLIC_SHOP_URL }}
           PUBLIC_N8N_FORM_WEBHOOK: ${{ vars.PUBLIC_N8N_FORM_WEBHOOK }}
           PUBLIC_GCAL_EMBED: ${{ vars.PUBLIC_GCAL_EMBED }}
-      - name: Store not open yet, old shop URLs go to /store/ (302, so browsers do not keep it)
-        if: vars.PUBLIC_SHOP_URL == ''
-        run: |
-          sed -i -E '/shop\.expertsddt\.com/ { s#https://shop\.expertsddt\.com[^ ]*#/store/#; s#R=301#R=302# }' dist/.htaccess
-          if grep -v '^[[:space:]]*#' dist/.htaccess | grep -q 'shop.expertsddt.com'; then echo "::error::shop redirect left in .htaccess"; exit 1; fi
-          grep -c 'R=302' dist/.htaccess
-      - name: Shopify store is public and every linked product exists
+      - name: Every product the site links to exists in the Shopify store
         if: (inputs.target || 'staging') == 'production' && vars.PUBLIC_SHOP_URL != ''
         run: npm run check:shop
         env:

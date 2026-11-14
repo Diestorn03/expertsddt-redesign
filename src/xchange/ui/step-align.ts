@@ -625,6 +625,7 @@ export class AlignStep {
     q(this.pane3, '[data-sample-jaw]').hidden = !s.sample || !!jaw;
     q(this.pane3, '[data-jawcard]').hidden = !jaw;
     q(this.pane3, '[data-next="3"]').hidden = !jaw && !s.jawSkipped;
+    q(this.pane3, '[data-skip]').hidden = !!jaw; // with a jaw scan, Continue is the way on
     if (jaw) {
       const chip = q(this.pane3, '[data-jaw-chip]');
       chip.replaceChildren(icon('check', 14), c.s3.ready);

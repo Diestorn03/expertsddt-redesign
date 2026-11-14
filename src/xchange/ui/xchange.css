@@ -256,7 +256,7 @@
 .xch__stagewrap { position: sticky; top: calc(var(--nav-h) + 1rem); display: grid; }
 .xch__skiplink { position: absolute; left: 1rem; top: -3rem; z-index: 6; padding: .5rem .9rem; border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 600; font-size: .85rem; box-shadow: 0 10px 30px -12px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
 .xch__skiplink:focus { top: 4rem; opacity: 1; pointer-events: auto; }
-.xch__stage { --xch-btn: 40px; --dial-b: 32px; --dial-r: 50px; position: relative; height: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); border-radius: calc(var(--radius) - 6px); overflow: hidden; background: var(--xch-stage); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none; isolation: isolate; transition: background .3s; }
+.xch__stage { --xch-btn: 40px; --dial-b: 32px; --dial-r: 40px; position: relative; height: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); border-radius: calc(var(--radius) - 6px); overflow: hidden; background: var(--xch-stage); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none; isolation: isolate; transition: background .3s; }
 /* touch & hold (controls.ts): a 32 px ring at the finger, the crosshair recipe; it shows at 150 ms and grows until the
    rotation center is set at 500 ms (is-held), then stays until the finger lifts */
 .xch__stage::after { content: ''; position: absolute; left: var(--hold-x, 50%); top: var(--hold-y, 50%); z-index: 2; width: 32px; height: 32px; margin: -16px 0 0 -16px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--xch-active); box-shadow: 0 0 0 1px #1e293b, inset 0 0 0 1px #1e293b; pointer-events: none; opacity: 0; scale: .6; }
@@ -456,7 +456,7 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
 /* touch: 44 px targets on the stage chrome */
 @media (pointer: coarse) {
   .xch__stage, .xch__pad { --xch-btn: 44px; }
-  .xch__stage { --dial-b: 44px; --dial-r: 66px; } /* 2r·sin 22.5° ≥ b + 6 */
+  .xch__stage { --dial-b: 44px; --dial-r: 52px; } /* up, down, left, right and center: r ≥ b + 6 */
   .xch__padhint { display: none; } /* about clicks and Shift: nothing to do with a finger (Fine is) */
   .xch__tool.xch__padfine { min-height: 44px; }
   /* Display and Section popovers: 44 px rows for a finger (the range's box takes the touch, its thumb stays the same) */
@@ -536,10 +536,43 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
 /* beside the view (≥ 960 px) the workspace has one fixed height: the steps panel scrolls inside it and the view stays
    put, so a step that grows or shrinks never moves the page (it used to scroll the page past the workspace and back) */
 @media (min-width: 960px) {
-  .xch__body { --xch-h: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); height: var(--xch-h); grid-template-rows: minmax(0, 1fr); align-items: stretch; }
-  .xch__panel { overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding-bottom: 0; }
+  .xch__body { --xch-h: clamp(500px, calc(100svh - var(--nav-h) - 7.75rem), 900px); height: var(--xch-h); grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .xch__panel { overflow: hidden auto; scrollbar-gutter: stable; scrollbar-width: thin; padding-bottom: 0; scroll-padding-bottom: 6.5rem; } /* a focused row never hides under the sticky footer */
   .xch__stagewrap { position: relative; top: auto; }
   .xch__stage { height: 100%; }
   /* Back and Continue are always in reach at the bottom of the panel */
-  .xch__panel .xch__foot { position: sticky; bottom: 0; z-index: 2; background: var(--surface); padding-bottom: 1rem; }
+  .xch__panel .xch__foot { position: sticky; bottom: 0; z-index: 2; background: var(--surface); padding: .6rem 0 .75rem; gap: .35rem; box-shadow: 0 -10px 16px -12px rgba(15,52,110,.25); }
+  .xch__panel .xch__foot .xch__reason:empty { display: none; }
+  /* the toasts sit over the view, above its scale bar, not over the steps panel */
+  .xch__toasts { left: calc(50% + 176px); bottom: max(4.5rem, env(safe-area-inset-bottom)); width: min(420px, 100vw - 440px); }
 }
+
+/* ---------- UI audit (2026-11-14) ---------- */
+/* the panel never scrolls sideways: a long name or a chip shrinks its column instead of widening the pane */
+.xch__pane { grid-template-columns: minmax(0, 1fr); }
+.xch__libtext { min-width: 0; }
+.xch__panel .btn { white-space: normal; max-width: 100%; text-align: center; } /* "Cargar nuevo archivo de geometría" wraps */
+/* the step labels sit on the panel color, so the connecting line passes behind them, not through them */
+.xch__steptext { background: var(--surface); padding-inline: .3rem .6rem; }
+/* focus rings of list rows are not clipped by the scrolling lists */
+.xch__implants, .xch__lib { padding: 4px; margin: -4px; }
+/* a step-4 block is a section with a rule above it, not a rounded card */
+.xch__block { border-radius: 0; }
+/* the distance hint never runs under the color map button */
+.xch__hintchip { max-width: calc(100% - 2 * 10.5rem); text-wrap: balance; text-align: center; }
+/* narrow views (tablet): the legend keeps to its half, the scale bar gives way */
+.xch__legend { max-width: calc(50% - 1.4rem); }
+@media (max-width: 1179.98px) { .xch__scale { display: none; } }
+
+/* ---------- UX audit (2026-11-14) ---------- */
+/* Chrome's scroll anchoring moved the page when the dropdown opened or closed: the panel never anchors */
+.xch__panel { overflow-anchor: none; }
+@media (min-width: 960px) {
+  /* one scroller only: the lists grow inside the panel, so the wheel always scrolls something (no nested trap) */
+  .xch__panel :is(.xch__implants, .xch__lib) { max-height: none; overflow: visible; overscroll-behavior: auto; }
+  /* the result card keeps its room while a new measurement runs: Export does not jump */
+  .xch__result { min-height: 3.2rem; }
+}
+.xch__foot .cta-row { flex-wrap: wrap; }
+/* at the end of the steps panel the wheel goes on to the page (the site makes [data-lenis-prevent] contain it) */
+html.lenis .xch__panel[data-lenis-prevent] { overscroll-behavior-y: auto; } /* lenis.css: .lenis [data-lenis-prevent] */

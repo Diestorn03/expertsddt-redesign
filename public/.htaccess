@@ -40,6 +40,8 @@ RewriteRule ^producto/templates-package/?$ https://shop.expertsddt.com/products/
 RewriteRule ^producto/3d-aesthetic-guidelines-smile-creator-8mm-dr-fernando-polanco/?$ https://shop.expertsddt.com/products/3d-aesthetic-guidelines-smile-creator-8mm [L,R=301]
 RewriteRule ^producto/masterclass-master-the-virtual-teeth-in-occlusion-libraries/?$ https://shop.expertsddt.com/products/exocad-training-teeth-virtual-gingiva-libraries [L,R=301]
 RewriteRule ^producto(/.*)?$ https://shop.expertsddt.com/collections/all [L,R=301]
+# our /store/ page is gone: the store is Shopify
+RewriteRule ^(es/)?store/?$ https://shop.expertsddt.com/ [L,R=301]
 RewriteRule ^categoria-producto/cursos/?$ https://shop.expertsddt.com/collections/courses [L,R=301]
 RewriteRule ^categoria-producto/plantillas/?$ https://shop.expertsddt.com/collections/templates [L,R=301]
 RewriteRule ^categoria-producto(/.*)?$ https://shop.expertsddt.com/collections/all [L,R=301]

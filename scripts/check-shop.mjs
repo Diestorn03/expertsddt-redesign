@@ -1,4 +1,4 @@
-// Production gate: the Shopify store must be open to the public (no password page) and every product,
+// Production gate: every product,
 // collection and cart URL the site links or redirects to must exist. Network check, run before deploying.
 // Usage: PUBLIC_SHOP_URL=https://shop.expertsddt.com node scripts/check-shop.mjs
 import { readFileSync } from 'node:fs';
@@ -22,12 +22,16 @@ async function resolve(url, hops = 4) {
   return { status: 0, url };
 }
 
-let bad = 0;
+// a store still behind its password is linked anyway (decided 2026-11-14): a warning, not a failed deploy; a missing
+// product page on an open store still fails it
+let bad = 0, closed = 0;
 for (const p of [...paths].sort()) {
   const r = await resolve(shop + p);
   const ok = r.status === 200 && !r.password;
-  if (!ok) bad++;
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${p} -> ${r.password ? 'password page (store is not public yet)' : `${r.status} ${r.url}`}`);
+  if (r.password) closed++;
+  else if (!ok) bad++;
+  console.log(`${ok ? 'ok  ' : r.password ? 'WARN' : 'FAIL'} ${p} -> ${r.password ? 'password page (store is not public yet)' : `${r.status} ${r.url}`}`);
 }
-console.log(bad ? `\n${bad} shop URL(s) not ready: open the store (remove the password) and check the product handles before deploying.` : '\nShop ready');
+if (closed) console.log(`::warning::The Shopify store still shows its password page (${closed} URLs): visitors cannot buy until it is opened.`);
+console.log(bad ? `\n${bad} shop URL(s) missing: check the product handles before deploying.` : '\nShop links OK');
 process.exit(bad ? 1 : 0);

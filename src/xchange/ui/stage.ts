@@ -220,7 +220,9 @@ export class Stage {
     q(this.el, '[data-legend]').hidden = !mapped;
     const map = q(this.el, '[data-map-btn]'), xray = q(this.el, '[data-xray-btn]');
     map.setAttribute('aria-pressed', String(mapped));
-    map.hidden = !drawable; // a labeled on/off button, there only when there is a map to show
+    // a labeled on/off button, there once aligned; while a new measurement runs it stays put, just disabled (no flicker)
+    map.hidden = !app.s?.alignment && !drawable;
+    map.setAttribute('aria-disabled', String(!drawable));
     xray.setAttribute('aria-pressed', String(d.jawOpacity < 1));
     xray.setAttribute('aria-disabled', String(!app.s?.jaw));
     for (const sw of qa(this.pop, '[data-switch]')) {

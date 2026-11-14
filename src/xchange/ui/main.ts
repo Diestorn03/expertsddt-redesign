@@ -153,8 +153,9 @@ async function loadSample(a: App, opener: Element | null): Promise<void> {
   a.root.querySelector<HTMLElement>('[data-next="1"]')?.focus({ preventScroll: true });
   // beside the panel (≥ 960 px) the whole stage comes into view, views widget included: it is as tall as the viewport
   // under the nav, so scrolled to the workspace top (stepper above it) its bottom fell below the fold. One column: the top
-  const stage = matchMedia('(min-width: 960px)').matches && a.root.querySelector<HTMLElement>('.xch__stage');
-  document.dispatchEvent(new CustomEvent('scroll-to', { detail: stage || a.root }));
+  // the workspace comes into view only when it is not already: a click from inside it must not move the page
+  const r = a.root.getBoundingClientRect();
+  if (r.top < 0 || r.top > innerHeight * 0.4) document.dispatchEvent(new CustomEvent('scroll-to', { detail: a.root }));
 }
 
 function wireSmallCard(section: Element, signal: AbortSignal): void {

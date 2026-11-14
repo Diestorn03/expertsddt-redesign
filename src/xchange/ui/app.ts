@@ -455,6 +455,7 @@ export class App {
 
   /** Replaces the whole case (arch and library stay). */
   resetCase(arch = this.s.arch): void {
+    this.toasts?.clear(); // an old case's Undo must not act on the new one
     this.alignStep.resetCase();
     this.jobs.cancelAll();
     this.selected = null;

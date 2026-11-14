@@ -327,7 +327,21 @@ export function attachControls(viewer: Viewer, stage: HTMLElement, cb: ControlCa
   on(canvas, 'pointerleave', () => { hoverAt = null; stage.classList.remove('is-grab'); cb.onHover(null); });
   // a double-click fits, except while clicks place points (its two clicks are a point and a point on top of it)
   on(canvas, 'dblclick', () => { if (!placing()) cb.onPreset('fit'); });
+  // The view takes the wheel (zoom) only while it is wholly on screen under the site header. Partly scrolled away, the wheel
+  // scrolls the page (the stage drops data-lenis-prevent for that event, so Lenis takes it): the workspace can be brought
+  // in or left with the wheel anywhere (2026-11-14: the wheel over the view was trapped). A pinch (Ctrl) always zooms.
+  const wholeOnScreen = (): boolean => {
+    try {
+      const r = stage.getBoundingClientRect(), top = document.querySelector('.nav')?.getBoundingClientRect().bottom ?? 0;
+      if (!r.height || document.fullscreenElement) return true;
+      return r.height <= innerHeight - top ? r.top >= top - 2 && r.bottom <= innerHeight + 2 : r.top <= top + 2 && r.bottom >= innerHeight - 2;
+    } catch {
+      return true; // no layout to measure: the view keeps the wheel
+    }
+  };
   const wheel = (e: WheelEvent): void => {
+    if (!e.ctrlKey && !wholeOnScreen()) { stage.removeAttribute?.('data-lenis-prevent'); return; }
+    stage.setAttribute?.('data-lenis-prevent', '');
     e.preventDefault();
     const notches = (d: number): number => Math.max(-3, Math.min(3, (e.deltaMode === 1 ? d * 16 : d) / 100));
     // Shift + wheel moves the cut 0.5 mm per notch, pushing the wheel (up) goes deeper; macOS turns a Shift wheel sideways

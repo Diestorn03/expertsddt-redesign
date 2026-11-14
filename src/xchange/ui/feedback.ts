@@ -123,6 +123,14 @@ export function confirmDialog(dlg: HTMLDialogElement, copy: { title: string; tex
 
 /** Scrolls an element into view through Lenis (motion.js bridge), only when it is off-screen. */
 export function bringIntoView(el: Element): void {
+  // inside the steps panel where it scrolls on its own (beside the view): the panel moves, never the page (an error or a
+  // section brought into view used to fling the page past the workspace)
+  const panel = el.closest<HTMLElement>('.xch__panel');
+  if (panel && getComputedStyle(panel).overflowY === 'auto') {
+    const p = panel.getBoundingClientRect(), e = el.getBoundingClientRect();
+    if (e.top < p.top || e.bottom > p.bottom - 96) panel.scrollBy({ top: e.top - p.top - 16, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    return;
+  }
   const r = el.getBoundingClientRect();
   if (r.top >= 70 && r.bottom <= window.innerHeight) return;
   document.dispatchEvent(new CustomEvent('scroll-to', { detail: el }));

@@ -83,8 +83,8 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
         <h1 class="h-display" data-split="words">{c.hero.title}</h1>
         <p class="lead" data-reveal="up" data-delay=".3">{c.hero.lead}</p>
         <div class="cta-row" data-reveal="up" data-delay=".45">
-          <a class="btn btn--white" href="#workspace" data-magnetic>{c.hero.start} <span class="arrow">↓</span></a>
-          <a class="btn btn--ghost" href="#workspace" data-xch-demo>{c.hero.demo}</a>
+          <a class="btn btn--white" href="#xchange" data-magnetic>{c.hero.start} <span class="arrow">↓</span></a>
+          <a class="btn btn--ghost" href="#xchange" data-xch-demo>{c.hero.demo}</a>
         </div>
         <p class="xch-hero__privacy" data-reveal="up" data-delay=".55">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
@@ -145,6 +145,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <span class="eyebrow">{fmt(L, c.panel.stepOf, { n: 1 })}</span>
                 <h3 class="xch__h" id="xch-h1" tabindex="-1">{c.s1.title}</h3>
                 <p class="xch__text">{c.s1.text}</p>
+                <div class="xch__alerts" data-alerts="1"></div>
                 <div class="xch__group">
                   <p class="xch__label" id="xch-arch-label" data-arch-label>{c.s1.arch}</p>
                   <div class="xch__arch" role="radiogroup" aria-labelledby="xch-arch-label" data-arch-group>
@@ -156,25 +157,24 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                     </button>
                   </div>
                 </div>
-                <p class="xch__formats" data-formats="1">{c.s1.drop} {c.s1.formats} {c.s1.excel}</p>
+                <p class="xch__formats" data-formats="1">{c.s1.formats} {c.s1.excel}</p>
                 <div class="xch__busy" data-busy="1" hidden></div>
-                <div class="xch__sources" data-sources hidden>
-                  <p class="xch__label">{c.s1.sources}</p>
-                  <ul class="xch__list" data-list="sources"></ul>
-                  <button type="button" class="btn btn--outline xch-btn-sm" data-pick="capture">{c.s1.replace}</button>
-                </div>
                 <div class="xch__sub" data-ref hidden>
                   <p class="xch__subtitle">{c.s1.refTitle}</p>
                   <p class="xch__small">{c.s1.refText}</p>
                   <ul class="xch__lib" data-list="ref"></ul>
                   <button type="button" class="btn btn--outline xch-btn-sm" data-pick="reference">{c.s1.refLoad}</button>
                 </div>
+                <div class="xch__sources" data-sources hidden>
+                  <p class="xch__label">{c.s1.sources}</p>
+                  <ul class="xch__list" data-list="sources"></ul>
+                  <button type="button" class="btn btn--outline xch-btn-sm" data-pick="capture">{c.s1.replace}</button>
+                </div>
                 <div class="xch__notes" data-notes="1"></div>
                 <div class="xch__group" data-implants-wrap="1" hidden>
                   <p class="xch__label">{c.s1.implants} <span class="xch__count" data-implant-count="1"></span></p>
                   <ul class="xch__list xch__implants" data-list="implants1" data-lenis-prevent></ul>
                 </div>
-                <div class="xch__alerts" data-alerts="1"></div>
                 <footer class="xch__foot">
                   <p class="xch__reason" data-reason="1" id="xch-reason-1"></p>
                   <div class="cta-row"><button type="button" class="btn btn--primary" data-next="1" aria-describedby="xch-reason-1">{c.panel.continue} <span class="arrow">→</span></button></div>
@@ -186,6 +186,20 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <span class="eyebrow">{fmt(L, c.panel.stepOf, { n: 2 })}</span>
                 <h3 class="xch__h" id="xch-h2" tabindex="-1">{c.s2.title}</h3>
                 <p class="xch__text">{c.s2.text}</p>
+                <div class="xch__alerts" data-alerts="2"></div>
+                <div class="xch__sub xch__library">
+                  <div class="xch__libhead">
+                    <div><p class="xch__subtitle">{c.lib.title}</p><p class="xch__small">{c.lib.where}</p></div>
+                  </div>
+                  <details class="xch__libpick" data-libpick>
+                    <summary data-libpick-label>{c.lib.choose}</summary>
+                    <label class="xch__filter" data-lib-filter hidden><span class="sr-only">{c.lib.filter}</span><input type="search" placeholder={c.lib.filter} /></label>
+                    <div data-list="lib"></div>
+                  </details>
+                  <button type="button" class="btn btn--outline xch-btn-sm" data-pick="geometry">{c.lib.load} <span class="arrow">↑</span></button>
+                  <p class="xch__formats">{c.lib.formats}</p>
+                  <div class="xch__busy" data-busy="lib" hidden></div>
+                </div>
                 <div class="xch__group">
                   <p class="xch__label" id="xch-apply-label">{c.s2.applyTo}</p>
                   <div class="xch__seg" role="radiogroup" aria-labelledby="xch-apply-label" data-apply-group>
@@ -197,21 +211,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <p class="xch__label">{c.s1.implants}</p>
                   <ul class="xch__list xch__implants" data-list="implants2" data-lenis-prevent></ul>
                 </div>
-                <div class="xch__sub xch__library">
-                  <div class="xch__libhead">
-                    <div><p class="xch__subtitle">{c.lib.title}</p><p class="xch__small">{c.lib.where}</p></div>
-                  </div>
-                  <button type="button" class="btn btn--outline xch-btn-sm" data-pick="geometry">{c.lib.load} <span class="arrow">↑</span></button>
-                  <p class="xch__formats">{c.lib.formats}</p>
-                  <div class="xch__busy" data-busy="lib" hidden></div>
-                  <details class="xch__libpick" data-libpick>
-                    <summary data-libpick-label>{c.lib.choose}</summary>
-                    <label class="xch__filter" data-lib-filter hidden><span class="sr-only">{c.lib.filter}</span><input type="search" placeholder={c.lib.filter} /></label>
-                    <div data-list="lib"></div>
-                  </details>
-                </div>
                 <div class="xch__notes" data-notes="2"></div>
-                <div class="xch__alerts" data-alerts="2"></div>
                 <footer class="xch__foot">
                   <p class="xch__reason" data-reason="2" id="xch-reason-2"></p>
                   <div class="cta-row">
@@ -226,6 +226,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <span class="eyebrow">{fmt(L, c.panel.stepOfOptional, { n: 3 })}</span>
                 <h3 class="xch__h" id="xch-h3" tabindex="-1">{c.s3.title}</h3>
                 <p class="xch__text">{c.s3.text}</p>
+                <div class="xch__alerts" data-alerts="3"></div>
                 <div class="xch__drop" data-drop="jaw">
                   <i class="xch__dropicon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></i>
                   <p class="xch__droptitle">{c.s3.drop}</p>
@@ -245,16 +246,12 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                     <button type="button" class="btn btn--outline xch-btn-sm" data-jaw-remove>{c.s3.remove}</button>
                   </div>
                 </div>
-                <div class="xch__skip">
-                  <button type="button" class="btn btn--primary" data-skip>{c.s3.skip} <span class="arrow">→</span></button>
-                  <p class="note">{c.s3.skipNote}</p>
-                </div>
                 <div class="xch__notes" data-notes="3"></div>
-                <div class="xch__alerts" data-alerts="3"></div>
                 <footer class="xch__foot">
                   <p class="xch__reason" data-reason="3" id="xch-reason-3"></p>
                   <div class="cta-row">
                     <button type="button" class="btn btn--outline" data-back="3"><span class="arrow">←</span> {c.panel.back}</button>
+                    <button type="button" class="btn btn--outline" data-skip title={c.s3.skipNote}>{c.s3.skip} <span class="arrow">→</span></button>
                     <button type="button" class="btn btn--primary" data-next="3" hidden>{c.panel.continue} <span class="arrow">→</span></button>
                   </div>
                 </footer>
@@ -265,6 +262,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <span class="eyebrow">{fmt(L, c.panel.stepOf, { n: 4 })}</span>
                 <h3 class="xch__h" id="xch-h4" tabindex="-1" data-s4-title>{c.s4.titleAlign}</h3>
                 <p class="xch__text" data-s4-text>{c.s4.textAlign}</p>
+                <div class="xch__alerts" data-alerts="4"></div>
 
                 <div class="xch__block" data-sec="align">
                   <p class="xch__subtitle">{c.s4.alignment}</p>
@@ -303,15 +301,11 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <p class="note">{c.al.flags.visualCheckRequired}</p>
                   <ul class="xch__warns" data-ex-warn></ul>
                   <p class="xch__reason" data-reason="4" id="xch-reason-4"></p>
-                  <div class="cta-row">
-                    <button type="button" class="btn btn--primary" data-export aria-describedby="xch-reason-4">{c.ex.button} <span class="arrow">↓</span></button>
-                  </div>
                   <div class="xch__busy" data-busy="export" hidden></div>
                   <p class="xch__small" data-ex-last hidden><span></span> <button type="button" class="xch__textbtn" data-ex-again>{c.ex.again}</button></p>
                 </div>
-                <div class="xch__alerts" data-alerts="4"></div>
                 <footer class="xch__foot">
-                  <div class="cta-row"><button type="button" class="btn btn--outline" data-back="4"><span class="arrow">←</span> {c.panel.back}</button></div>
+                  <div class="cta-row"><button type="button" class="btn btn--outline" data-back="4"><span class="arrow">←</span> {c.panel.back}</button><button type="button" class="btn btn--primary" data-export aria-describedby="xch-reason-4">{c.ex.button} <span class="arrow">↓</span></button></div>
                 </footer>
               </section>
             </div>

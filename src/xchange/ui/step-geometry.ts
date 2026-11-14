@@ -12,7 +12,7 @@ import { LibraryError, matchesQuery, type GeometryMeta } from '../state/library'
 import type { App } from './app';
 import { dropZone, fileKind } from './step-capture';
 import { fill, fillKeep, h, icon, pickFiles, q, radiogroup, setChecked } from './dom';
-import { noteCard } from './feedback';
+import { noteCard, bringIntoView } from './feedback';
 import { LIMITS } from '../core/limits';
 import { LIBRARY_FILE_MAX_BYTES } from '../state/library-file';
 import { ACCEPT, buffersOf, download, readFiles, revokeUrl } from './files';
@@ -39,6 +39,9 @@ export class GeometryStep {
     }, signal);
     q(this.pane, '[data-pick="geometry"]').addEventListener('click', () => void this.loadFromPicker('apply'), { signal });
     dropZone(q(this.pane, '.xch__library'), (files) => void this.loadFile(files[0]!, 'apply'), signal);
+    // an opened dropdown is brought into view inside the panel (it opened under the sticky footer)
+    const pickBox = q<HTMLDetailsElement>(this.pane, '[data-libpick]');
+    pickBox.addEventListener('toggle', () => { if (pickBox.open) bringIntoView(pickBox); }, { signal });
     q<HTMLInputElement>(this.pane, '[data-lib-filter] input').addEventListener('input', (e) => { this.query = (e.target as HTMLInputElement).value; this.render(); }, { signal });
     if (!app.library.persistent) {
       const m = app.c.ui.storageUnavailable;
@@ -291,7 +294,7 @@ export class GeometryStep {
   private mainButton(id: string, name: string, meta: string, thumb: string, label: string, usedOn: number, mode: ListMode, onPick: () => void, badge?: string): HTMLButtonElement {
     const app = this.app;
     const img = thumb ? h('img', '', { src: thumb, alt: '', width: 48, height: 48 }) : icon('pin', 22);
-    const text = h('span', 'xch__libtext', {}, h('span', 'xch__libname', { text: name }), h('span', 'xch__libmeta', { text: meta }));
+    const text = h('span', 'xch__libtext', {}, h('span', 'xch__libname', { text: name, title: name }), h('span', 'xch__libmeta', { text: meta }));
     const btn = h('button', 'xch__libmain', { type: 'button', 'aria-label': label, 'data-key': `lib:${id}` }, h('span', 'xch__thumb', {}, img), text);
     if (badge) text.append(app.chip('info', badge, 'info'));
     if (usedOn && mode === 'apply') text.append(app.chip('ok', app.plural(app.c.lib.used, usedOn), 'check'));

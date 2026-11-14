@@ -51,7 +51,7 @@ const cases = {
   'wp-admin/': '410', 'wp-login.php': '410', 'xmlrpc.php': '410', 'wp-json/wp/v2/pages': '410', 'wp-content/uploads/2025/11/LOGO.jpg': '410', 'feed/': '410',
   '.git/config': '403', '.htaccess': '403',
   // must stay untouched
-  '': 'pass', 'services/': 'pass', 'es/services/': 'pass', 'store/': 'pass', 'exocad-libraries/': 'pass', 'downloads/services-and-fees-experts-ddt.pdf': 'pass',
+  '': 'pass', 'services/': 'pass', 'es/services/': 'pass', 'store/': '301 https://shop.expertsddt.com/', 'es/store/': '301 https://shop.expertsddt.com/', 'exocad-libraries/': 'pass', 'downloads/services-and-fees-experts-ddt.pdf': 'pass',
   '_astro/index.abc123.css': 'pass', '.well-known/security.txt': 'pass', 'sitemap-index.xml': 'pass', 'privacy-policy/': 'pass', 'es/terms-and-conditions/': 'pass',
 };
 let bad = 0;
