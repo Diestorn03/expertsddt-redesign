@@ -139,7 +139,7 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
           </nav>
 
           <div class="xch__body">
-            <div class="xch__panel">
+            <div class="xch__panel" data-lenis-prevent>
               <!-- Step 1 -->
               <section class="xch__pane" data-pane="1" aria-labelledby="xch-h1">
                 <span class="eyebrow">{fmt(L, c.panel.stepOf, { n: 1 })}</span>
@@ -168,7 +168,6 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   <p class="xch__small">{c.s1.refText}</p>
                   <ul class="xch__lib" data-list="ref"></ul>
                   <button type="button" class="btn btn--outline xch-btn-sm" data-pick="reference">{c.s1.refLoad}</button>
-                  <div data-namefield="reference"></div>
                 </div>
                 <div class="xch__notes" data-notes="1"></div>
                 <div class="xch__group" data-implants-wrap="1" hidden>
@@ -204,7 +203,6 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   </div>
                   <button type="button" class="btn btn--outline xch-btn-sm" data-pick="geometry">{c.lib.load} <span class="arrow">↑</span></button>
                   <p class="xch__formats">{c.lib.formats}</p>
-                  <div data-namefield="geometry"></div>
                   <div class="xch__busy" data-busy="lib" hidden></div>
                   <details class="xch__libpick" data-libpick>
                     <summary data-libpick-label>{c.lib.choose}</summary>
@@ -295,30 +293,13 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                   </div>
                 </div>
 
-                <div class="xch__block" data-sec="manual">
-                  <p class="xch__subtitle">{c.s4.manual}</p>
-                  <label class="xch__check" data-unlock-wrap hidden><input type="checkbox" data-manual-unlock /> <span>{c.s4.unlock}</span></label>
-                  <p class="xch__small xch__muted" data-unlock-hint hidden>{c.s4.unlockHint}</p>
-                  <p class="xch__small">{c.s4.manualText}</p>
-                </div>
+                <p class="xch__small xch__muted" data-sec="manual">{c.s4.manualText}</p>
 
                 <div class="xch__block" data-sec="review" hidden>
                   <ul class="xch__list xch__implants" data-list="implants4" data-lenis-prevent></ul>
                 </div>
 
                 <div class="xch__block xch__export" id="xch-export" data-sec="export" tabindex="-1">
-                  <p class="xch__subtitle">{c.ex.title}</p>
-                  <p class="xch__small" data-ex-text></p>
-                  <details class="xch__what">
-                    <summary>{c.ex.what}</summary>
-                    <ul data-ex-files></ul>
-                  </details>
-                  <dl class="xch__summary">
-                    <div><dt>{c.ex.sum.coords}</dt><dd data-sum="coords"></dd></div>
-                    <div><dt>{c.ex.sum.implants}</dt><dd data-sum="implants"></dd></div>
-                    <div><dt>{c.ex.sum.geometry}</dt><dd><span data-sum="geometry"></span> <button type="button" class="xch__textbtn" data-change-geometry aria-label={c.ex.sum.changeLabel}>{c.ex.sum.change}</button></dd></div>
-                    <div><dt>{c.ex.sum.alignment}</dt><dd data-sum="alignment"></dd></div>
-                  </dl>
                   <p class="note">{c.al.flags.visualCheckRequired}</p>
                   <ul class="xch__warns" data-ex-warn></ul>
                   <p class="xch__reason" data-reason="4" id="xch-reason-4"></p>
@@ -342,9 +323,9 @@ const switches = [['jaw', c.display.jaw], ['jawColor', c.display.jawColor], ['pa
                 <p id="xch-view-gp" class="sr-only">{c.gp.keyboard}</p>
                 <p id="xch-view-dist" class="sr-only">{c.dist.keyboard}</p>
                 <div class="xch__toolbar" role="toolbar" aria-label={c.view.toolbar} aria-orientation="vertical">
-                  <button type="button" class="xch__tool" data-display-btn aria-expanded="false" aria-controls="xch-display" aria-label={c.view.display} data-tip={c.view.display}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('layers')} /></button>
-                  <button type="button" class="xch__tool" data-xray-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="T" aria-label={c.view.xray} data-tip={fmt(L, c.view.tip, { name: c.view.xray, key: 'T' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('xray')} /></button>
-                  <button type="button" class="xch__tool" data-section-btn aria-expanded="false" aria-disabled="true" aria-controls="xch-section" aria-keyshortcuts="P" aria-label={c.section.title} data-tip={fmt(L, c.view.tip, { name: c.section.title, key: 'P' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('section')} /></button>
+                  <button type="button" class="xch__tool" hidden data-display-btn aria-expanded="false" aria-controls="xch-display" aria-label={c.view.display} data-tip={c.view.display}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('layers')} /></button>
+                  <button type="button" class="xch__tool" hidden data-xray-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="T" aria-label={c.view.xray} data-tip={fmt(L, c.view.tip, { name: c.view.xray, key: 'T' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('xray')} /></button>
+                  <button type="button" class="xch__tool" hidden data-section-btn aria-expanded="false" aria-disabled="true" aria-controls="xch-section" aria-keyshortcuts="P" aria-label={c.section.title} data-tip={fmt(L, c.view.tip, { name: c.section.title, key: 'P' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('section')} /></button>
                   <button type="button" class="xch__tool" data-dist-btn aria-pressed="false" aria-disabled="true" aria-keyshortcuts="R" aria-label={c.dist.button} data-tip={fmt(L, c.view.tip, { name: c.dist.button, key: 'R' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('distance')} /></button>
                   <span class="xch__sep" aria-hidden="true"></span>
                   <button type="button" class="xch__tool" data-keys-btn aria-label={c.view.shortcuts} aria-keyshortcuts="?" data-tip={fmt(L, c.view.tip, { name: c.view.shortcuts, key: '?' })}><svg class="xch__ico" viewBox="0 0 24 24" aria-hidden="true" set:html={paths('keys')} /></button>

@@ -381,7 +381,7 @@ const es: Copy = {
     rename: 'Cambiar nombre',
     remove: 'Eliminar',
     used: { one: 'En 1 implante', other: 'En {count} implantes' },
-    meta: '{triangles} triángulos · {size} mm',
+    meta: '{size} mm',
     nameLabel: 'Nombre',
     nameDefault: 'Geometría {n}',
     nameHint: 'Ponle un nombre que reconozcas. El nombre del archivo no se guarda.',

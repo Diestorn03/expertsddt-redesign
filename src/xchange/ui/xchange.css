@@ -517,11 +517,13 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
 .xch__libpick > summary:hover { color: var(--blue); }
 .xch__libpick[open] { padding-bottom: .6rem; }
 .xch__libpick[open] > :not(summary) { margin-inline: .6rem; }
-/* rows: rename and delete show on hover or focus, so the name gets the room (always shown on touch screens) */
-.xch__libpick .xch__libitem .xch__iconbtn[data-key^="ren:"], .xch__libpick .xch__libitem .xch__iconbtn[data-key^="del:"] { display: none; }
-.xch__libpick .xch__libitem:is(:hover, :focus-within) .xch__iconbtn { display: grid; }
-@media (hover: none) { .xch__libpick .xch__libitem .xch__iconbtn { display: grid !important; } }
-.xch__libpick .xch__iconbtn { width: 32px; height: 32px; flex: none; }
+/* rows: the star, rename and delete are always there and small, so nothing moves under the pointer */
+.xch__libpick .xch__libitem { gap: .15rem; }
+.xch__libpick .xch__libmain { min-width: 0; min-height: 48px; gap: .5rem; padding: .3rem .5rem; }
+.xch__libpick .xch__thumb, .xch__libpick .xch__thumb img { width: 36px; height: 36px; border-radius: 9px; }
+.xch__libpick .xch__iconbtn { width: 28px; height: 28px; flex: none; border-color: transparent; background: transparent; }
+.xch__libpick .xch__iconbtn:hover { border-color: var(--line); background: var(--surface); }
+.xch__libpick .xch__iconbtn svg { width: 16px; height: 16px; }
 /* the viewer: the color map is a labeled on/off button where the adjust pad was */
 .xch__mapbtn { position: absolute; left: .7rem; top: .7rem; z-index: 3; display: inline-flex; align-items: center; gap: .55rem; min-height: 40px; padding: .4rem 1rem .4rem .7rem; border-radius: 999px; border: 1px solid var(--xch-glass-line); background: var(--xch-glass); box-shadow: var(--xch-float); color: var(--ink); font-weight: 600; font-size: .85rem; cursor: pointer; }
 .xch__mapbtn i { width: 30px; height: 18px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 25%, transparent); position: relative; transition: background .25s; }
@@ -529,3 +531,15 @@ html.xch-in-view .floats { opacity: 0; transform: translateY(16px); pointer-even
 .xch__mapbtn[aria-pressed="true"] i { background: linear-gradient(90deg, #22c55e, #facc15, #ef4444); }
 .xch__mapbtn[aria-pressed="true"] i::after { transform: translateX(12px); }
 .xch__mapbtn:hover { color: var(--blue); }
+
+/* ---------- Fernando's review (2026-11-13): nothing moves under the user ---------- */
+/* beside the view (≥ 960 px) the workspace has one fixed height: the steps panel scrolls inside it and the view stays
+   put, so a step that grows or shrinks never moves the page (it used to scroll the page past the workspace and back) */
+@media (min-width: 960px) {
+  .xch__body { --xch-h: clamp(560px, calc(100svh - var(--nav-h) - 2rem), 900px); height: var(--xch-h); grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .xch__panel { overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding-bottom: 0; }
+  .xch__stagewrap { position: relative; top: auto; }
+  .xch__stage { height: 100%; }
+  /* Back and Continue are always in reach at the bottom of the panel */
+  .xch__panel .xch__foot { position: sticky; bottom: 0; z-index: 2; background: var(--surface); padding-bottom: 1rem; }
+}

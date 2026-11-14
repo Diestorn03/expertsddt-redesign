@@ -381,7 +381,7 @@ const en = {
     rename: 'Rename',
     remove: 'Remove',
     used: { one: 'On 1 implant', other: 'On {count} implants' },
-    meta: '{triangles} triangles · {size} mm',
+    meta: '{size} mm',
     nameLabel: 'Name',
     nameDefault: 'Geometry {n}',
     nameHint: "Give it a name you'll recognize. The file name isn't kept.",

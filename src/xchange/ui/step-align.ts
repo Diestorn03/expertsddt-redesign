@@ -59,10 +59,6 @@ export class AlignStep {
   private alignedResult: AlignmentResult | null = null;
   private mapShown = false;
   guided: Guided | null = null;
-  /** Once aligned, the hand controls (drag, pad, move to jaw) are locked until the box is ticked, so nothing moves by accident. */
-  private unlocked = false;
-  private hadAlignment = false;
-  locked(): boolean { return !!this.app.s.alignment && !this.unlocked; }
   private exportUrl: string | null = null;
   private exportLine = '';
   private resultKey: unknown = null;
@@ -90,15 +86,9 @@ export class AlignStep {
     alignBtn('auto', () => void this.autoAlign());
     alignBtn('guided', () => this.startGuided());
     for (const b of qa<HTMLButtonElement>(this.pane4, '[data-gp]')) b.addEventListener('click', () => this.guidedAction(b.dataset.gp!), { signal });
-    q<HTMLInputElement>(this.pane4, '[data-manual-unlock]').addEventListener('change', (e) => {
-      this.unlocked = (e.target as HTMLInputElement).checked;
-      this.renderAlign();
-      this.app.stage?.update();
-    }, { signal });
     const exportBtn = q<HTMLButtonElement>(this.pane4, '[data-export]');
     exportBtn.addEventListener('click', () => void this.onExport(exportBtn), { signal });
     q(this.pane4, '[data-ex-again]').addEventListener('click', () => this.downloadAgain(), { signal });
-    q(this.pane4, '[data-change-geometry]').addEventListener('click', () => app.go(2), { signal });
     root.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && app.s.undo.length) { e.preventDefault(); this.undo(); }
@@ -113,7 +103,7 @@ export class AlignStep {
   mode(): ControlMode {
     if (this.guided) return 'guided';
     if (this.app.stage?.measuring) return 'measure';
-    return this.app.shown === 4 && this.app.s.jaw && !this.locked() ? 'set' : 'camera';
+    return this.app.shown === 4 && this.app.s.jaw ? 'set' : 'camera';
   }
 
   controlCallbacks(): ControlCallbacks {
@@ -350,7 +340,7 @@ export class AlignStep {
   /** Adjust pad: 30° / 1 mm per click, 5° / 0.1 mm with Shift, in screen axes about the set's center. */
   pad(op: string, dir: number, shift: boolean): void {
     const v = this.app.viewer;
-    if (!v || !this.app.s.jaw || this.locked()) return;
+    if (!v || !this.app.s.jaw) return;
     v.finishPose(); // a quick second click starts from the committed pose, not from the in-between one
     const pose = v.assembly.matrix.clone();
     const pivot = v.setCenter();
@@ -667,16 +657,6 @@ export class AlignStep {
       aligned: this.bodyNames(exchanged.map((x) => alignedBody(s, x.id))),
       exported: this.bodyNames(exchanged.map((x) => bodyOf(s, s.geometryBySite[x.id]))),
     }) : '';
-    for (const b of qa(this.pane4, '[data-manual]')) {
-      const kind = b.dataset.manual;
-      b.setAttribute('aria-disabled', String(kind === 'undo' ? !s.undo.length : kind === 'reset' ? !s.lastAlignedPose : kind === 'jaw' ? this.locked() : false));
-    }
-    // a new alignment locks the hand controls again
-    if (s.alignment && !this.hadAlignment) this.unlocked = false;
-    this.hadAlignment = !!s.alignment;
-    q(this.pane4, '[data-unlock-wrap]').hidden = !s.alignment;
-    q(this.pane4, '[data-unlock-hint]').hidden = !s.alignment || this.unlocked;
-    q<HTMLInputElement>(this.pane4, '[data-manual-unlock]').checked = this.unlocked;
     this.renderResult();
     if (g) this.renderGuided(g);
   }
@@ -743,6 +723,7 @@ export class AlignStep {
     // the status and the three numbers are what is read at a glance; the rest waits in a disclosure (open when the fit needs a look)
     const details = h('details', 'xch__what', {},
       h('summary', '', { text: c.al.details }),
+      metrics,
       h('p', 'xch__small', { text: fmt(app.lang, c.al.visible, { pct: Math.round(r.visible * 100) }) }),
       help,
       h('p', 'xch__small', { text: `${c.al.method}: ${c.al.methods[r.method]}` }),
@@ -750,9 +731,9 @@ export class AlignStep {
     details.open = status === 'weak' || status === 'failed';
     box.replaceChildren(...([
       h('div', 'xch__row', {}, chip),
-      h('p', 'xch__small', { text: explain }),
+      // a good or acceptable fit is the chip alone (Fernando, 2026-11-13); what to do about a weak one is said
+      status === 'good' || status === 'acceptable' ? null : h('p', 'xch__small', { text: explain }),
       failed ? h('p', 'xch__label', { text: c.al.lastAttempt }) : null,
-      metrics,
       flags.length ? h('ul', 'xch__flags', {}, ...flags) : null,
       details,
     ].filter(Boolean) as Node[]));
@@ -803,17 +784,8 @@ export class AlignStep {
   private renderExport(): void {
     const app = this.app, s = app.s, c = app.c;
     const jaw = !!s.jaw;
-    q(this.pane4, '[data-ex-text]').textContent = jaw ? c.ex.textJaw : c.ex.textCapture;
-    const main = mainFileName(s.arch ?? 'lower');
-    const files = [fmt(app.lang, c.ex.files.main, { file: main }), jaw ? c.ex.files.combined : fmt(app.lang, c.ex.files.combinedNoJaw, { file: main }), c.ex.files.single, ...(jaw ? [c.ex.files.jaw] : []), c.ex.files.report, c.ex.files.readme];
-    fill(q(this.pane4, '[data-ex-files]'), files.map((t) => h('li', '', { text: t })));
     const sites = activeSites(s);
-    q(this.pane4, '[data-sum="coords"]').textContent = jaw ? c.ex.sum.jaw : c.ex.sum.capture;
-    q(this.pane4, '[data-sum="implants"]').textContent = num(app.lang, sites.length);
-    // what is exported, one click from step 2 (workflow 2: align, then exchange)
-    q(this.pane4, '[data-sum="geometry"]').textContent = [...new Set(sites.flatMap((x) => { const g = s.geometryBySite[x.id]; return g ? [app.geometryName(g)] : []; }))].join(', ') || c.ex.sum.none;
     const a = jaw ? s.alignment : null;
-    q(this.pane4, '[data-sum="alignment"]').textContent = a ? fmt(app.lang, c.ex.sum.alignmentValue, { status: c.al.status[a.status], method: c.al.methods[a.method], rms: num(app.lang, a.rmsMm * 1000) }) : c.ex.sum.none;
     const warns: string[] = [];
     if (a?.status === 'weak' || a?.status === 'failed') warns.push(c.ex.warnWeak);
     if (a?.status === 'ambiguous') warns.push(c.ex.warnAmbiguous);

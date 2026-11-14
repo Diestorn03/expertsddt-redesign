@@ -256,8 +256,12 @@ export class App {
     void this.motion.panel(from, to, () => {
       from.hidden = true;
       to.hidden = false;
+      q(this.root, '.xch__panel').scrollTop = 0; // the panel scrolls inside the workspace: a new step starts at its top
       if (!to.contains(document.activeElement)) q<HTMLElement>(to, '.xch__h').focus({ preventScroll: true });
-    }).then(() => bringIntoView(q(this.root, '.xch__stepper')));
+    }).then(() => {
+      // the page never moves on a step change where the panel sits beside the view; stacked (narrow), the steps come back
+      if (matchMedia('(max-width: 959.98px)').matches) bringIntoView(q(this.root, '.xch__stepper'));
+    });
     this.say.say(fmt(this.lang, this.c.say.step, { n: step, name: this.c.steps.names[step - 1]! }));
     if (step === 4) {
       // a toast of an earlier step (the geometry's "applied to all", its Undo about step 2) would sit on the legend and

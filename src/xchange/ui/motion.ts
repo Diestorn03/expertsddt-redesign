@@ -58,9 +58,9 @@ export class Motion {
     const out = shown(from), into = shown(to);
     return new Promise((resolve) => {
       this.step = this.add(() => gsap.timeline({ onComplete: () => { this.step = null; resolve(); }, onInterrupt: () => resolve() })
-        .to(out, { y: -16, opacity: 0, duration: 0.18, ease: 'power2.in', stagger: { amount: 0.08 } })
+        .to(out, { opacity: 0, duration: 0.12, ease: 'power1.in' })
         .add(() => { gsap.set(out, { clearProps: 'transform,opacity' }); swap(); })
-        .fromTo(into, { y: 40, opacity: 0, skewY: 2 }, { y: 0, opacity: 1, skewY: 0, duration: 0.5, ease: 'power3.out', stagger: { amount: 0.12 }, clearProps: 'transform,opacity' }));
+        .fromTo(into, { y: 8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.25, ease: 'power2.out', clearProps: 'transform,opacity' }));
     });
   }
 
@@ -72,7 +72,7 @@ export class Motion {
 
   rows(els: ArrayLike<Element>): void {
     if (this.reduced || !els.length) return;
-    this.add(() => gsap.fromTo(els, { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out', stagger: 0.04, clearProps: 'transform,opacity' }));
+    this.add(() => gsap.fromTo(els, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power1.out', stagger: 0.02, clearProps: 'opacity' }));
   }
 
   /** Count-up like [data-count]; `format` renders the value. */

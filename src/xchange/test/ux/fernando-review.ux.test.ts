@@ -1,6 +1,6 @@
 /**
- * Fernando's review of 2026-11-11: a clean capture goes straight to step 2; once aligned, the hand controls are locked
- * until the box is ticked; the jaw step names its arch.
+ * Fernando's reviews (2026-11-11 to 13): a clean capture goes straight to step 2, a mesh-only capture finds its scan body,
+ * hand adjustment is Ctrl + drag.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { freshCase } from '../../state/case';
@@ -44,30 +44,15 @@ describe('step 1 goes on by itself when the capture is clean', () => {
   });
 });
 
-describe('once aligned, the hand controls are locked until the box is ticked', () => {
-  const align = (alignment: unknown, unlocked: boolean) => {
-    const finishPose = vi.fn();
-    const app = { shown: 4, s: { jaw: {}, alignment }, viewer: { finishPose } };
-    const step = Object.create(AlignStep.prototype) as AlignStep;
-    Object.assign(step, { app, guided: null, unlocked });
-    return { step, finishPose };
+describe('hand adjustment is Ctrl + drag, before and after the alignment (no lock since 2026-11-13)', () => {
+  const step = (alignment: unknown) => {
+    const s = Object.create(AlignStep.prototype) as AlignStep;
+    Object.assign(s, { app: { shown: 4, s: { jaw: {}, alignment } }, guided: null });
+    return s;
   };
-  it('not aligned yet: free to adjust by hand (the way to align by hand)', () => {
-    const { step } = align(null, false);
-    expect(step.locked()).toBe(false);
-    expect(step.mode()).toBe('set');
-  });
-  it('aligned: dragging the set is off and the pad does nothing', () => {
-    const { step, finishPose } = align({ status: 'good' }, false);
-    expect(step.locked()).toBe(true);
-    expect(step.mode()).toBe('camera');
-    step.pad('rx', 1, false);
-    expect(finishPose).not.toHaveBeenCalled();
-  });
-  it('ticking the box gives the controls back', () => {
-    const { step } = align({ status: 'good' }, true);
-    expect(step.locked()).toBe(false);
-    expect(step.mode()).toBe('set');
+  it('the set can be dragged with or without an alignment', () => {
+    expect(step(null).mode()).toBe('set');
+    expect(step({ status: 'good' }).mode()).toBe('set');
   });
 });
 

@@ -102,7 +102,7 @@ export class GeometryStep {
       this.notes.push(note);
       this.target = 'all';
     }
-    this.askName(mode, mesh, r.plan.kind === 'normalized' ? undefined : r.normals);
+    await this.save(mode, mesh, r.plan.kind === 'normalized' ? undefined : r.normals, file.name);
   }
 
   /**
@@ -131,38 +131,24 @@ export class GeometryStep {
     this.notes = this.notes.filter((n) => !n.dataset.plan && !n.dataset.warn);
   }
 
-  /** Inline name field (Enter saves, Esc cancels); the name never comes from the file. */
-  private askName(mode: ListMode, mesh: TriMesh, normals: Float32Array | undefined): void {
+  /**
+   * Saves the geometry under its file name (without the extension; renamed later with the pencil) and uses it at once:
+   * no name to type (Fernando, 2026-11-13). These are library parts (scan bodies, caps), not patient files.
+   */
+  private async save(mode: ListMode, mesh: TriMesh, normals: Float32Array | undefined, fileName: string): Promise<void> {
     const app = this.app, c = app.c;
-    const box = q(app.root, `[data-namefield="${mode === 'reference' ? 'reference' : 'geometry'}"]`);
-    const input = h('input', '', { type: 'text', maxlength: 60, value: fmt(app.lang, c.lib.nameDefault, { n: app.library.size + 1 }), 'aria-describedby': 'xch-namehint' });
-    const save = h('button', 'btn btn--primary xch-btn-sm', { type: 'submit', text: c.lib.save });
-    const cancel = h('button', 'btn btn--outline xch-btn-sm', { type: 'button', text: c.lib.cancel });
-    const form = h('form', 'xch__field', {}, h('label', 'xch__field', {}, c.lib.nameLabel, input), h('small', '', { id: 'xch-namehint', text: c.lib.nameHint }), h('div', 'cta-row', {}, save, cancel));
-    // closing the field gives focus back to the button that opened the file picker
-    const close = (): void => { box.replaceChildren(); q<HTMLElement>(app.root, mode === 'reference' ? '[data-pick="reference"]' : '[data-pick="geometry"]').focus(); };
-    cancel.addEventListener('click', close);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      try {
-        const meta = await app.library.add(input.value, mesh);
-        box.replaceChildren();
-        app.meshCache.set(meta.id, { mesh, normals: normals ?? computeVertexNormals(mesh) });
-        app.focusKey = 'lib:' + meta.id; // the new row (an auto-advance then moves focus on to step 3)
-        this.thumbnail(meta.id);
-        app.toasts.show(fmt(app.lang, c.say.saved, { name: meta.name }));
-        if (mode === 'reference') void app.capture.detect(meta.id);
-        else await this.apply(meta.id);
-      } catch (err) {
-        if (err instanceof LibraryError && err.code === 'nameEmpty') { input.focus(); return; }
-        app.error(mode === 'reference' ? 1 : 2, err, 'geometry', { vars: { limit: 50 } });
-      }
-    });
-    box.replaceChildren(form);
-    app.motion.appear(form);
-    input.focus();
-    input.select();
+    const name = fileName.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim().slice(0, 60) || fmt(app.lang, c.lib.nameDefault, { n: app.library.size + 1 });
+    try {
+      const meta = await app.library.add(name, mesh);
+      app.meshCache.set(meta.id, { mesh, normals: normals ?? computeVertexNormals(mesh) });
+      app.focusKey = 'lib:' + meta.id; // the new row (an auto-advance then moves focus on to step 3)
+      this.thumbnail(meta.id);
+      app.toasts.show(fmt(app.lang, c.say.saved, { name: meta.name }));
+      if (mode === 'reference') void app.capture.detect(meta.id);
+      else await this.apply(meta.id);
+    } catch (err) {
+      app.error(mode === 'reference' ? 1 : 2, err, 'geometry', { vars: { limit: 50 } });
+    }
   }
 
   private thumbnail(id: string): void {
